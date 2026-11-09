@@ -1,8 +1,25 @@
 // Workspace（画面枠のUI状態）の契約。型と定数だけを置き、実行時依存を持たない。
 
-// 最後に表示した画面として保存・復元できるルート
-export const WORKSPACE_ROUTES = ['/inbox', '/settings'] as const
-export type WorkspaceRoute = (typeof WORKSPACE_ROUTES)[number]
+// 最後に表示した画面として保存・復元できるルート（フェーズ5.1で /projects と /projects/<UUID> を追加）
+// - 固定のルートは列挙した値だけ
+// - プロジェクトのルートは「/projects/」+ 小文字のUUID だけ（任意のパスや外部URLは受け付けない）
+export const WORKSPACE_STATIC_ROUTES = ['/inbox', '/settings', '/projects'] as const
+export type WorkspaceStaticRoute = (typeof WORKSPACE_STATIC_ROUTES)[number]
+export type ProjectRoute = `/projects/${string}`
+export type WorkspaceRoute = WorkspaceStaticRoute | ProjectRoute
+
+// Main側で生成するUUID（crypto.randomUUID()は小文字）の形
+export const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
+export const PROJECT_ROUTE_PATTERN = /^\/projects\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/
+
+export function projectRoute(projectId: string): ProjectRoute {
+  return `/projects/${projectId}`
+}
+
+// /projects/<UUID> ならプロジェクトIDを返す。それ以外はnull
+export function projectIdFromRoute(route: string): string | null {
+  return PROJECT_ROUTE_PATTERN.exec(route)?.[1] ?? null
+}
 
 // ペイン幅の制約（px）。Rendererのパネル制約とMainの検証で共通に使う。
 export const WORKSPACE_LIMITS = {
@@ -33,7 +50,8 @@ export const DEFAULT_WORKSPACE_SETTINGS: WorkspaceSettings = {
 }
 
 export function isWorkspaceRoute(value: unknown): value is WorkspaceRoute {
-  return typeof value === 'string' && (WORKSPACE_ROUTES as readonly string[]).includes(value)
+  if (typeof value !== 'string') return false
+  return (WORKSPACE_STATIC_ROUTES as readonly string[]).includes(value) || PROJECT_ROUTE_PATTERN.test(value)
 }
 
 export function clampWidth(value: number, limits: { min: number; max: number }): number {

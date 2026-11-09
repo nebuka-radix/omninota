@@ -1,7 +1,7 @@
 // 終了・ウィンドウを閉じる前に、Rendererへ確定済みWorkspace状態と未保存ドラフトの扱いを問い合わせる。
 // electronをimportしないので、ホストNode.jsのテストから検証できる。
 import { randomUUID } from 'node:crypto'
-import type { DraftExitAction, WorkspaceFlushOutcome } from '../../shared/contracts/ipc'
+import type { DraftExitAction, DraftKind, WorkspaceFlushOutcome } from '../../shared/contracts/ipc'
 
 // Rendererの応答に加え、Main側で判定する結果
 // - timeout: 待機上限までに応答がない / unavailable: ウィンドウ・Rendererが存在しない
@@ -20,7 +20,9 @@ export type FlushRequester = {
   // 問い合わせを送り、結果を待つ。同じ扱い（draftAction）の問い合わせが進行中なら共有する。
   request(draftAction?: DraftExitAction): Promise<FlushCheckOutcome>
   // Rendererからの応答。未知・期限切れのrequestIdは無視してfalseを返す。
-  resolve(requestId: string, outcome: WorkspaceFlushOutcome): boolean
+  resolve(requestId: string, outcome: WorkspaceFlushOutcome, draftKind?: DraftKind): boolean
+  // 直近の応答で伝えられた未保存ドラフトの対象（ダイアログの文言用。なければnull）
+  lastDraftKind(): DraftKind | null
 }
 
 export function createFlushRequester(deps: {
@@ -40,6 +42,7 @@ export function createFlushRequester(deps: {
 
   const waiting = new Map<string, { finish: (outcome: FlushCheckOutcome) => void }>()
   const inflight = new Map<DraftExitAction, Promise<FlushCheckOutcome>>()
+  let latestDraftKind: DraftKind | null = null
 
   const requestOnce = (draftAction: DraftExitAction) =>
     new Promise<FlushCheckOutcome>((resolvePromise) => {
@@ -68,11 +71,15 @@ export function createFlushRequester(deps: {
       }
       return pending
     },
-    resolve(requestId, outcome) {
+    resolve(requestId, outcome, draftKind) {
       const entry = waiting.get(requestId)
       if (!entry) return false
+      latestDraftKind = draftKind ?? null
       entry.finish(outcome)
       return true
+    },
+    lastDraftKind() {
+      return latestDraftKind
     }
   }
 }

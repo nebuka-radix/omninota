@@ -1,12 +1,14 @@
 // Zodスキーマ。Mainだけがimportする（Preload / Rendererへ持ち込まない）。
 import { z } from 'zod'
-import { WORKSPACE_FLUSH_OUTCOMES } from '../contracts/ipc'
+import { DRAFT_KINDS, WORKSPACE_FLUSH_OUTCOMES } from '../contracts/ipc'
 import {
   clampWidth,
   DEFAULT_WORKSPACE_SETTINGS,
   WORKSPACE_LIMITS,
-  WORKSPACE_ROUTES,
+  PROJECT_ROUTE_PATTERN,
   WORKSPACE_SETTINGS_VERSION,
+  WORKSPACE_STATIC_ROUTES,
+  type ProjectRoute,
   type WorkspaceSettings
 } from '../contracts/workspace'
 
@@ -18,7 +20,11 @@ export const workspaceSettingsSchema = z.strictObject({
   sidebarWidth: width(WORKSPACE_LIMITS.sidebarWidth),
   detailWidth: width(WORKSPACE_LIMITS.detailWidth),
   detailVisible: z.boolean(),
-  lastRoute: z.enum(WORKSPACE_ROUTES)
+  // 固定のルート、または /projects/<UUID>（保存要求の厳格な検証。読み取り時は下の正規化で扱う）
+  lastRoute: z.union([
+    z.enum(WORKSPACE_STATIC_ROUTES),
+    z.custom<ProjectRoute>((value) => typeof value === 'string' && PROJECT_ROUTE_PATTERN.test(value))
+  ])
 })
 
 export const workspaceGetArgsSchema = z.tuple([])
@@ -26,7 +32,8 @@ export const workspaceSaveArgsSchema = z.tuple([workspaceSettingsSchema])
 export const workspaceFlushResultArgsSchema = z.tuple([
   z.strictObject({
     requestId: z.uuid(),
-    outcome: z.enum(WORKSPACE_FLUSH_OUTCOMES)
+    outcome: z.enum(WORKSPACE_FLUSH_OUTCOMES),
+    draftKind: z.enum(DRAFT_KINDS).optional()
   })
 ])
 

@@ -1,5 +1,5 @@
 import type { WorkspaceFlushOutcome } from '../../../../shared/contracts/ipc'
-import { processFlushRequest, type DraftExitHandlers } from './flush-request-handler'
+import { processFlushRequest, type DraftExitHandlers, type FlushResponse } from './flush-request-handler'
 
 // 終了・ウィンドウを閉じる前の問い合わせに応答する。
 // WorkspaceProviderがマウントされていない間（起動直後の読み込み中など）は、未保存の変更がないので nothing を返す。
@@ -44,18 +44,18 @@ function waitForPendingCommits(): Promise<void> {
 export function installWorkspaceFlushListener(): () => void {
   return window.gtd.workspace.onFlushRequest((request) => {
     void (async () => {
-      let outcome: WorkspaceFlushOutcome
+      let response: FlushResponse
       try {
-        outcome = await processFlushRequest(request.draftAction, {
+        response = await processFlushRequest(request.draftAction, {
           draft: currentDraftHandlers,
           flushWorkspace: currentHandler,
           waitForPendingCommits
         })
       } catch (error) {
         console.error('[workspace] 終了前の保存確認に失敗しました', error)
-        outcome = 'failed'
+        response = { outcome: 'failed' }
       }
-      const result = await window.gtd.workspace.reportFlushResult({ requestId: request.requestId, outcome })
+      const result = await window.gtd.workspace.reportFlushResult({ requestId: request.requestId, ...response })
       if (!result.ok) console.error('[workspace] 保存確認の応答を送れませんでした', result.error)
     })()
   })

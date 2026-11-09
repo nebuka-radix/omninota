@@ -12,8 +12,10 @@ import {
   type FailureChoice,
   type FlushCheckOutcome
 } from './lifecycle/workspace-flush'
+import { createProjectRepository } from './repositories/project-repository'
 import { createSettingsRepository } from './repositories/settings-repository'
 import { createTaskRepository } from './repositories/task-repository'
+import { createProjectService } from './services/project-service'
 import { createTaskService } from './services/task-service'
 import { createWorkspaceSettingsService } from './services/workspace-settings-service'
 import { createMainWindow, isAppUrl } from './window'
@@ -60,14 +62,15 @@ async function askOnFlushFailure(outcome: FlushCheckOutcome, kind: ExitKind): Pr
 
   // 詳細パネルに未保存のタイトル編集がある場合
   if (outcome === 'unsaved-draft') {
+    const draftTarget = flushRequester.lastDraftKind() === 'project' ? 'プロジェクト名' : 'タスクのタイトル'
     const response = await show({
       type: 'warning',
       buttons: [`保存して${verb}`, `保存せずに${verb}`, 'キャンセル'],
       defaultId: 0,
       cancelId: 2,
-      message: 'タスクのタイトルに未保存の変更があります',
+      message: `${draftTarget}に未保存の変更があります`,
       detail:
-        '「保存せずに」を選ぶと、タイトルの変更だけを破棄します（ペイン幅などのUI設定は保存します）。\n' +
+        `「保存せずに」を選ぶと、${draftTarget}の変更だけを破棄します（ペイン幅などのUI設定は保存します）。\n` +
         '保存できなかった場合は中断し、入力は残ります。'
     })
     return response === 0 ? 'save' : response === 1 ? 'discard' : 'cancel'
@@ -203,6 +206,7 @@ if (!app.requestSingleInstanceLock()) {
       policy: { getWindow: () => mainWindow, isAllowedUrl: isAppUrl },
       getAppInfo,
       taskService: createTaskService({ repository: createTaskRepository(database) }),
+      projectService: createProjectService({ repository: createProjectRepository(database) }),
       workspaceSettingsService: createWorkspaceSettingsService({
         repository: createSettingsRepository(database)
       }),

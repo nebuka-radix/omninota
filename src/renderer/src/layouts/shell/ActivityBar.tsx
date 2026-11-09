@@ -1,7 +1,7 @@
 import { Box, IconButton, Tooltip } from '@mui/material'
 import { useNavigate } from '@tanstack/react-router'
 import { vscodeColors } from '../../theme'
-import { SCREEN_ORDER, SCREENS } from './screens'
+import { SCREEN_ORDER, SCREENS, screenOf } from './screens'
 
 // 固定幅のアクティビティバー。選択状態はRouterの現在位置から導出する。
 export function ActivityBar({ pathname }: { pathname: string }) {
@@ -22,15 +22,15 @@ export function ActivityBar({ pathname }: { pathname: string }) {
         gap: 1
       }}
     >
-      {SCREEN_ORDER.map((route) => {
-        const { label, icon: Icon } = SCREENS[route]
-        const active = pathname === route
+      {SCREEN_ORDER.map((screen) => {
+        const { label, icon: Icon, path } = SCREENS[screen]
+        const active = screenOf(pathname) === screen
         return (
-          <Tooltip key={route} title={label} placement="right">
+          <Tooltip key={screen} title={label} placement="right">
             <IconButton
               aria-label={label}
               aria-current={active ? 'page' : undefined}
-              onClick={() => void navigate({ to: route })}
+              onClick={() => void navigate({ to: path })}
               sx={{
                 width: 48,
                 height: 44,

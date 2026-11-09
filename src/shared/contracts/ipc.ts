@@ -1,5 +1,6 @@
 // IPC契約: 型とチャンネル名の定数だけを置く。実行時依存を持たない。
 // Main / Preload / Rendererのどこからimportしてもよい。
+import type { CreateProjectInput, ProjectDto, RenameProjectInput } from './projects'
 import type { CreateTaskInput, SetTaskCompletedInput, TaskDto, UpdateTaskTitleInput } from './tasks'
 import type { WorkspaceSettings } from './workspace'
 
@@ -9,6 +10,9 @@ export const IPC_CHANNELS = {
   tasksList: 'tasks:list',
   tasksUpdateTitle: 'tasks:update-title',
   tasksSetCompleted: 'tasks:set-completed',
+  projectsList: 'projects:list',
+  projectsCreate: 'projects:create',
+  projectsRename: 'projects:rename',
   workspaceGet: 'workspace:get',
   workspaceSave: 'workspace:save',
   // Main → Renderer: 終了・ウィンドウを閉じる前に、確定済みのWorkspace状態の保存完了を問い合わせる
@@ -35,9 +39,15 @@ export type WorkspaceFlushRequest = {
   draftAction: DraftExitAction
 }
 
+// 未保存ドラフトの対象（終了時のダイアログの文言に使う。フェーズ5.1）
+export const DRAFT_KINDS = ['task', 'project'] as const
+export type DraftKind = (typeof DRAFT_KINDS)[number]
+
 export type WorkspaceFlushResult = {
   requestId: string
   outcome: WorkspaceFlushOutcome
+  // outcome が unsaved-draft / draft-save-failed の時の対象
+  draftKind?: DraftKind
 }
 
 // NOT_FOUND: 業務エラー（対象が存在しない）。その他は送信元・入力・予期しない障害。
@@ -79,6 +89,12 @@ export type GtdApi = {
     // 用途別の更新API。任意の列は更新できない。成功時は保存後のタスクを返す。
     updateTitle: (input: UpdateTaskTitleInput) => Promise<IpcResult<TaskDto>>
     setCompleted: (input: SetTaskCompletedInput) => Promise<IpcResult<TaskDto>>
+  }
+  // 用途別のAPI（フェーズ5.1は一覧・作成・名前変更だけ。完了は5.3）
+  projects: {
+    list: () => Promise<IpcResult<ProjectDto[]>>
+    create: (input: CreateProjectInput) => Promise<IpcResult<ProjectDto>>
+    rename: (input: RenameProjectInput) => Promise<IpcResult<ProjectDto>>
   }
   // Workspace設定専用。任意の設定キーは扱わない。
   workspace: {

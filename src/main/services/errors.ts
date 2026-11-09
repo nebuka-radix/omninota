@@ -15,3 +15,7 @@ export class BusinessError extends Error {
 export function taskNotFound(): BusinessError {
   return new BusinessError('NOT_FOUND', '対象のタスクが見つかりません。')
 }
+
+export function projectNotFound(): BusinessError {
+  return new BusinessError('NOT_FOUND', '対象のプロジェクトが見つかりません。')
+}

@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from 
 import { Alert, Box, Button, TextField, Typography } from '@mui/material'
 import { CircleCheck, RotateCcw, Save, Undo2 } from 'lucide-react'
 import { isTaskCompleted, TASK_TITLE_MAX_LENGTH, type TaskDto } from '../../../../shared/contracts/tasks'
-import { useDraftGuard } from './DraftGuard'
+import { useDraftGuard } from '../drafts/DraftGuard'
 import { formatTaskDateTime } from './TaskList'
 import { usePendingTaskIds, useSetTaskCompletedMutation, useUpdateTaskTitleMutation } from './task-queries'
 
@@ -48,7 +48,8 @@ export function TaskEditor({ task }: { task: TaskDto }) {
   useEffect(
     () =>
       register({
-        taskId: task.id,
+        kind: 'task',
+        targetId: task.id,
         isDirty: () => latest.current.dirty,
         save: () => latest.current.save(),
         discard: () => latest.current.discard()
@@ -71,7 +72,7 @@ export function TaskEditor({ task }: { task: TaskDto }) {
 
   const toggleCompleted = async () => {
     if (busy) return
-    if (!(await confirmLeave({ taskId: task.id }))) return
+    if (!(await confirmLeave({ target: { kind: 'task', id: task.id } }))) return
     setCompleted.mutate({ id: task.id, completed: !completed })
   }
 

@@ -6,11 +6,13 @@ import {
   createRouter,
   redirect
 } from '@tanstack/react-router'
-import { DEFAULT_WORKSPACE_SETTINGS } from '../../shared/contracts/workspace'
+import { DEFAULT_WORKSPACE_SETTINGS, projectIdFromRoute } from '../../shared/contracts/workspace'
+import { projectListQueryOptions } from './features/projects/project-queries'
 import { workspaceSettingsQueryOptions } from './features/workspace/workspace-queries'
 import { AppFrame } from './layouts/AppFrame'
 import { queryClient } from './lib/query-client'
 import { InboxPage } from './routes/InboxPage'
+import { ProjectPage, ProjectsIndexPage } from './routes/ProjectsPage'
 import { NotFoundPage } from './routes/NotFoundPage'
 import { SettingsPage } from './routes/SettingsPage'
 
@@ -33,7 +35,39 @@ const indexRoute = createRoute({
     } catch {
       // 読み込み失敗はAppFrame側で表示する
     }
-    throw redirect({ to: target, replace: true })
+    const projectId = projectIdFromRoute(target)
+    if (projectId) {
+      // 保存済みのプロジェクトが存在しなければ /projects へ。取得に失敗した場合は判定せず、そのまま開く
+      // （画面側で取得失敗として表示する。存在しないとは扱わない）
+      let exists = true
+      try {
+        const projects = await context.queryClient.ensureQueryData(projectListQueryOptions)
+        exists = projects.some((project) => project.id === projectId)
+      } catch {
+        exists = true
+      }
+      if (!exists) throw redirect({ to: '/projects', replace: true })
+      throw redirect({ to: '/projects/$projectId', params: { projectId }, replace: true })
+    }
+    if (target === '/inbox' || target === '/settings' || target === '/projects') {
+      throw redirect({ to: target, replace: true })
+    }
+    throw redirect({ to: '/inbox', replace: true })
+  }
+})
+
+const projectsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/projects',
+  component: ProjectsIndexPage
+})
+
+const projectRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/projects/$projectId',
+  component: function ProjectRouteComponent() {
+    const { projectId } = projectRoute.useParams()
+    return <ProjectPage projectId={projectId} />
   }
 })
 
@@ -49,7 +83,7 @@ const settingsRoute = createRoute({
   component: SettingsPage
 })
 
-const routeTree = rootRoute.addChildren([indexRoute, inboxRoute, settingsRoute])
+const routeTree = rootRoute.addChildren([indexRoute, inboxRoute, settingsRoute, projectsRoute, projectRoute])
 
 export const router = createRouter({
   routeTree,

@@ -1,9 +1,9 @@
 import { Box, Typography } from '@mui/material'
 import { useQuery } from '@tanstack/react-query'
 import { taskListQueryOptions } from '../../features/tasks/task-queries'
-import { isWorkspaceRoute } from '../../../../shared/contracts/workspace'
 import { PaneHeader } from './PaneHeader'
-import { SCREENS } from './screens'
+import { ProjectsSidebar } from '../../features/projects/ProjectsSidebar'
+import { SCREENS, screenOf } from './screens'
 
 function InboxSummary() {
   // Inboxの一覧と同じQueryを使う（追加の取得APIは使わない）
@@ -24,7 +24,8 @@ function InboxSummary() {
 
 // 現在の画面に対応した見出しと最小限の内容を表示する。
 export function Sidebar({ pathname }: { pathname: string }) {
-  const title = isWorkspaceRoute(pathname) ? SCREENS[pathname].label : '画面'
+  const screen = screenOf(pathname)
+  const title = screen ? SCREENS[screen].label : '画面'
 
   return (
     <Box
@@ -34,7 +35,8 @@ export function Sidebar({ pathname }: { pathname: string }) {
     >
       <PaneHeader id="sidebar-title" title={title} />
       <Box sx={{ flex: 1, minHeight: 0, overflowY: 'auto', overflowX: 'hidden' }}>
-        {pathname === '/inbox' && <InboxSummary />}
+        {screen === 'inbox' && <InboxSummary />}
+        {screen === 'projects' && <ProjectsSidebar pathname={pathname} />}
         {pathname === '/settings' && (
           <Typography variant="body2" color="text.secondary" sx={{ px: 4 }}>
             アプリ情報

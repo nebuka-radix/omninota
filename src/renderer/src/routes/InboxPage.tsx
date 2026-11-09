@@ -5,7 +5,7 @@ import { useTable, type SortingState } from '@tanstack/react-table'
 import { Inbox, Search } from 'lucide-react'
 import type { TaskDto } from '../../../shared/contracts/tasks'
 import { Page } from '../components/Page'
-import { useDraftGuard } from '../features/tasks/DraftGuard'
+import { useDraftGuard } from '../features/drafts/DraftGuard'
 import { TASK_LIST_HELP_ID, TaskList } from '../features/tasks/TaskList'
 import { TaskQuickAdd } from '../features/tasks/TaskQuickAdd'
 import { taskListQueryOptions, usePendingTaskIds, useSetTaskCompletedMutation } from '../features/tasks/task-queries'
@@ -67,7 +67,7 @@ export function InboxPage() {
   const handleToggleCompleted = async (task: TaskDto) => {
     if (pendingTaskIds.has(task.id)) return
     // 未保存の編集があるタスクは、完了操作の前に確認する（入力を黙って失わない）
-    if (!(await confirmLeave({ taskId: task.id }))) return
+    if (!(await confirmLeave({ target: { kind: 'task', id: task.id } }))) return
     setCompleted.mutate(
       { id: task.id, completed: task.completedAt === null },
       {

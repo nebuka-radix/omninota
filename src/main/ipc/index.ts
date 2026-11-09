@@ -2,6 +2,11 @@ import { ipcMain } from 'electron'
 import { IPC_CHANNELS, type AppInfo } from '../../shared/contracts/ipc'
 import { appGetInfoArgsSchema } from '../../shared/validation/app'
 import {
+  projectsCreateArgsSchema,
+  projectsListArgsSchema,
+  projectsRenameArgsSchema
+} from '../../shared/validation/projects'
+import {
   tasksCreateArgsSchema,
   tasksListArgsSchema,
   tasksSetCompletedArgsSchema,
@@ -13,6 +18,7 @@ import {
   workspaceSaveArgsSchema
 } from '../../shared/validation/workspace'
 import type { FlushRequester } from '../lifecycle/workspace-flush'
+import type { ProjectService } from '../services/project-service'
 import type { TaskService } from '../services/task-service'
 import type { WorkspaceSettingsService } from '../services/workspace-settings-service'
 import { createIpcHandler, type SenderPolicy } from './handler'
@@ -23,10 +29,11 @@ export function registerIpcHandlers(deps: {
   policy: SenderPolicy
   getAppInfo: () => AppInfo
   taskService: TaskService
+  projectService: ProjectService
   workspaceSettingsService: WorkspaceSettingsService
   flushRequester: FlushRequester
 }): void {
-  const { policy, taskService, workspaceSettingsService } = deps
+  const { policy, taskService, projectService, workspaceSettingsService } = deps
 
   ipcMain.handle(
     IPC_CHANNELS.appGetInfo,
@@ -79,6 +86,36 @@ export function registerIpcHandlers(deps: {
   )
 
   ipcMain.handle(
+    IPC_CHANNELS.projectsList,
+    createIpcHandler({
+      channel: IPC_CHANNELS.projectsList,
+      argsSchema: projectsListArgsSchema,
+      policy,
+      run: () => projectService.list()
+    })
+  )
+
+  ipcMain.handle(
+    IPC_CHANNELS.projectsCreate,
+    createIpcHandler({
+      channel: IPC_CHANNELS.projectsCreate,
+      argsSchema: projectsCreateArgsSchema,
+      policy,
+      run: ([input]) => projectService.create(input)
+    })
+  )
+
+  ipcMain.handle(
+    IPC_CHANNELS.projectsRename,
+    createIpcHandler({
+      channel: IPC_CHANNELS.projectsRename,
+      argsSchema: projectsRenameArgsSchema,
+      policy,
+      run: ([input]) => projectService.rename(input)
+    })
+  )
+
+  ipcMain.handle(
     IPC_CHANNELS.workspaceGet,
     createIpcHandler({
       channel: IPC_CHANNELS.workspaceGet,
@@ -106,7 +143,7 @@ export function registerIpcHandlers(deps: {
       argsSchema: workspaceFlushResultArgsSchema,
       policy,
       run: ([result]) => {
-        if (!deps.flushRequester.resolve(result.requestId, result.outcome)) {
+        if (!deps.flushRequester.resolve(result.requestId, result.outcome, result.draftKind)) {
           console.warn(`[ipc] 対応する保存問い合わせがありません: ${result.requestId}`)
         }
         return null

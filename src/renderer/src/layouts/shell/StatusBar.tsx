@@ -1,11 +1,10 @@
 import { Box, Typography } from '@mui/material'
 import { useIsMutating, useQuery } from '@tanstack/react-query'
-import { isWorkspaceRoute } from '../../../../shared/contracts/workspace'
 import { appInfoQueryOptions } from '../../features/app-info/app-info-query'
 import { taskKeys } from '../../features/tasks/task-queries'
 import { useWorkspace } from '../../features/workspace/WorkspaceContext'
 import { vscodeColors } from '../../theme'
-import { SCREENS } from './screens'
+import { SCREENS, screenOf } from './screens'
 
 // 実際に取得できる情報と、進行中・失敗した非同期処理だけを表示する。
 // 「すべて保存済み」のような根拠のない表示はしない。長いパスは設定画面に集約する。
@@ -15,7 +14,8 @@ export function StatusBar({ pathname }: { pathname: string }) {
   const savingTasks = useIsMutating({ mutationKey: taskKeys.all })
   const { saveStatus, persistenceEnabled } = useWorkspace()
 
-  const screen = isWorkspaceRoute(pathname) ? SCREENS[pathname].label : '—'
+  const screenId = screenOf(pathname)
+  const screen = screenId ? SCREENS[screenId].label : '—'
 
   const messages: string[] = []
   if (savingTasks > 0) messages.push('タスクを保存中…')

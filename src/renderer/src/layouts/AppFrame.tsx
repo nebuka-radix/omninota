@@ -1,7 +1,7 @@
 import { Box, CircularProgress } from '@mui/material'
 import { useQuery } from '@tanstack/react-query'
 import { DEFAULT_WORKSPACE_SETTINGS } from '../../../shared/contracts/workspace'
-import { DraftGuardProvider } from '../features/tasks/DraftGuard'
+import { DraftGuardProvider } from '../features/drafts/DraftGuard'
 import { workspaceSettingsQueryOptions } from '../features/workspace/workspace-queries'
 import { WorkspaceProvider } from '../features/workspace/WorkspaceContext'
 import { AppShell } from './shell/AppShell'
