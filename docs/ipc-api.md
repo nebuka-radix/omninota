@@ -38,7 +38,7 @@ type IpcResult<T> = { ok: true; data: T } | { ok: false; error: { code: IpcError
 | `tasks.setCompleted(input)` | `tasks:set-completed` | `{ id, completed }` | `TaskDto`（保存後） |
 | `workspace.get()` | `workspace:get` | なし | `WorkspaceSettings` |
 | `workspace.save(settings)` | `workspace:save` | `WorkspaceSettings` | `WorkspaceSettings` |
-| `workspace.onFlushRequest(listener)` | `workspace:flush-request`（Main → Renderer） | `requestId: string` | 購読解除関数 |
+| `workspace.onFlushRequest(listener)` | `workspace:flush-request`（Main → Renderer） | `{ requestId, draftAction }` | 購読解除関数 |
 | `workspace.reportFlushResult(result)` | `workspace:flush-result` | `{ requestId, outcome }` | `null` |
 
 ### tasks.create
@@ -95,13 +95,17 @@ type WorkspaceSettings = {
 
 通常の終了・ウィンドウを閉じる前に、Mainが確定済みWorkspace状態の保存完了を問い合わせるための専用API。
 
-- Mainは `workspace:flush-request` で `requestId`（UUID）を送る。Preloadはこのチャンネルだけを購読し、解除関数を返す。
+- Mainは `workspace:flush-request` で `{ requestId（UUID）, draftAction }` を送る。Preloadはこのチャンネルだけを購読し、
+  値の形（文字列・3値）を確かめてから渡す。戻り値は購読解除関数。
+- `draftAction`（フェーズ4.1）: `check`（確認だけ）/ `save`（未保存ドラフトを保存してから応答）/ `discard`（ドラフトを破棄してから応答）
 - Rendererは保存キューの `flush()` を待ってから `reportFlushResult` で応答する。
   - `outcome`: `saved`（保存できた）/ `nothing`（未保存の変更なし）/ `failed`（失敗）/ `disabled`（保存しない設定）
     / `unsaved-draft`（Workspace状態は問題ないが、詳細パネルに未保存のタイトル編集がある。フェーズ4）
-  - `unsaved-draft` の場合、Mainは同じ終了フローのダイアログで「キャンセル / 保存せずに終了（閉じる）」を選んでもらう。
+    / `draft-save-failed`（`save` でタイトルを保存できなかった。無効な入力を含む。フェーズ4.1）
+  - `unsaved-draft` の場合、Mainは同じ終了フローのダイアログで「保存して終了 / 保存せずに終了 / キャンセル」を選んでもらう。
+  - `draft-save-failed` の場合、Mainは終了・閉じる処理を中断する（ダイアログは重ねない）。
 - Main側の検証: 送信元検証に加え、`requestId` はUUID、`outcome` は上記4値、余分なキーは拒否。
-  未知・期限切れ（3秒）の `requestId` への応答は無視する。
+  未知・期限切れ（確認・破棄は3秒、保存は10秒）の `requestId` への応答は無視する。
 - Main側では、応答なしを `timeout`、ウィンドウ破棄済みを `unavailable` として扱う。
   `failed` と `timeout` は成功として扱わず、利用者に再試行・保存せずに続行・キャンセルを選んでもらう。
 

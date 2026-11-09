@@ -26,6 +26,7 @@
     "tests/**/*",
     "src/renderer/src/features/workspace/latest-wins-saver.ts",
     "src/renderer/src/features/workspace/pane-layout.ts",
-    "src/renderer/src/features/tasks/task-table.ts"
+    "src/renderer/src/features/tasks/task-table.ts",
+    "src/renderer/src/features/workspace/flush-request-handler.ts"
   ]
 }

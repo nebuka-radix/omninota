@@ -17,6 +17,7 @@ export function TaskEditor({ task }: { task: TaskDto }) {
   const pendingTaskIds = usePendingTaskIds()
   const { register, confirmLeave } = useDraftGuard()
   const submittingRef = useRef(false)
+  const inputRef = useRef<HTMLInputElement>(null)
 
   const busy = pendingTaskIds.has(task.id)
   const dirty = draft.trim() !== task.title
@@ -33,6 +34,8 @@ export function TaskEditor({ task }: { task: TaskDto }) {
       setDraft(saved.title)
       return true
     } catch {
+      // 失敗・無効な入力の理由は下のエラー表示に出る。すぐ修正できるよう入力欄へフォーカスを戻す
+      requestAnimationFrame(() => inputRef.current?.focus())
       return false
     } finally {
       submittingRef.current = false
@@ -94,6 +97,7 @@ export function TaskEditor({ task }: { task: TaskDto }) {
           autoComplete="off"
           error={blank}
           helperText={blank ? 'タイトルを入力してください。' : dirty ? '未保存の変更があります' : ' '}
+          inputRef={inputRef}
           slotProps={{
             htmlInput: {
               maxLength: TASK_TITLE_MAX_LENGTH,

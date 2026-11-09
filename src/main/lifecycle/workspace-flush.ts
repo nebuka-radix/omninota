@@ -1,13 +1,15 @@
-// 終了・ウィンドウを閉じる前に、Rendererへ確定済みWorkspace状態の保存完了を問い合わせる。
+// 終了・ウィンドウを閉じる前に、Rendererへ確定済みWorkspace状態と未保存ドラフトの扱いを問い合わせる。
 // electronをimportしないので、ホストNode.jsのテストから検証できる。
 import { randomUUID } from 'node:crypto'
-import type { WorkspaceFlushOutcome } from '../../shared/contracts/ipc'
+import type { DraftExitAction, WorkspaceFlushOutcome } from '../../shared/contracts/ipc'
 
 // Rendererの応答に加え、Main側で判定する結果
 // - timeout: 待機上限までに応答がない / unavailable: ウィンドウ・Rendererが存在しない
 export type FlushCheckOutcome = WorkspaceFlushOutcome | 'timeout' | 'unavailable'
 
 export const DEFAULT_FLUSH_TIMEOUT_MS = 3000
+// 「保存して終了」はタイトルの保存（IPC・DB書き込み）を含むため、確認より長く待つ
+export const DRAFT_SAVE_TIMEOUT_MS = 10000
 
 export function isFlushSuccessful(outcome: FlushCheckOutcome): boolean {
   // unavailable は保存を待つ相手がいないため、終了を妨げない（保存できたとはみなさない）
@@ -15,29 +17,31 @@ export function isFlushSuccessful(outcome: FlushCheckOutcome): boolean {
 }
 
 export type FlushRequester = {
-  // 問い合わせを送り、結果を待つ。同時に複数回呼ばれた場合は同じ問い合わせを共有する。
-  request(): Promise<FlushCheckOutcome>
+  // 問い合わせを送り、結果を待つ。同じ扱い（draftAction）の問い合わせが進行中なら共有する。
+  request(draftAction?: DraftExitAction): Promise<FlushCheckOutcome>
   // Rendererからの応答。未知・期限切れのrequestIdは無視してfalseを返す。
   resolve(requestId: string, outcome: WorkspaceFlushOutcome): boolean
 }
 
 export function createFlushRequester(deps: {
   // 送信できなければfalse（ウィンドウ破棄済みなど）
-  send: (requestId: string) => boolean
+  send: (request: { requestId: string; draftAction: DraftExitAction }) => boolean
   timeoutMs?: number
+  draftSaveTimeoutMs?: number
   generateId?: () => string
   setTimer?: (callback: () => void, ms: number) => unknown
   clearTimer?: (timer: unknown) => void
 }): FlushRequester {
-  const timeoutMs = deps.timeoutMs ?? DEFAULT_FLUSH_TIMEOUT_MS
+  const timeoutFor = (action: DraftExitAction) =>
+    action === 'save' ? (deps.draftSaveTimeoutMs ?? DRAFT_SAVE_TIMEOUT_MS) : (deps.timeoutMs ?? DEFAULT_FLUSH_TIMEOUT_MS)
   const generateId = deps.generateId ?? (() => randomUUID())
   const setTimer = deps.setTimer ?? ((callback, ms) => setTimeout(callback, ms))
   const clearTimer = deps.clearTimer ?? ((timer) => clearTimeout(timer as ReturnType<typeof setTimeout>))
 
   const waiting = new Map<string, { finish: (outcome: FlushCheckOutcome) => void }>()
-  let inflight: Promise<FlushCheckOutcome> | null = null
+  const inflight = new Map<DraftExitAction, Promise<FlushCheckOutcome>>()
 
-  const requestOnce = () =>
+  const requestOnce = (draftAction: DraftExitAction) =>
     new Promise<FlushCheckOutcome>((resolvePromise) => {
       const requestId = generateId()
       let timer: unknown = null
@@ -48,19 +52,21 @@ export function createFlushRequester(deps: {
         resolvePromise(outcome)
       }
       waiting.set(requestId, { finish })
-      if (!deps.send(requestId)) {
+      if (!deps.send({ requestId, draftAction })) {
         finish('unavailable')
         return
       }
-      timer = setTimer(() => finish('timeout'), timeoutMs)
+      timer = setTimer(() => finish('timeout'), timeoutFor(draftAction))
     })
 
   return {
-    request() {
-      inflight ??= requestOnce().finally(() => {
-        inflight = null
-      })
-      return inflight
+    request(draftAction = 'check') {
+      let pending = inflight.get(draftAction)
+      if (!pending) {
+        pending = requestOnce(draftAction).finally(() => inflight.delete(draftAction))
+        inflight.set(draftAction, pending)
+      }
+      return pending
     },
     resolve(requestId, outcome) {
       const entry = waiting.get(requestId)
@@ -72,7 +78,8 @@ export function createFlushRequester(deps: {
 }
 
 export type ExitKind = 'quit' | 'close'
-export type FailureChoice = 'retry' | 'discard' | 'cancel'
+// retry: 再試行 / save: ドラフトを保存して続行 / discard: 保存せずに続行 / cancel: 中断
+export type FailureChoice = 'retry' | 'save' | 'discard' | 'cancel'
 
 export type ExitCoordinator = {
   // アプリ終了要求（before-quit）。続行してよければ何もしない。
@@ -86,9 +93,12 @@ export type ExitCoordinator = {
 // 終了とウィンドウを閉じる処理を1か所で調整する。
 // - 保存確認中に届いた要求は止めるだけで、問い合わせを重ねない（再入防止）。
 // - 確認中に終了要求が来たら、確認後に終了まで進める。
-// - 失敗・タイムアウト時は利用者に選んでもらう。ダイアログは確認1回につき1つだけ。
+// - 確認・選択は順番に1つずつ行い、ダイアログを同時に重ねない。
+// - 未保存ドラフト（unsaved-draft）: 保存して続行 / 保存せずに続行 / キャンセル。
+//   「保存せずに」はドラフトの破棄だけを意味し、Workspace状態の保存確認は続けて行う。
+//   保存に失敗（draft-save-failed）したら続行しない（ドラフトは画面に残り、理由は詳細パネルに表示される）。
 export function createExitCoordinator(deps: {
-  requestFlush: () => Promise<FlushCheckOutcome>
+  requestFlush: (draftAction: DraftExitAction) => Promise<FlushCheckOutcome>
   askOnFailure: (outcome: FlushCheckOutcome, kind: ExitKind) => Promise<FailureChoice>
   // 確認後に処理を再開する
   continueQuit: () => void
@@ -101,14 +111,29 @@ export function createExitCoordinator(deps: {
   let quitAllowed = false
   let closeAllowed = false
 
-  const runCheck = async () => {
+  const runCheck = async (): Promise<boolean> => {
+    let action: DraftExitAction = 'check'
     for (;;) {
-      const outcome = await deps.requestFlush()
-      logger.info(`[exit] workspace保存の確認結果: ${outcome}`)
+      const outcome = await deps.requestFlush(action)
+      logger.info(`[exit] 保存の確認結果（${action}）: ${outcome}`)
       if (isFlushSuccessful(outcome)) return true
+      if (outcome === 'draft-save-failed') {
+        logger.warn('[exit] タイトルを保存できないため、中断します（ドラフトは保持）')
+        return false
+      }
       const choice = await deps.askOnFailure(outcome, pendingKind)
-      logger.warn(`[exit] 保存を確認できませんでした（${outcome}）。選択: ${choice}`)
-      if (choice === 'retry') continue
+      logger.warn(`[exit] 選択: ${choice}（${outcome}）`)
+      if (choice === 'cancel') return false
+      if (outcome === 'unsaved-draft') {
+        // 保存する・破棄する、のどちらでもWorkspace状態の確認まで行う
+        action = choice === 'save' ? 'save' : 'discard'
+        continue
+      }
+      // Workspace状態の保存失敗・応答なし
+      if (choice === 'retry') {
+        action = 'check'
+        continue
+      }
       return choice === 'discard'
     }
   }

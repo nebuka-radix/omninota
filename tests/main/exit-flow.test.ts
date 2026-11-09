@@ -2,9 +2,11 @@ import { describe, expect, it, vi } from 'vitest'
 import {
   createExitCoordinator,
   createFlushRequester,
+  type ExitKind,
   type FailureChoice,
   type FlushCheckOutcome
 } from '../../src/main/lifecycle/workspace-flush'
+import type { DraftExitAction } from '../../src/shared/contracts/ipc'
 import { workspaceFlushResultArgsSchema } from '../../src/shared/validation/workspace'
 
 const tick = () => new Promise((resolve) => setTimeout(resolve, 0))
@@ -13,7 +15,7 @@ const silent = { info: () => {}, warn: () => {} }
 describe('Rendererへの保存確認（FlushRequester）', () => {
   it('Rendererの応答で完了する', async () => {
     const sent: string[] = []
-    const requester = createFlushRequester({ send: (id) => (sent.push(id), true), generateId: () => 'req-1' })
+    const requester = createFlushRequester({ send: (request) => (sent.push(request.requestId), true), generateId: () => 'req-1' })
     const result = requester.request()
     expect(sent).toEqual(['req-1'])
     expect(requester.resolve('req-1', 'saved')).toBe(true)
@@ -52,6 +54,29 @@ describe('Rendererへの保存確認（FlushRequester）', () => {
     expect(await requester.request()).toBe('unavailable')
   })
 
+  it('問い合わせにはドラフトの扱いを含め、保存（save）は確認より長く待つ', async () => {
+    vi.useFakeTimers()
+    try {
+      const sent: string[] = []
+      let n = 0
+      const requester = createFlushRequester({
+        send: (request) => (sent.push(request.draftAction), true),
+        timeoutMs: 3000,
+        draftSaveTimeoutMs: 10000,
+        generateId: () => `req-${++n}`
+      })
+      const check = requester.request()
+      const save = requester.request('save')
+      expect(sent).toEqual(['check', 'save'])
+      vi.advanceTimersByTime(3000)
+      expect(await check).toBe('timeout')
+      expect(requester.resolve('req-2', 'saved')).toBe(true) // 保存はまだ待っている
+      expect(await save).toBe('saved')
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   it('未知のrequestIdは無視する', () => {
     const requester = createFlushRequester({ send: () => true, generateId: () => 'req-1' })
     void requester.request()
@@ -61,8 +86,10 @@ describe('Rendererへの保存確認（FlushRequester）', () => {
 
 describe('終了・ウィンドウを閉じる処理の調整（ExitCoordinator）', () => {
   function setup(outcomes: FlushCheckOutcome[], choices: FailureChoice[] = []) {
-    const requestFlush = vi.fn(async () => outcomes.shift() ?? 'saved')
-    const askOnFailure = vi.fn(async () => choices.shift() ?? 'cancel')
+    const requestFlush = vi.fn(async (_action: DraftExitAction): Promise<FlushCheckOutcome> => outcomes.shift() ?? 'saved')
+    const askOnFailure = vi.fn(
+      async (_outcome: FlushCheckOutcome, _kind: ExitKind): Promise<FailureChoice> => choices.shift() ?? 'cancel'
+    )
     const continueQuit = vi.fn()
     const continueClose = vi.fn()
     const coordinator = createExitCoordinator({ requestFlush, askOnFailure, continueQuit, continueClose, logger: silent })
@@ -172,18 +199,79 @@ describe('終了・ウィンドウを閉じる処理の調整（ExitCoordinator�
     expect(t.continueQuit).toHaveBeenCalledTimes(1)
   })
 
-  it('未保存の編集（unsaved-draft）は同じ終了フローのダイアログで確認し、成功扱いしない', async () => {
-    const cancel = setup(['unsaved-draft'], ['cancel'])
-    cancel.coordinator.onQuitRequested(cancel.event())
+  it('未保存ドラフト: キャンセルなら中断し、編集を続けられる（ドラフトは変えない）', async () => {
+    const t = setup(['unsaved-draft'], ['cancel'])
+    t.coordinator.onQuitRequested(t.event())
     await tick()
-    expect(cancel.askOnFailure).toHaveBeenCalledWith('unsaved-draft', 'quit')
-    expect(cancel.continueQuit).not.toHaveBeenCalled()
+    expect(t.askOnFailure).toHaveBeenCalledWith('unsaved-draft', 'quit')
+    expect(t.requestFlush.mock.calls.map((call) => call[0])).toEqual(['check'])
+    expect(t.continueQuit).not.toHaveBeenCalled()
+  })
 
-    const discard = setup(['unsaved-draft'], ['discard'])
-    discard.coordinator.onWindowCloseRequested(discard.event())
+  it('未保存ドラフト: 保存して終了 → 保存に成功した後だけ終了する', async () => {
+    const t = setup(['unsaved-draft', 'saved'], ['save'])
+    t.coordinator.onQuitRequested(t.event())
     await tick()
-    expect(discard.askOnFailure).toHaveBeenCalledWith('unsaved-draft', 'close')
-    expect(discard.continueClose).toHaveBeenCalledTimes(1)
+    await tick()
+    expect(t.requestFlush.mock.calls.map((call) => call[0])).toEqual(['check', 'save'])
+    expect(t.continueQuit).toHaveBeenCalledTimes(1)
+  })
+
+  it('未保存ドラフト: 保存に失敗したら終了せず、ダイアログを重ねない', async () => {
+    const t = setup(['unsaved-draft', 'draft-save-failed'], ['save'])
+    t.coordinator.onQuitRequested(t.event())
+    await tick()
+    await tick()
+    expect(t.askOnFailure).toHaveBeenCalledTimes(1)
+    expect(t.continueQuit).not.toHaveBeenCalled()
+    // 次の終了要求では最初から確認し直す
+    const again = t.event()
+    t.coordinator.onQuitRequested(again)
+    expect(again.preventDefault).toHaveBeenCalled()
+  })
+
+  it('未保存ドラフト: 保存せずに閉じる → ドラフトだけ破棄し、Workspace状態の確認は行う', async () => {
+    const t = setup(['unsaved-draft', 'saved'], ['discard'])
+    t.coordinator.onWindowCloseRequested(t.event())
+    await tick()
+    await tick()
+    expect(t.askOnFailure).toHaveBeenCalledWith('unsaved-draft', 'close')
+    expect(t.requestFlush.mock.calls.map((call) => call[0])).toEqual(['check', 'discard'])
+    expect(t.continueClose).toHaveBeenCalledTimes(1)
+    expect(t.continueQuit).not.toHaveBeenCalled()
+  })
+
+  it('保存してもWorkspace状態の保存に失敗した場合は、続けて既存の確認（再試行など）を行う', async () => {
+    const t = setup(['unsaved-draft', 'failed', 'saved'], ['save', 'retry'])
+    t.coordinator.onQuitRequested(t.event())
+    for (let i = 0; i < 4; i++) await tick()
+    expect(t.requestFlush.mock.calls.map((call) => call[0])).toEqual(['check', 'save', 'check'])
+    expect(t.askOnFailure.mock.calls.map((call) => call[0])).toEqual(['unsaved-draft', 'failed'])
+    expect(t.continueQuit).toHaveBeenCalledTimes(1)
+  })
+
+  it('保存して終了の処理中に終了要求が重なっても、保存・終了は1回だけ', async () => {
+    let finishSave: (outcome: FlushCheckOutcome) => void = () => {}
+    const requestFlush = vi.fn((action: string) =>
+      action === 'save'
+        ? new Promise<FlushCheckOutcome>((resolve) => (finishSave = resolve))
+        : Promise.resolve<FlushCheckOutcome>('unsaved-draft')
+    )
+    const continueQuit = vi.fn()
+    const coordinator = createExitCoordinator({
+      requestFlush,
+      askOnFailure: vi.fn(async () => 'save' as const),
+      continueQuit,
+      continueClose: vi.fn(),
+      logger: silent
+    })
+    coordinator.onQuitRequested({ preventDefault: vi.fn() })
+    await tick()
+    for (let i = 0; i < 3; i++) coordinator.onQuitRequested({ preventDefault: vi.fn() })
+    finishSave('saved')
+    await tick()
+    expect(requestFlush.mock.calls.map((call) => call[0])).toEqual(['check', 'save'])
+    expect(continueQuit).toHaveBeenCalledTimes(1)
   })
 
   it('保存しない設定（disabled）やRendererなし（unavailable）では終了を妨げない', async () => {

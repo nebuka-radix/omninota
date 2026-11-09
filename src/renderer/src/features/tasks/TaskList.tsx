@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type KeyboardEvent } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent } from 'react'
 import { Box, ButtonBase, Checkbox, Typography } from '@mui/material'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { ArrowDown, ArrowUp } from 'lucide-react'
@@ -60,11 +60,15 @@ function SortHeader({
   )
 }
 
+export const TASK_LIST_HELP_ID = 'task-list-help'
+
 // 1件選択のリスト（role="listbox"）。DOMフォーカスはリスト本体に置き、
 // 現在行は aria-activedescendant で示す（仮想化で行要素が入れ替わってもフォーカスを失わない）。
 // - 上下キー・Home/End・PageUp/PageDown: 現在行の移動（選択は変えない）
-// - Enter / Space: 現在行を選択して詳細パネルに表示
-// - 完了チェックはマウス操作用（キーボードでは詳細パネルのボタンを使う）
+// - Enter: 現在行を選択して詳細パネルに表示
+// - Space: 現在行の完了／未完了を切り替える（行の選択は変えない）
+// - 行のチェックボックスはマウス用。キーボード・読み上げでは上記のSpaceで同じ操作を行う
+//   （option内に操作要素を置けないため。Tab移動の対象も増やさない）
 export function TaskList({
   tasks,
   totalCount,
@@ -107,6 +111,22 @@ export function TaskList({
 
   const activeIndex = activeTaskId === null ? -1 : tasks.findIndex((task) => task.id === activeTaskId)
 
+  // 現在行が一覧から消えた時（完了して未完了の表示から外れた等）、フォーカス中なら同じ位置の行へ移す。
+  // 古い行番号ではなく、直前に現在行だった位置だけを手がかりに、現在の一覧から選び直す。
+  const lastActiveIndexRef = useRef(-1)
+  if (activeIndex >= 0) lastActiveIndexRef.current = activeIndex
+  useLayoutEffect(() => {
+    if (activeTaskId === null || activeIndex >= 0) return
+    if (!listFocused || tasks.length === 0) {
+      setActiveTaskId(null)
+      return
+    }
+    const nextIndex = Math.min(lastActiveIndexRef.current, tasks.length - 1)
+    const next = tasks[Math.max(0, nextIndex)]
+    setActiveTaskId(next ? next.id : null)
+    if (next) virtualizer.scrollToIndex(Math.max(0, nextIndex), { align: 'auto' })
+  }, [activeTaskId, activeIndex, listFocused, tasks, virtualizer])
+
   const moveTo = (index: number) => {
     if (tasks.length === 0) return
     const clamped = Math.max(0, Math.min(tasks.length - 1, index))
@@ -145,13 +165,19 @@ export function TaskList({
       case 'PageUp':
         moveTo(current - PAGE_STEP)
         break
-      case 'Enter':
-      case ' ': {
+      case 'Enter': {
         const target = tasks[current]
         if (target) {
           setActiveTaskId(target.id)
           onSelect(target.id)
         }
+        break
+      }
+      case ' ': {
+        // 現在行の完了切り替え。現在行がなければ表示範囲の行を現在行にするだけ（意図しない行を操作しない）
+        const target = activeIndex >= 0 ? tasks[activeIndex] : undefined
+        if (target) onToggleCompleted(target)
+        else moveTo(current)
         break
       }
       default:
@@ -173,7 +199,10 @@ export function TaskList({
     if (target) setActiveTaskId(target.id)
   }
 
-  const activeId = activeIndex >= 0 && tasks[activeIndex] ? taskOptionId(tasks[activeIndex].id) : undefined
+  // aria-activedescendant は描画済みの行だけを参照する（未描画の行はスクロール後の再描画で参照する）
+  const virtualItems = virtualizer.getVirtualItems()
+  const activeRendered = activeIndex >= 0 && virtualItems.some((item) => item.index === activeIndex)
+  const activeId = activeRendered && tasks[activeIndex] ? taskOptionId(tasks[activeIndex].id) : undefined
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', minHeight: 0, flex: 1 }}>
@@ -195,6 +224,7 @@ export function TaskList({
           ref={listRef}
           role="listbox"
           aria-label={`タスク一覧（${tasks.length}件表示 / 全${totalCount}件）`}
+          aria-describedby={TASK_LIST_HELP_ID}
           aria-activedescendant={listFocused ? activeId : undefined}
           tabIndex={0}
           onKeyDown={handleKeyDown}
@@ -203,7 +233,7 @@ export function TaskList({
           data-testid="task-list"
           sx={{ position: 'relative', height: virtualizer.getTotalSize(), outline: 'none' }}
         >
-          {virtualizer.getVirtualItems().map((item) => {
+          {virtualItems.map((item) => {
             const task = tasks[item.index]
             if (!task) return null
             const completed = isTaskCompleted(task)
@@ -216,7 +246,8 @@ export function TaskList({
                 id={taskOptionId(task.id)}
                 role="option"
                 aria-selected={selected}
-                aria-label={`${task.title}${completed ? '（完了）' : ''}、作成 ${formatTaskDateTime(task.createdAt)}`}
+                // 読み上げ名に対象のタスク名と完了状態を含める（チェックボックスは読み上げ対象外）
+                aria-label={`${task.title}、${completed ? '完了' : '未完了'}、作成 ${formatTaskDateTime(task.createdAt)}`}
                 data-task-id={task.id}
                 onClick={() => {
                   setActiveTaskId(task.id)

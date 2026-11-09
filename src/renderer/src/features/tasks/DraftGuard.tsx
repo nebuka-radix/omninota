@@ -1,7 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { Button, Dialog, DialogActions, DialogContent, DialogContentText, DialogTitle } from '@mui/material'
 import { useBlocker } from '@tanstack/react-router'
-import { setUnsavedDraftCheck } from '../workspace/workspace-flush'
+import { setDraftExitHandlers } from '../workspace/workspace-flush'
 
 // 詳細パネルの未保存の編集（ドラフト）を、黙って失わないための確認。
 // - 別タスクの選択・他画面への遷移・詳細パネルを閉じる・完了操作の前に confirmLeave() を呼ぶ。
@@ -73,8 +73,16 @@ export function DraftGuardProvider({ children }: { children: ReactNode }) {
     enableBeforeUnload: false
   })
 
-  // 終了フローへ未保存の有無を伝える
-  useEffect(() => setUnsavedDraftCheck(() => handleRef.current?.isDirty() ?? false), [])
+  // 終了フロー（Main側のダイアログ）から、未保存の有無の確認・保存・破棄を行えるようにする
+  useEffect(
+    () =>
+      setDraftExitHandlers({
+        isDirty: () => handleRef.current?.isDirty() ?? false,
+        save: async () => (handleRef.current ? handleRef.current.save() : true),
+        discard: () => handleRef.current?.discard()
+      }),
+    []
+  )
 
   const value = useMemo(() => ({ register, confirmLeave }), [register, confirmLeave])
   const choose = (choice: Choice) => prompt?.resolve(choice)
@@ -89,6 +97,8 @@ export function DraftGuardProvider({ children }: { children: ReactNode }) {
         }}
         aria-labelledby="draft-guard-title"
         aria-describedby="draft-guard-description"
+        // ポータル内のキー操作がReactの親（画面側）へ伝わらないようにする
+        onKeyDown={(event) => event.stopPropagation()}
       >
         <DialogTitle id="draft-guard-title" sx={{ fontSize: 15 }}>
           未保存の変更があります

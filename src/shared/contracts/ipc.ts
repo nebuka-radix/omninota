@@ -21,8 +21,19 @@ export const IPC_CHANNELS = {
 // - saved: 最新の確定値を保存できた / nothing: 未保存の変更なし
 // - failed: 保存に失敗した / disabled: 起動時の読み込み失敗により保存を行わない設定
 // - unsaved-draft: Workspace状態は保存済みだが、詳細パネルに未保存の編集（タイトル）がある（フェーズ4）
-export const WORKSPACE_FLUSH_OUTCOMES = ['saved', 'nothing', 'failed', 'disabled', 'unsaved-draft'] as const
+// - draft-save-failed: 「保存して終了」でタイトルを保存できなかった（無効な入力を含む）。ドラフトは残している（フェーズ4.1）
+export const WORKSPACE_FLUSH_OUTCOMES = ['saved', 'nothing', 'failed', 'disabled', 'unsaved-draft', 'draft-save-failed'] as const
 export type WorkspaceFlushOutcome = (typeof WORKSPACE_FLUSH_OUTCOMES)[number]
+
+// 終了前の問い合わせで、未保存のドラフトをどう扱うか（フェーズ4.1）
+// - check: 確認だけ（ドラフトは変えない） / save: ドラフトを保存してから応答 / discard: ドラフトを破棄してから応答
+export const DRAFT_EXIT_ACTIONS = ['check', 'save', 'discard'] as const
+export type DraftExitAction = (typeof DRAFT_EXIT_ACTIONS)[number]
+
+export type WorkspaceFlushRequest = {
+  requestId: string
+  draftAction: DraftExitAction
+}
 
 export type WorkspaceFlushResult = {
   requestId: string
@@ -74,7 +85,7 @@ export type GtdApi = {
     get: () => Promise<IpcResult<WorkspaceSettings>>
     save: (settings: WorkspaceSettings) => Promise<IpcResult<WorkspaceSettings>>
     // 終了前の保存問い合わせを購読する。戻り値は購読解除関数。
-    onFlushRequest: (listener: (requestId: string) => void) => () => void
+    onFlushRequest: (listener: (request: WorkspaceFlushRequest) => void) => () => void
     reportFlushResult: (result: WorkspaceFlushResult) => Promise<IpcResult<null>>
   }
 }

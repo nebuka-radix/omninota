@@ -6,7 +6,7 @@ import { Inbox, Search } from 'lucide-react'
 import type { TaskDto } from '../../../shared/contracts/tasks'
 import { Page } from '../components/Page'
 import { useDraftGuard } from '../features/tasks/DraftGuard'
-import { TaskList } from '../features/tasks/TaskList'
+import { TASK_LIST_HELP_ID, TaskList } from '../features/tasks/TaskList'
 import { TaskQuickAdd } from '../features/tasks/TaskQuickAdd'
 import { taskListQueryOptions, usePendingTaskIds, useSetTaskCompletedMutation } from '../features/tasks/task-queries'
 import {
@@ -40,6 +40,8 @@ export function InboxPage() {
   const [search, setSearch] = useState('')
   const [status, setStatus] = useState<TaskStatusFilter>(DEFAULT_TASK_STATUS)
   const [sorting, setSorting] = useState<SortingState>(DEFAULT_TASK_SORTING)
+  // 完了切り替えの結果を読み上げる（ライブリージョン）
+  const [announcement, setAnnouncement] = useState('')
 
   // Tableへ渡す状態は値が変わった時だけ作り直す（毎回新しい配列だと行モデルが作り直される）
   const columnFilters = useMemo(() => statusFilterState(status), [status])
@@ -66,7 +68,13 @@ export function InboxPage() {
     if (pendingTaskIds.has(task.id)) return
     // 未保存の編集があるタスクは、完了操作の前に確認する（入力を黙って失わない）
     if (!(await confirmLeave({ taskId: task.id }))) return
-    setCompleted.mutate({ id: task.id, completed: task.completedAt === null })
+    setCompleted.mutate(
+      { id: task.id, completed: task.completedAt === null },
+      {
+        onSuccess: (saved) =>
+          setAnnouncement(`「${saved.title}」を${saved.completedAt === null ? '未完了に戻しました' : '完了にしました'}`)
+      }
+    )
   }
 
   return (
@@ -112,6 +120,17 @@ export function InboxPage() {
           <Typography variant="caption" color="text.secondary" role="status" data-testid="task-count">
             {visibleTasks.length} 件表示 / 全 {data.length} 件
           </Typography>
+        </Box>
+        <Typography id={TASK_LIST_HELP_ID} variant="caption" color="text.secondary" component="p" sx={{ mb: 1 }}>
+          一覧の操作: ↑↓ で移動、Enter で選択、Space で完了／未完了の切り替え
+        </Typography>
+        <Box
+          role="status"
+          aria-live="polite"
+          data-testid="task-announcement"
+          sx={{ position: 'absolute', width: 1, height: 1, overflow: 'hidden', clip: 'rect(0 0 0 0)', whiteSpace: 'nowrap' }}
+        >
+          {announcement}
         </Box>
 
         {setCompleted.isError && (

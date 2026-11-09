@@ -14,6 +14,21 @@
 - ソース、out、dist、アプリバンドル内に実DBを置かない。
 - `*.sqlite`、`*.sqlite-wal`、`*.sqlite-shm`、`backups/`、`logs/` は `.gitignore` で除外している。
 
+### 検証用の保存先（GTD_DEV_USER_DATA_DIR）
+
+大量データや終了フローの確認で、開発用・通常利用のDBを使わないための仕組み（フェーズ4）。
+
+- 有効になる条件: 未パッケージ（`npm run dev` / `npm run preview`）で、値が**絶対パス**の場合だけ。
+  パッケージ版、相対パス、未指定では無視し、通常の保存先を使う（`src/main/infrastructure/app-paths.ts`）。
+- 指定したディレクトリがuserDataになり、DBはその中の `gtd.sqlite`。起動時にマイグレーションが適用される。
+- 使い方:
+
+```zsh
+DIR=$(mktemp -d /tmp/gtd-verify-XXXXXX)
+GTD_DEV_USER_DATA_DIR=$DIR npm run dev
+# 終了後、必要なら sqlite3 "$DIR/gtd.sqlite" で中身を確認する。不要になったら自分でディレクトリを削除する
+```
+
 ## 接続設定
 
 `src/main/db/client.ts`

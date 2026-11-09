@@ -19,8 +19,13 @@ const api: GtdApi = {
     save: (settings) => ipcRenderer.invoke(IPC_CHANNELS.workspaceSave, settings),
     // このチャンネルだけを購読する（任意チャンネルの購読口は公開しない）。
     onFlushRequest: (listener) => {
-      const handler = (_event: unknown, requestId: unknown) => {
-        if (typeof requestId === 'string') listener(requestId)
+      // Mainから届く値だけを、形を確かめてから渡す
+      const handler = (_event: unknown, request: unknown) => {
+        if (typeof request !== 'object' || request === null) return
+        const { requestId, draftAction } = request as Record<string, unknown>
+        if (typeof requestId !== 'string') return
+        if (draftAction !== 'check' && draftAction !== 'save' && draftAction !== 'discard') return
+        listener({ requestId, draftAction })
       }
       ipcRenderer.on(IPC_CHANNELS.workspaceFlushRequest, handler)
       return () => {

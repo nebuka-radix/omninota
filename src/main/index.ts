@@ -39,42 +39,45 @@ const migrationsDir = resolveMigrationsDir({
 let mainWindow: BrowserWindow | null = null
 let database: AppDatabase | null = null
 
-// 終了・ウィンドウを閉じる前に、Rendererへ確定済みWorkspace状態の保存完了を問い合わせる。
+// 終了・ウィンドウを閉じる前に、Rendererへ確定済みWorkspace状態と未保存ドラフトの扱いを問い合わせる。
 // 破棄済みのウィンドウ・Rendererには送らない（unavailableとして扱う）。
 const flushRequester = createFlushRequester({
-  send: (requestId) => {
+  send: (request) => {
     const win = mainWindow
     if (!win || win.isDestroyed() || win.webContents.isDestroyed() || win.webContents.isCrashed()) return false
-    win.webContents.send(IPC_CHANNELS.workspaceFlushRequest, requestId)
+    win.webContents.send(IPC_CHANNELS.workspaceFlushRequest, request)
     return true
   }
 })
 
+// 終了フローのダイアログ（同時に1つだけ。ExitCoordinatorが順番に呼ぶ）
 async function askOnFlushFailure(outcome: FlushCheckOutcome, kind: ExitKind): Promise<FailureChoice> {
   const parent = mainWindow && !mainWindow.isDestroyed() ? mainWindow : null
   const show = async (options: Electron.MessageBoxOptions) =>
     (parent ? await dialog.showMessageBox(parent, options) : await dialog.showMessageBox(options)).response
-  const discardLabel = kind === 'quit' ? '保存せずに終了' : '保存せずに閉じる'
-  console.warn(`[exit] 保存を確認できないため、確認ダイアログを表示します（${outcome}）`)
+  const verb = kind === 'quit' ? '終了' : '閉じる'
+  console.warn(`[exit] 確認ダイアログを表示します（${outcome}）`)
 
-  // 詳細パネルに未保存のタイトル編集がある場合。保存は画面側で行ってもらう（ここでは再試行しない）。
+  // 詳細パネルに未保存のタイトル編集がある場合
   if (outcome === 'unsaved-draft') {
     const response = await show({
       type: 'warning',
-      buttons: ['キャンセル', discardLabel],
+      buttons: [`保存して${verb}`, `保存せずに${verb}`, 'キャンセル'],
       defaultId: 0,
-      cancelId: 0,
+      cancelId: 2,
       message: 'タスクのタイトルに未保存の変更があります',
-      detail: '保存する場合は「キャンセル」を選び、詳細パネルで保存してください。'
+      detail:
+        '「保存せずに」を選ぶと、タイトルの変更だけを破棄します（ペイン幅などのUI設定は保存します）。\n' +
+        '保存できなかった場合は中断し、入力は残ります。'
     })
-    return response === 1 ? 'discard' : 'cancel'
+    return response === 0 ? 'save' : response === 1 ? 'discard' : 'cancel'
   }
 
   const reason =
     outcome === 'timeout' ? '画面からの応答がありませんでした。' : 'UI設定（ペイン幅など）の保存に失敗しました。'
   const response = await show({
     type: 'warning',
-    buttons: ['再試行', discardLabel, 'キャンセル'],
+    buttons: ['再試行', `保存せずに${verb}`, 'キャンセル'],
     defaultId: 0,
     cancelId: 2,
     message: 'UI設定を保存できませんでした',
@@ -84,7 +87,7 @@ async function askOnFlushFailure(outcome: FlushCheckOutcome, kind: ExitKind): Pr
 }
 
 const exitCoordinator = createExitCoordinator({
-  requestFlush: () => flushRequester.request(),
+  requestFlush: (draftAction) => flushRequester.request(draftAction),
   askOnFailure: askOnFlushFailure,
   continueQuit: () => app.quit(),
   continueClose: () => {
