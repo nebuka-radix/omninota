@@ -1,0 +1,149 @@
+import { join } from 'node:path'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { closeDatabase, openDatabase, type AppDatabase } from '../../src/main/db/client'
+import { runMigrations } from '../../src/main/db/migrate'
+import { createIpcHandler, type InvokeEventLike, type SenderPolicy } from '../../src/main/ipc/handler'
+import { createSettingsRepository, SETTINGS_KEYS } from '../../src/main/repositories/settings-repository'
+import { createWorkspaceSettingsService } from '../../src/main/services/workspace-settings-service'
+import { DEFAULT_WORKSPACE_SETTINGS, WORKSPACE_LIMITS, type WorkspaceSettings } from '../../src/shared/contracts/workspace'
+import {
+  normalizeWorkspaceSettings,
+  workspaceGetArgsSchema,
+  workspaceSaveArgsSchema
+} from '../../src/shared/validation/workspace'
+import { createTempDir, MIGRATIONS_DIR } from '../helpers/temp-database'
+
+const valid: WorkspaceSettings = {
+  version: 1,
+  sidebarWidth: 260,
+  detailWidth: 320,
+  detailVisible: false,
+  lastRoute: '/settings'
+}
+
+describe('workspace.save の入力検証（厳格）', () => {
+  it('正しい設定を受け付ける', () => {
+    expect(workspaceSaveArgsSchema.safeParse([valid]).success).toBe(true)
+  })
+
+  it.each<[string, unknown[]]>([
+    ['引数なし', []],
+    ['余分なキー', [{ ...valid, openTabs: [] }]],
+    ['未知の画面', [{ ...valid, lastRoute: '/projects' }]],
+    ['バージョン違い', [{ ...valid, version: 2 }]],
+    ['サイドバー幅が最小未満', [{ ...valid, sidebarWidth: WORKSPACE_LIMITS.sidebarWidth.min - 1 }]],
+    ['詳細幅が最大超過', [{ ...valid, detailWidth: WORKSPACE_LIMITS.detailWidth.max + 1 }]],
+    ['幅が小数', [{ ...valid, sidebarWidth: 250.5 }]],
+    ['表示状態が文字列', [{ ...valid, detailVisible: 'true' }]],
+    ['任意キー指定の試み', ['theme', 'dark']]
+  ])('拒否する: %s', (_label, args) => {
+    expect(workspaceSaveArgsSchema.safeParse(args).success).toBe(false)
+  })
+
+  it('workspace.get は引数を受け付けない', () => {
+    expect(workspaceGetArgsSchema.safeParse([]).success).toBe(true)
+    expect(workspaceGetArgsSchema.safeParse(['workspace']).success).toBe(false)
+  })
+})
+
+describe('保存値の読み取り時の正規化（フォールバック）', () => {
+  it('未保存なら既定値', () => {
+    expect(normalizeWorkspaceSettings(undefined)).toEqual({ settings: DEFAULT_WORKSPACE_SETTINGS, source: 'default' })
+  })
+
+  it.each([['壊れたJSON', '{"version":1,'], ['JSONの配列', '[]'], ['バージョン違い', '{"version":99}'], ['null', 'null']])(
+    '%s なら既定値',
+    (_label, raw) => {
+      expect(normalizeWorkspaceSettings(raw)).toEqual({ settings: DEFAULT_WORKSPACE_SETTINGS, source: 'default' })
+    }
+  )
+
+  it('正しい保存値はそのまま使う', () => {
+    expect(normalizeWorkspaceSettings(JSON.stringify(valid))).toEqual({ settings: valid, source: 'saved' })
+  })
+
+  it('範囲外の幅は範囲内に丸め、型違い・未知の画面は項目ごとに既定値にする', () => {
+    const raw = JSON.stringify({
+      version: 1,
+      sidebarWidth: 99999,
+      detailWidth: 10,
+      detailVisible: 'yes',
+      lastRoute: '/review'
+    })
+    expect(normalizeWorkspaceSettings(raw)).toEqual({
+      settings: {
+        version: 1,
+        sidebarWidth: WORKSPACE_LIMITS.sidebarWidth.max,
+        detailWidth: WORKSPACE_LIMITS.detailWidth.min,
+        detailVisible: DEFAULT_WORKSPACE_SETTINGS.detailVisible,
+        lastRoute: '/inbox'
+      },
+      source: 'repaired'
+    })
+  })
+})
+
+describe('Workspace設定の保存・取得（一時DB）', () => {
+  let temp: ReturnType<typeof createTempDir>
+  let db: AppDatabase
+  const logger = { warn: vi.fn(), error: vi.fn() }
+
+  beforeEach(() => {
+    temp = createTempDir()
+    db = openDatabase(join(temp.dir, 'gtd.sqlite'))
+    runMigrations(db, MIGRATIONS_DIR)
+    logger.warn.mockClear()
+  })
+
+  afterEach(() => {
+    closeDatabase(db)
+    temp.cleanup()
+  })
+
+  const service = () => createWorkspaceSettingsService({ repository: createSettingsRepository(db), logger })
+
+  it('未保存なら既定値を返し、DBには書き込まない', () => {
+    expect(service().get()).toEqual(DEFAULT_WORKSPACE_SETTINGS)
+    expect(createSettingsRepository(db).get(SETTINGS_KEYS.workspace)).toBeUndefined()
+  })
+
+  it('保存した値を取得でき、上書き保存で最新値になる', () => {
+    service().save(valid)
+    expect(service().get()).toEqual(valid)
+    service().save({ ...valid, sidebarWidth: 300 })
+    expect(service().get().sidebarWidth).toBe(300)
+    const count = db.$client.prepare('SELECT COUNT(*) AS c FROM app_settings').get() as { c: number }
+    expect(count.c).toBe(1)
+  })
+
+  it('DB上の値が壊れていても既定値で読み込み、DBの値は書き換えない', () => {
+    createSettingsRepository(db).upsert({ key: 'workspace', value: 'not json', updatedAt: '2026-01-01T00:00:00.000Z' })
+    expect(service().get()).toEqual(DEFAULT_WORKSPACE_SETTINGS)
+    expect(createSettingsRepository(db).get('workspace')?.value).toBe('not json')
+    expect(logger.warn).toHaveBeenCalledTimes(1)
+  })
+
+  it('IPCハンドラー経由: 不正な保存要求はINVALID_INPUTで、DBは変わらない', async () => {
+    const policy: SenderPolicy = {
+      getWindow: () => ({ isDestroyed: () => false, webContents: { id: 1 } }),
+      isAllowedUrl: () => true
+    }
+    const event: InvokeEventLike = { sender: { id: 1 }, senderFrame: { url: 'file:///index.html', parent: null } }
+    const handler = createIpcHandler({
+      channel: 'workspace:save',
+      argsSchema: workspaceSaveArgsSchema,
+      policy,
+      logger,
+      run: ([settings]) => service().save(settings)
+    })
+
+    expect(await handler(event, { ...valid, sidebarWidth: 5 })).toMatchObject({
+      ok: false,
+      error: { code: 'INVALID_INPUT' }
+    })
+    expect(createSettingsRepository(db).get('workspace')).toBeUndefined()
+
+    expect(await handler(event, valid)).toEqual({ ok: true, data: valid })
+    expect(service().get()).toEqual(valid)
+  })
+})

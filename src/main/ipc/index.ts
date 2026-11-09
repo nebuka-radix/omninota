@@ -1,0 +1,116 @@
+import { ipcMain } from 'electron'
+import { IPC_CHANNELS, type AppInfo } from '../../shared/contracts/ipc'
+import { appGetInfoArgsSchema } from '../../shared/validation/app'
+import {
+  tasksCreateArgsSchema,
+  tasksListArgsSchema,
+  tasksSetCompletedArgsSchema,
+  tasksUpdateTitleArgsSchema
+} from '../../shared/validation/tasks'
+import {
+  workspaceFlushResultArgsSchema,
+  workspaceGetArgsSchema,
+  workspaceSaveArgsSchema
+} from '../../shared/validation/workspace'
+import type { FlushRequester } from '../lifecycle/workspace-flush'
+import type { TaskService } from '../services/task-service'
+import type { WorkspaceSettingsService } from '../services/workspace-settings-service'
+import { createIpcHandler, type SenderPolicy } from './handler'
+
+// チャンネルごとに用途を限定したハンドラーだけを登録する（汎用の転送口は作らない）。
+// タスクAPIは、DBのマイグレーション完了後に呼び出すこと。
+export function registerIpcHandlers(deps: {
+  policy: SenderPolicy
+  getAppInfo: () => AppInfo
+  taskService: TaskService
+  workspaceSettingsService: WorkspaceSettingsService
+  flushRequester: FlushRequester
+}): void {
+  const { policy, taskService, workspaceSettingsService } = deps
+
+  ipcMain.handle(
+    IPC_CHANNELS.appGetInfo,
+    createIpcHandler({
+      channel: IPC_CHANNELS.appGetInfo,
+      argsSchema: appGetInfoArgsSchema,
+      policy,
+      run: () => deps.getAppInfo()
+    })
+  )
+
+  ipcMain.handle(
+    IPC_CHANNELS.tasksCreate,
+    createIpcHandler({
+      channel: IPC_CHANNELS.tasksCreate,
+      argsSchema: tasksCreateArgsSchema,
+      policy,
+      run: ([input]) => taskService.create(input)
+    })
+  )
+
+  ipcMain.handle(
+    IPC_CHANNELS.tasksList,
+    createIpcHandler({
+      channel: IPC_CHANNELS.tasksList,
+      argsSchema: tasksListArgsSchema,
+      policy,
+      run: () => taskService.list()
+    })
+  )
+
+  ipcMain.handle(
+    IPC_CHANNELS.tasksUpdateTitle,
+    createIpcHandler({
+      channel: IPC_CHANNELS.tasksUpdateTitle,
+      argsSchema: tasksUpdateTitleArgsSchema,
+      policy,
+      run: ([input]) => taskService.updateTitle(input)
+    })
+  )
+
+  ipcMain.handle(
+    IPC_CHANNELS.tasksSetCompleted,
+    createIpcHandler({
+      channel: IPC_CHANNELS.tasksSetCompleted,
+      argsSchema: tasksSetCompletedArgsSchema,
+      policy,
+      run: ([input]) => taskService.setCompleted(input)
+    })
+  )
+
+  ipcMain.handle(
+    IPC_CHANNELS.workspaceGet,
+    createIpcHandler({
+      channel: IPC_CHANNELS.workspaceGet,
+      argsSchema: workspaceGetArgsSchema,
+      policy,
+      run: () => workspaceSettingsService.get()
+    })
+  )
+
+  ipcMain.handle(
+    IPC_CHANNELS.workspaceSave,
+    createIpcHandler({
+      channel: IPC_CHANNELS.workspaceSave,
+      argsSchema: workspaceSaveArgsSchema,
+      policy,
+      run: ([settings]) => workspaceSettingsService.save(settings)
+    })
+  )
+
+  // 終了前の保存問い合わせへの応答。未知・期限切れのrequestIdは無視する。
+  ipcMain.handle(
+    IPC_CHANNELS.workspaceFlushResult,
+    createIpcHandler({
+      channel: IPC_CHANNELS.workspaceFlushResult,
+      argsSchema: workspaceFlushResultArgsSchema,
+      policy,
+      run: ([result]) => {
+        if (!deps.flushRequester.resolve(result.requestId, result.outcome)) {
+          console.warn(`[ipc] 対応する保存問い合わせがありません: ${result.requestId}`)
+        }
+        return null
+      }
+    })
+  )
+}

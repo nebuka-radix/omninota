@@ -113,6 +113,7 @@ routesにはルーティングと画面の組み立てを置く。
 ## IPC契約
 
 shared/contractsに入力・出力とAPI型を定義する。
+実装済みAPIの一覧と結果形式は docs/ipc-api.md を参照する。
 
 APIの例:
 - tasks.list
@@ -129,6 +130,28 @@ APIの例:
 - 業務エラーと予期しない障害を区別する。
 - 通知イベントの購読APIは解除関数を返す。
 
+各層の取り込み範囲:
+- shared/contractsは型とチャンネル名の定数だけを置き、実行時依存を持たない。
+  Main、Preload、Rendererのどこから使ってもよい。
+- shared/validation（Zodスキーマ）はMainだけがimportする。
+  PreloadとRendererへZodを持ち込まない。
+- Mainは`ipcMain.handle`で受け付け、送信元のwebContents・フレームURLを検証し、
+  Zodで入力を検証してから処理する。結果は`{ ok, data | error }`形式で返す。
+- PreloadはsandboxのためCJSで出力する。`require`できるのは`electron`だけなので、
+  Preloadが使うコードはすべてバンドルする（electron-viteの`externalizeDeps: false`）。
+- Preloadは用途別の関数だけを`window.gtd`として公開し、汎用のinvokeを公開しない。
+
+## 依存関係の分類
+
+| 分類 | 置き場所 | 理由 |
+|---|---|---|
+| Mainの実行時に読み込む（例: zod、better-sqlite3、drizzle-orm） | dependencies | electron-viteがMainでは外部依存として残すため、配布物のnode_modulesに必要 |
+| Rendererだけで使う（例: React、MUI、TanStack） | devDependencies | Viteがout/rendererへバンドルし、実行時にnode_modulesから読み込まないため |
+| ビルド・型・開発ツール | devDependencies | 実行時に使わないため |
+
+Preloadは全依存をバンドルするため、Preloadだけで使う依存もdevDependenciesとする。
+Mainへ新しい依存を追加する場合は、外部依存として残るかを確認してから分類する。
+
 ## 状態の配置
 
 | 状態 | 所有者 |
@@ -138,11 +161,81 @@ APIの例:
 | ソート・列表示・行選択 | Tableと画面状態 |
 | 表示範囲・スクロール計算 | Virtual |
 | 現在の画面 | Router |
-| 開いているタブ・ペイン幅 | Workspace状態 |
+| ペイン幅・詳細パネル表示・最後の画面 | Workspace状態（SQLiteのapp_settingsへ保存） |
+| 開いているタブ | Workspace状態（未実装） |
 | 入力途中のフォーム | 対象画面 |
 
-UI状態管理ライブラリは未選定。
-最初はReact Context/Reducer等で必要十分か検討する。
+UI状態管理ライブラリは導入せず、React Context / Reducerで管理する。
+
+### Workspace状態（フェーズ3）
+
+`src/renderer/src/features/workspace/WorkspaceContext.tsx`
+
+| 項目 | 保存 | 内容 |
+|---|---|---|
+| sidebarWidth | する | 左サイドバーの希望幅（px） |
+| detailWidth | する | 右詳細パネルの希望幅（px）。閉じても保持する |
+| detailVisible | する | 右詳細パネルの表示・非表示 |
+| lastRoute | する | 最後に表示した画面（`/inbox` / `/settings`）。次回起動用のスナップショット |
+| selectedTaskId | しない | 詳細パネルに表示するタスク |
+| saveStatus | しない | 保存中・失敗の表示用 |
+
+- 現在の画面の正本はRouter。ActivityBarの選択はRouterの位置から導出し、
+  lastRouteはRouterの位置に追従させるだけで独立には更新しない。
+- タブ（openTabs / activeTabId）はまだ持たない。
+- 起動時はWorkspace設定を読み込んでからAppShellを描画する。読み込み失敗時は既定値で表示し、保存しない。
+- 保存はユーザー操作で設定が変わった時だけ行う（起動時の復元値・既定値は書き込まない）。
+- 保存は「最新値だけを順番に送る」キュー（latest-wins-saver.ts）を通し、古い保存が新しい値を上書きしないようにする。
+
+### 終了・ウィンドウを閉じる時の保存（フェーズ3.1）
+
+```text
+⌘Q / app.quit()          → before-quit ─┐
+閉じるボタン・⌘W（close） → close ───────┤→ ExitCoordinator（止めて確認）
+                                          │   → Rendererへ workspace:flush-request（送信元はMain）
+                                          │   → Rendererは保存キューの flush() を待ち workspace:flush-result で応答
+                                          │   → 成功・保存不要: 終了 / 閉じる処理を再開
+                                          └   → 失敗・3秒応答なし: 「再試行 / 保存せずに終了（閉じる） / キャンセル」
+```
+
+- `src/main/lifecycle/workspace-flush.ts`（electronに依存しない）と `src/main/index.ts` で実装。
+- 確認中に届いた終了・閉じる要求は止めるだけで、問い合わせやダイアログを重ねない。
+  閉じる確認中に終了要求が来た場合は、確認後に終了まで進める。
+- macOSではウィンドウを閉じてもアプリは終了しない（既存方針）。閉じる前にも同じ確認を行う。
+- 破棄済みのウィンドウ・Rendererには問い合わせない（unavailable として終了を妨げない）。
+- 起動時の読み込みに失敗した場合は保存しない方針のため、Rendererは disabled を返す。
+- 保証するのは通常の終了操作での保存。強制終了・OSクラッシュ・電源断は対象外。
+  ドラッグ途中の幅は未確定として扱う。
+
+### 画面枠（AppShell）
+
+`src/renderer/src/layouts/shell/`
+
+```text
+TopBar（固定）
+ActivityBar（固定48px）| Sidebar | MainPanel | DetailPanel   ← react-resizable-panels の Group
+StatusBar（固定）
+```
+
+- Sidebar・DetailPanelは `groupResizeBehavior="preserve-pixel-size"`、MainPanelが残りの幅を使う。
+- 各ペインは縦方向だけスクロールし、ウィンドウ全体には横スクロールを出さない。
+- 境界（Separator）はキーボード操作（矢印・Home/End）とARIA属性をライブラリが提供する。
+- 幅は「希望幅（保存する値）」と「実寸（表示する値）」を分ける（フェーズ3.1）。
+  処理は `src/renderer/src/features/workspace/use-pane-layout.ts` と `pane-layout.ts`。
+  - 希望幅を更新するのは、ユーザーが境界線を直接操作した時だけ。
+    Groupの `onLayoutChanged` のうち `isUserInteraction` が true のものだけを扱い、
+    操作した境界線（Separatorの onPointerDown / onKeyDown で記録）に対応するペインの希望幅だけを更新する。
+    記録がない場合は幅の増減から判定する（両方変わった時は広がった側）。
+  - 実寸は、希望幅・表示可能な幅・最小幅から計算し、`groupRef.setLayout()` で適用する。
+    幅が足りない時は、直前に操作していない側のペインから最小幅まで縮める。
+    この適用はユーザー操作として通知されないため、保存されない。
+  - ウィンドウサイズ変更（ResizeObserver）・詳細パネルの開閉・起動時の復元では、実寸の再計算だけを行う。
+  - ドラッグ中（`onLayoutChange`）はDBに書き込まない。
+- 境界線のダブルクリックは、ライブラリ既定の動作（`disableDoubleClick`）を無効にし、
+  Separatorの onDoubleClick で対象ペインを既定幅（サイドバー240px・詳細300px）に戻して、その希望幅だけを保存する。
+  ダブルクリック・ドラッグの判定範囲は、境界線の要素幅（6px）と `resizeTargetMinimumSize.fine` を一致させている。
+- ドラッグ中のペインにMotionの補間は使わない。
+- DetailPanelは既存のタスク一覧Queryのデータから選択中タスクを探して表示する（詳細取得APIは追加しない）。
 
 ## 一覧表示
 
@@ -166,6 +259,46 @@ MUIによる描画
 - 可変行高、スクロール復元、選択行への移動を検証する。
 - 仮想化とMotionのレイアウトアニメーションを安易に重ねない。
 
+### Inbox一覧（フェーズ4）
+
+| 役割 | 担当 | 実装 |
+|---|---|---|
+| 取得・更新・キャッシュ | TanStack Query | `features/tasks/task-queries.ts`（一覧は全件。一覧・詳細・件数の唯一の正本） |
+| 絞り込み・ソート・行モデル | TanStack Table v9 | `features/tasks/task-table.ts`（features・columnsはモジュールで固定） |
+| 表示範囲の行だけを描画 | TanStack Virtual | `features/tasks/TaskList.tsx`（固定行高34px、`getItemKey` はタスクID） |
+| 見た目・入力 | MUI | 検索欄、表示切り替え（ToggleButtonGroup）、チェックボックス、ボタン |
+
+- 取得した全件に対して、クライアント側で絞り込み・ソートを行う（DBページング・サーバー側ソートはしない）。
+  仮想化は描画量を減らすだけで、DBからの取得件数は減らない。
+- 絞り込み: タイトルの部分一致（大文字・小文字を区別しない `includesString`）と、
+  未完了／完了／すべて（completedAtから導出する非表示列への列フィルター）。初期表示は未完了。
+- ソート: 作成日時（初期は降順。同じ日時はIDで比較し、DBと同じ順序）とタイトル（日本語照合・数字は数値として比較）。
+- 検索・表示切り替え・ソートは画面内の状態で、保存しない。条件が変わった時だけ先頭へスクロールし、
+  更新後のキャッシュ反映では戻さない。
+
+一覧の意味付けとキーボード操作:
+- 1件選択のリスト（`role="listbox"` / `role="option"`、`aria-selected`）。
+  列見出しは表ではなく「並べ替えボタン」として実装する（`aria-sort` を使う表の意味付けはしていない）。
+- DOMフォーカスはリスト本体に置き、現在行は `aria-activedescendant` で示す（仮想化で行要素が入れ替わってもフォーカスを失わない）。
+- 上下キー・Home/End・PageUp/PageDownで現在行を移動し、未描画なら `scrollToIndex` で表示する。
+  Enter / Space で現在行を選択する。キーボードの現在行（枠線）と選択（背景色）は区別する。
+- フォーカスが入った時はスクロールしない（クリック時に表示位置が動いて別の行を押さないため）。
+- 行の完了チェックはマウス操作用（チェック操作は行選択を起こさない）。キーボード・読み上げでは詳細パネルのボタンを使う。
+  option内に操作要素を置けないため、行の読み上げ名に完了状態を含め、チェックボックスは読み上げ対象から外している。
+- 完了は色だけでなく、チェックと取り消し線でも示す。
+- 選択中のタスクが絞り込みで一覧から消えても、詳細パネルには表示し続け、一覧の上にその旨を表示する。
+
+### 詳細パネルの編集と未保存の編集（フェーズ4）
+
+- タイトルは明示的な保存方式（保存ボタン・Enter）。入力のたびには保存しない。IME変換確定のEnterでは保存しない。
+- 入力中の値はドラフトとして `TaskEditor`（key=タスクID）が持つ。一覧の再取得やキャッシュ更新で上書きしない。
+  保存成功後にだけ保存済みの値へ切り替え、失敗時は入力を残す。
+- 未保存の編集がある時の確認（`features/tasks/DraftGuard.tsx`）:
+  - 別タスクの選択、他画面への遷移（Routerの `useBlocker`）、詳細パネルを閉じる、そのタスクの完了操作の前に
+    アプリ内の確認ダイアログ（保存 / 破棄 / キャンセル）を1つだけ表示する。
+  - 終了・ウィンドウを閉じる時は、既存の終了フローの応答に `unsaved-draft` を返し、
+    Main側の同じダイアログで「キャンセル / 保存せずに終了（閉じる）」を選んでもらう（独立した終了ダイアログは重ねない）。
+
 ## Routerとタブ
 
 Routerは現在の表示先を管理する。
@@ -176,14 +309,28 @@ Workspaceは開いているタブを管理する。
 - 同じ対象を重複して開くかを決める。
 - 動的なタブと単純な画面遷移を混同しない。
 - パッケージ化後のHTML読み込みで動作を確認する。
-- ファイルベース採用時のみrouteTree.gen.tsを生成する。
-- RouterプラグインはRendererのVite設定に適用する。
+- ルートはコードベースで定義し、routeTree.gen.tsやRouterプラグインは使わない。
+- 履歴はハッシュ方式とする。開発時は開発サーバーのURL（ELECTRON_RENDERER_URL）、
+  ビルド後はローカルのindex.htmlをloadFileで読み込む。
 
 ## DB・保存先
+
+保存先、接続設定、スキーマ、マイグレーションの詳細は docs/database.md を参照する。
+
+Main側の責務分担（フェーズ2で実装）:
+- db/: 接続（client.ts）、マイグレーション適用（migrate.ts）、スキーマ（schema/）
+- repositories/: SQLを使う取得・保存
+- services/: ID・日時の付与、DTOへの変換などの業務処理
+- ipc/: 送信元検証・入力検証・結果形式への変換（handler.tsはelectronに依存しない）
+- infrastructure/app-paths.ts: 保存先・同梱ファイル・許可URLの解決（electronに依存しない）
 
 - 実DBはアプリバンドル、out、dist、ソースツリーに保存しない。
 - ユーザーデータ領域を候補とし、最終パスは明示する。
 - 開発・テスト・通常利用のDBを分離する。
+  - 通常利用（パッケージ化済み）: Electron既定のuserData
+  - 開発（未パッケージ）: 起動直後にuserDataを`<表示名>-dev`へ切り替える
+  - テスト: 一時ディレクトリを使う（方式はテストツール選定時に決める）
+  - 名称と保存先の命名はsrc/shared/app-identity.tsに集約する。
 - マイグレーションSQLはアプリへ同梱する。
 - 配布後の参照パスを検証する。
 - スキーマ変更は履歴として管理する。

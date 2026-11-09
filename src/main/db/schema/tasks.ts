@@ -1,0 +1,21 @@
+import { index, sqliteTable, text } from 'drizzle-orm/sqlite-core'
+
+// フェーズ2: 永続化検証に必要な最小項目だけを持つ。
+// - id: crypto.randomUUID() で生成するUUID v4（文字列）
+// - created_at / updated_at: UTCのISO 8601文字列（例: 2026-11-09T10:00:00.000Z）
+//   固定長・UTC固定なので、文字列の大小比較が時刻順と一致する。
+// - completed_at: 完了日時（UTCのISO 8601文字列）。未完了ならNULL。完了状態はこの列だけから導出する（フェーズ4）。
+export const tasks = sqliteTable(
+  'tasks',
+  {
+    id: text('id').primaryKey(),
+    title: text('title').notNull(),
+    createdAt: text('created_at').notNull(),
+    updatedAt: text('updated_at').notNull(),
+    completedAt: text('completed_at')
+  },
+  (table) => [index('tasks_created_at_id_idx').on(table.createdAt, table.id)]
+)
+
+export type TaskRow = typeof tasks.$inferSelect
+export type NewTaskRow = typeof tasks.$inferInsert
