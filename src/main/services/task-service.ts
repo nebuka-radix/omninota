@@ -9,7 +9,12 @@ import type {
 import type { ProjectRow, TaskRow } from '../db/schema'
 import type { RunInTransaction } from '../db/transaction'
 import type { TaskRepository } from '../repositories/task-repository'
-import { projectCompletedConflict, targetProjectNotFound, taskNotFound } from './errors'
+import {
+  projectCompletedConflict,
+  targetProjectNotFound,
+  taskInCompletedProjectConflict,
+  taskNotFound
+} from './errors'
 
 // inputはIPC層でZod検証済み（前後空白の除去・空文字と長さ・IDの形式）であること。
 export type TaskService = {
@@ -19,6 +24,7 @@ export type TaskService = {
   // タイトルが保存済みと同じなら更新しない（updatedAtも変えない）。
   updateTitle(input: UpdateTaskTitleInput): TaskDto
   // 目的の状態を指定する。既にその状態なら更新しない（日時を変えない）。
+  // 完了済みプロジェクトに所属するタスクは未完了に戻せない（CONFLICT。フェーズ5.3）。完了にするのは常に可能。
   setCompleted(input: SetTaskCompletedInput): TaskDto
   // 所属の変更・解除。既に同じ所属なら更新しない（移動先の確認より先に判定する。完了済みプロジェクトへの再要求もエラーにしない）。
   // 移動先は存在し、未完了であること。完了済みプロジェクトから外（未所属・別の未完了プロジェクト）への移動は許可する。
@@ -93,13 +99,20 @@ export function createTaskService(deps: {
       return toDto(updated)
     },
     setCompleted(input) {
-      const current = findOrThrow(input.id)
-      const isCompleted = current.completedAt !== null
-      if (isCompleted === input.completed) return toDto(current)
-      const timestamp = now().toISOString()
-      const updated = repository.updateCompletedAt(input.id, input.completed ? timestamp : null, timestamp)
-      if (!updated) throw taskNotFound()
-      return toDto(updated)
+      return transaction(() => {
+        // 1. タスクの存在 → 2. 同じ状態なら変更なし → 3. 未完了に戻す場合は所属プロジェクトが未完了か → 4. 更新
+        const current = findOrThrow(input.id)
+        const isCompleted = current.completedAt !== null
+        if (isCompleted === input.completed) return toDto(current)
+        if (!input.completed && current.projectId !== null) {
+          const project = deps.findProject(current.projectId)
+          if (project && project.completedAt !== null) throw taskInCompletedProjectConflict()
+        }
+        const timestamp = now().toISOString()
+        const updated = repository.updateCompletedAt(input.id, input.completed ? timestamp : null, timestamp)
+        if (!updated) throw taskNotFound()
+        return toDto(updated)
+      })
     },
     setProject(input) {
       return transaction(() => {

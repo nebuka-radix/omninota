@@ -12,7 +12,10 @@ Rendererからは `window.gtd` だけを使う。任意SQLや任意チャンネ�
 結果形式:
 
 ```ts
-type IpcResult<T> = { ok: true; data: T } | { ok: false; error: { code: IpcErrorCode; message: string } }
+type IpcResult<T> = { ok: true; data: T } | { ok: false; error: { code: IpcErrorCode; message: string; details?: IpcErrorDetails } }
+
+// 業務エラーの型付きの補足（フェーズ5.3）。画面はメッセージ文字列を解析せず、この値を使う。SQLやスタックは含めない
+type IpcErrorDetails = { kind: 'project-has-open-tasks'; openTaskCount: number }
 ```
 
 | code | 意味 | message |
@@ -20,7 +23,7 @@ type IpcResult<T> = { ok: true; data: T } | { ok: false; error: { code: IpcError
 | FORBIDDEN | 送信元が自アプリのウィンドウのメインフレーム・許可URLではない | 固定文言 |
 | INVALID_INPUT | Zodの入力検証に失敗 | 最初の検証エラーの文言（画面表示用） |
 | NOT_FOUND | 業務エラー: 対象が存在しない | 固定文言（「対象のタスクが見つかりません。」「対象のプロジェクトが見つかりません。」「指定したプロジェクトが見つかりません。」） |
-| CONFLICT | 業務エラー: 業務ルールにより実行できない（フェーズ5.2） | 固定文言（「完了済みのプロジェクトにはタスクを追加・移動できません。」） |
+| CONFLICT | 業務エラー: 業務ルールにより実行できない（フェーズ5.2・5.3） | 「完了済みのプロジェクトにはタスクを追加・移動できません。」「完了済みのプロジェクトのタスクは未完了に戻せません。先にプロジェクトを未完了に戻してください。」「未完了のタスクがn件あるため完了できません。」（この場合は `details` に件数） |
 | INTERNAL | 処理中の予期しないエラー | 固定文言。SQLやスタックはMainのログだけに出す |
 
 送信元検証の条件:
@@ -41,6 +44,7 @@ type IpcResult<T> = { ok: true; data: T } | { ok: false; error: { code: IpcError
 | `projects.list()` | `projects:list` | なし | `ProjectDto[]` |
 | `projects.create(input)` | `projects:create` | `{ name }` | `ProjectDto` |
 | `projects.rename(input)` | `projects:rename` | `{ id, name }` | `ProjectDto`（保存後） |
+| `projects.setCompleted(input)` | `projects:set-completed` | `{ id, completed }` | `ProjectDto`（保存後。フェーズ5.3） |
 | `workspace.get()` | `workspace:get` | なし | `WorkspaceSettings` |
 | `workspace.save(settings)` | `workspace:save` | `WorkspaceSettings` | `WorkspaceSettings` |
 | `workspace.onFlushRequest(listener)` | `workspace:flush-request`（Main → Renderer） | `{ requestId, draftAction }` | 購読解除関数 |
@@ -72,6 +76,9 @@ type IpcResult<T> = { ok: true; data: T } | { ok: false; error: { code: IpcError
 - 完了日時はMain側で付与する。Rendererから日時は指定できない（余分なキーは拒否）。
 - 既に目的の状態なら更新せず（日時を変えず）、そのままのタスクを返す。
 - 存在しないIDは NOT_FOUND。
+- 完了済みプロジェクトに所属するタスクを未完了に戻す（`completed: false`）要求は CONFLICT（フェーズ5.3）。
+  確認順は「タスクの存在 → 同じ状態なら変更なしの成功 → 所属プロジェクトの完了状態 → 更新」で、1つのトランザクションで行う。
+  完了にする要求（`completed: true`）は、所属によらず許可する。
 
 ### tasks.create の所属・tasks.setProject（フェーズ5.2）
 
@@ -102,7 +109,19 @@ type TaskDto = {
 - 名前: 前後空白を除去、空白のみは INVALID_INPUT、最大200文字（`PROJECT_NAME_MAX_LENGTH`）。同名を許可。
 - `create`: IDと日時はMain側で付与し、未完了（`completedAt: null`）で作成する。
 - `rename`: `id` はUUID。存在しないIDは NOT_FOUND（「対象のプロジェクトが見つかりません。」）。同じ名前なら更新しない。
-- 余分なキー（`completedAt` など）は拒否する。完了・取り消しのAPIは5.3で追加する。
+- 余分なキー（`completedAt` など）は拒否する。
+
+### projects.setCompleted（フェーズ5.3）
+
+- 目的の状態を指定する（`{ id, completed: true }` / `{ id, completed: false }`）。トグルではない。`id` はUUID、余分なキーは拒否。
+- Main側の確認順（1つのトランザクション）:
+  1. プロジェクトの存在（NOT_FOUND「対象のプロジェクトが見つかりません。」）
+  2. 既に目的の状態なら、変更しない成功（日時を変えない）
+  3. 完了にする場合: 所属する未完了タスクの件数をDBで数える（画面の検索・表示フィルター・取得済みの件数には依存しない）。
+     1件以上なら CONFLICT（`details: { kind: 'project-has-open-tasks', openTaskCount }`）。タスク0件・全件完了なら完了できる。
+  4. 更新: 完了は `completedAt` と `updatedAt` を同じ現在日時に、取り消しは `completedAt: null` と `updatedAt` を現在日時にする。
+     `createdAt`・名前は変えない。所属タスクの状態・日時・所属は変えない。
+- タスクが全件完了しても、プロジェクトを自動で完了しない。
 
 ```ts
 type ProjectDto = { id: string; name: string; createdAt: string; updatedAt: string; completedAt: string | null }
@@ -157,6 +176,9 @@ type WorkspaceSettings = {
   失敗時はキャッシュを変えない（楽観的更新はしない）。一覧の再取得中だった場合は、更新前の結果で上書きされないよう取り直す。
 - 同じタスクへの更新（タイトル・完了・所属）は、Renderer内で順番に1つずつ送る（`task-save-queue.ts`、フェーズ5.2）。
   各応答は保存後のタスク全体なので、最後の応答が最新の状態になり、古いDTOで別の項目を上書きしない。
+- 同じプロジェクトへの更新（名前・完了状態）も、同じ保存キューでキー `project:<ID>` として順番に送る（フェーズ5.3）。
+  `projects.rename` / `projects.setCompleted` の成功時は、返却DTOでプロジェクト一覧キャッシュの該当行だけを置き換える。
+- `IpcCallError.details` で業務エラーの補足を受け取る（プロジェクト完了の拒否時の件数など）。
 - 更新中のタスクID（`usePendingTaskIds`）の行・ボタン・所属の選択は、同じタスクへの重複操作を防ぐため無効にする。
 - Inbox・プロジェクトの一覧は同じ全件Query（`['tasks', 'list']`）から、Tableの絞り込みで表示範囲を決める（範囲ごとのQueryは作らない）。
 - Workspace設定は起動時に `['workspace', 'settings']` で1回だけ読み込み、以後はWorkspaceContextが正本。

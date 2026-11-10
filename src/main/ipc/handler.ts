@@ -61,7 +61,11 @@ export function createIpcHandler<S extends z.ZodType, T>(options: {
       // 業務エラー（対象が存在しないなど）は、画面表示用のcode・messageだけを返す。
       if (error instanceof BusinessError) {
         logger.warn(`[ipc] ${channel}: ${error.code}`)
-        return { ok: false, error: { code: error.code, message: error.message } }
+        // details は型付きの補足情報（ある場合だけ）。SQLやスタックは含まない
+        return {
+          ok: false,
+          error: { code: error.code, message: error.message, ...(error.details ? { details: error.details } : {}) }
+        }
       }
       // 詳細（SQLやスタック）はMainのログだけに出し、Rendererへは返さない。
       logger.error(`[ipc] 処理中にエラーが発生しました: ${channel}`, error)

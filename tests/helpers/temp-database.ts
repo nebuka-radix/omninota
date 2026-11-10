@@ -27,3 +27,12 @@ export function taskServiceDeps(db: AppDatabase) {
     transaction: createTransactionRunner(db)
   }
 }
+
+// ProjectServiceの依存（未完了タスクの件数・トランザクション）を、同じ一時DBの接続で用意する（フェーズ5.3）
+export function projectServiceDeps(db: AppDatabase) {
+  return {
+    repository: createProjectRepository(db),
+    countOpenTasks: createTaskRepository(db).countOpenByProject,
+    transaction: createTransactionRunner(db)
+  }
+}

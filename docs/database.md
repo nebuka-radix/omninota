@@ -158,10 +158,22 @@ WAL使用中は、稼働中のDBファイルを単純コピーしてもバック
 | id | TEXT PRIMARY KEY | `crypto.randomUUID()` によるUUID v4 |
 | name | TEXT NOT NULL | 前後空白を除去した名前（最大200文字、`PROJECT_NAME_MAX_LENGTH`）。同名を許可（一意制約なし） |
 | created_at / updated_at | TEXT NOT NULL | UTCのISO 8601文字列 |
-| completed_at | TEXT（NULL可） | 完了日時。5.1では常にNULL（完了操作は5.3） |
+| completed_at | TEXT（NULL可） | 完了日時。未完了ならNULL（完了・取り消しはフェーズ5.3の projects.setCompleted） |
 
 - 名前変更は、前後空白を除いた名前が保存済みと同じなら更新しない（updated_atも変えない）。存在しないIDは NOT_FOUND。
 - DBからの取得順は作成日時・IDの昇順。画面の表示順（未完了 → 完了、名前順）はRendererで決める。
+- 完了・取り消し（フェーズ5.3。マイグレーションなし。既存の completed_at を使う）:
+
+| 操作 | completed_at | updated_at | created_at |
+|---|---|---|---|
+| 完了（所属タスクがすべて完了済み、または0件の場合のみ） | 現在日時 | 同じ現在日時 | 変えない |
+| 完了の取り消し | NULL | 現在日時 | 変えない |
+| 既に目的の状態 | 変えない | 変えない | 変えない |
+
+- 未完了タスクの件数は `tasks` を `project_id = ? AND completed_at IS NULL` で数える（索引 `tasks_project_id_idx`）。
+  確認と更新は1つのトランザクション（BEGIN IMMEDIATE）。所属タスクの行は変更しない。
+- 完了済みプロジェクトに所属するタスクは未完了に戻せない（tasks.setCompleted で確認。同じトランザクション）。
+- フェーズ5.3ではマイグレーションを追加していない（DBのバージョンは0004のまま）。
 - タスクとの関連は `tasks.project_id`（フェーズ5.2で追加。上記 tasks を参照）。
 - 0003は新しいテーブルの追加だけで、既存の tasks・app_settings は変更しない。
   フェーズ4のスキーマ（0000〜0002）からの移行で、タスク（完了状態を含む）とWorkspace設定が保持されること、

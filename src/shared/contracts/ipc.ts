@@ -1,6 +1,6 @@
 // IPC契約: 型とチャンネル名の定数だけを置く。実行時依存を持たない。
 // Main / Preload / Rendererのどこからimportしてもよい。
-import type { CreateProjectInput, ProjectDto, RenameProjectInput } from './projects'
+import type { CreateProjectInput, ProjectDto, RenameProjectInput, SetProjectCompletedInput } from './projects'
 import type { CreateTaskInput, SetTaskCompletedInput, SetTaskProjectInput, TaskDto, UpdateTaskTitleInput } from './tasks'
 import type { WorkspaceSettings } from './workspace'
 
@@ -14,6 +14,7 @@ export const IPC_CHANNELS = {
   projectsList: 'projects:list',
   projectsCreate: 'projects:create',
   projectsRename: 'projects:rename',
+  projectsSetCompleted: 'projects:set-completed',
   workspaceGet: 'workspace:get',
   workspaceSave: 'workspace:save',
   // Main → Renderer: 終了・ウィンドウを閉じる前に、確定済みのWorkspace状態の保存完了を問い合わせる
@@ -55,10 +56,16 @@ export type WorkspaceFlushResult = {
 // その他は送信元・入力・予期しない障害。
 export type IpcErrorCode = 'FORBIDDEN' | 'INVALID_INPUT' | 'NOT_FOUND' | 'CONFLICT' | 'INTERNAL'
 
+// 業務エラーの型付きの補足情報（フェーズ5.3）。画面はメッセージ文字列を解析せず、この値を使う。
+// - project-has-open-tasks: プロジェクトに未完了のタスクがあるため完了できない（CONFLICT）。件数はDBの所属タスク全体から数える
+export type IpcErrorDetails = { kind: 'project-has-open-tasks'; openTaskCount: number }
+
 export type IpcError = {
   code: IpcErrorCode
   // 画面表示用の短いメッセージ。詳細はMain側のログへ出す。
   message: string
+  // 業務エラーの補足（ある場合だけ）。SQLやスタックは含めない
+  details?: IpcErrorDetails
 }
 
 export type IpcResult<T> = { ok: true; data: T } | { ok: false; error: IpcError }
@@ -94,11 +101,13 @@ export type GtdApi = {
     // 所属の変更・解除（フェーズ5.2）
     setProject: (input: SetTaskProjectInput) => Promise<IpcResult<TaskDto>>
   }
-  // 用途別のAPI（フェーズ5.1は一覧・作成・名前変更だけ。完了は5.3）
+  // 用途別のAPI（一覧・作成・名前変更はフェーズ5.1、完了・取り消しは5.3）
   projects: {
     list: () => Promise<IpcResult<ProjectDto[]>>
     create: (input: CreateProjectInput) => Promise<IpcResult<ProjectDto>>
     rename: (input: RenameProjectInput) => Promise<IpcResult<ProjectDto>>
+    // 完了・完了の取り消し（フェーズ5.3）。未完了のタスクがあれば CONFLICT（details: project-has-open-tasks）
+    setCompleted: (input: SetProjectCompletedInput) => Promise<IpcResult<ProjectDto>>
   }
   // Workspace設定専用。任意の設定キーは扱わない。
   workspace: {

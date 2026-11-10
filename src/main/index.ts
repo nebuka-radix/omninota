@@ -284,15 +284,21 @@ if (!app.requestSingleInstanceLock()) {
 
     // マイグレーション完了後にIPC（タスクAPI）を登録する。
     const projectRepository = createProjectRepository(database)
+    const taskRepository = createTaskRepository(database)
+    const transaction = createTransactionRunner(database)
     registerIpcHandlers({
       policy: { getWindow: () => mainWindow, isAllowedUrl: isAppUrl },
       getAppInfo,
       taskService: createTaskService({
-        repository: createTaskRepository(database),
+        repository: taskRepository,
         findProject: projectRepository.findById,
-        transaction: createTransactionRunner(database)
+        transaction
       }),
-      projectService: createProjectService({ repository: projectRepository }),
+      projectService: createProjectService({
+        repository: projectRepository,
+        countOpenTasks: taskRepository.countOpenByProject,
+        transaction
+      }),
       workspaceSettingsService: createWorkspaceSettingsService({
         repository: createSettingsRepository(database)
       }),

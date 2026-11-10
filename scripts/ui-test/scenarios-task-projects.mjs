@@ -2,7 +2,7 @@
 // run.mjs から呼ぶ。すべて専用の一時userData（root配下）だけを使う。
 import { randomUUID } from 'node:crypto'
 import { join } from 'node:path'
-import { assert, createDatabaseAt, openDatabaseReadOnly, openDatabaseWritable, requestQuit, sleep } from './lib.mjs'
+import { assert, createDatabaseAt, openDatabaseReadOnly, requestQuit, sleep } from './lib.mjs'
 
 const collator = new Intl.Collator('ja', { numeric: true, sensitivity: 'base' })
 
@@ -178,14 +178,12 @@ export function taskProjectScenarios({ withApp, root }) {
             concurrent
           )
 
-          // 所属の保存失敗（業務ルール: 画面の一覧取得後に、別の接続でプロジェクトを完了済みにする）
+          // 所属の保存失敗（業務ルール: 画面のプロジェクト一覧を取得した後で、プロジェクトを完了済みにする）。
+          // 完了は実際のAPI（フェーズ5.3の projects.setCompleted）で行う。画面のQueryキャッシュは経由しないため、
+          // 画面上はまだ未完了に見え、選んだ移動先をMainが拒否する
           await setTitleDraft(c, '失敗時も残るドラフト')
-          const writer = openDatabaseWritable(join(scopeDir, 'gtd.sqlite'))
-          try {
-            writer.prepare('UPDATE projects SET completed_at = ? WHERE id = ?').run('2026-11-10T09:00:00.000Z', ids.home)
-          } finally {
-            writer.close()
-          }
+          await api(c, `window.gtd.tasks.setCompleted({ id: ${JSON.stringify(ids.homeTask)}, completed: true })`)
+          await api(c, `window.gtd.projects.setCompleted({ id: ${JSON.stringify(ids.home)}, completed: true })`)
           await chooseProject(c, ids.home)
           await c.waitFor(`document.querySelector('[data-testid=task-project-error]')`, 5000, '失敗の表示')
           const error = await c.evaluate(`document.querySelector('[data-testid=task-project-error]').textContent`)
@@ -195,15 +193,10 @@ export function taskProjectScenarios({ withApp, root }) {
           assert((await tasksById(c)).get(ids.inboxTask).projectId === ids.work2, 'DBの所属は変わらない')
           await c.click(c.byText('[data-testid=task-editor] button', '変更を取り消す'))
 
-          // 画面を開いた後で（別の接続により）完了済みになったプロジェクトへの追加 → Mainが拒否し、入力を残す
+          // 画面を開いた後で（APIで）完了済みになったプロジェクトへの追加 → Mainが拒否し、入力を残す
           // （画面を開き直すと一覧を取り直し、追加欄は無効になる。次のシナリオで確認）
           await openProject(c, ids.later)
-          const laterWriter = openDatabaseWritable(join(scopeDir, 'gtd.sqlite'))
-          try {
-            laterWriter.prepare('UPDATE projects SET completed_at = ? WHERE id = ?').run('2026-11-10T09:30:00.000Z', ids.later)
-          } finally {
-            laterWriter.close()
-          }
+          await api(c, `window.gtd.projects.setCompleted({ id: ${JSON.stringify(ids.later)}, completed: true })`)
           await addTask(c, '完了済みへの追加')
           await c.waitFor(`[...document.querySelectorAll('form .MuiAlert-message')].some((e) => e.textContent.includes('完了済み'))`, 5000, '追加の失敗表示')
           const addError = await c.evaluate(`[...document.querySelectorAll('form .MuiAlert-message')].map((e) => e.textContent).join(' ')`)

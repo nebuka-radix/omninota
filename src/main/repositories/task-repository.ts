@@ -1,4 +1,4 @@
-import { desc, eq } from 'drizzle-orm'
+import { and, count, desc, eq, isNull } from 'drizzle-orm'
 import type { AppDatabase } from '../db/client'
 import { tasks, type NewTaskRow, type TaskRow } from '../db/schema'
 
@@ -14,6 +14,8 @@ export type TaskRepository = {
   updateCompletedAt(id: string, completedAt: string | null, updatedAt: string): TaskRow | undefined
   // 所属の変更・解除（フェーズ5.2）。projectIdの存在・状態の確認はServiceで行う（外部キーでも保証される）
   updateProjectId(id: string, projectId: string | null, updatedAt: string): TaskRow | undefined
+  // プロジェクトに所属する未完了タスクの件数（フェーズ5.3。プロジェクトの完了判定に使う。索引 tasks_project_id_idx）
+  countOpenByProject(projectId: string): number
 }
 
 export function createTaskRepository(db: AppDatabase): TaskRepository {
@@ -35,6 +37,14 @@ export function createTaskRepository(db: AppDatabase): TaskRepository {
     },
     updateProjectId(id, projectId, updatedAt) {
       return db.update(tasks).set({ projectId, updatedAt }).where(eq(tasks.id, id)).returning().get()
+    },
+    countOpenByProject(projectId) {
+      const row = db
+        .select({ value: count() })
+        .from(tasks)
+        .where(and(eq(tasks.projectId, projectId), isNull(tasks.completedAt)))
+        .get()
+      return row?.value ?? 0
     }
   }
 }

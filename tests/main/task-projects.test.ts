@@ -3,7 +3,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { closeDatabase, openDatabase, type AppDatabase } from '../../src/main/db/client'
 import { runMigrations } from '../../src/main/db/migrate'
 import { createIpcHandler, type InvokeEventLike, type SenderPolicy } from '../../src/main/ipc/handler'
-import { createProjectRepository } from '../../src/main/repositories/project-repository'
 import { createTaskRepository } from '../../src/main/repositories/task-repository'
 import { createProjectService, type ProjectService } from '../../src/main/services/project-service'
 import { createTaskService, type TaskService } from '../../src/main/services/task-service'
@@ -11,7 +10,7 @@ import {
   tasksCreateArgsSchema,
   tasksSetProjectArgsSchema
 } from '../../src/shared/validation/tasks'
-import { createTempDir, MIGRATIONS_DIR, taskServiceDeps } from '../helpers/temp-database'
+import { createTempDir, MIGRATIONS_DIR, projectServiceDeps, taskServiceDeps } from '../helpers/temp-database'
 
 const MISSING_ID = '00000000-0000-4000-8000-00000000ffff'
 
@@ -60,8 +59,13 @@ describe('タスクの所属（Service・一時DB）', () => {
   let projects: ProjectService
   let n = 0
 
-  const complete = (projectId: string) =>
-    db.$client.prepare('UPDATE projects SET completed_at = ? WHERE id = ?').run('2026-11-10T09:00:00.000Z', projectId)
+  // 完了済みのプロジェクトを、実際の操作（所属タスクを完了 → プロジェクトを完了。フェーズ5.3のAPI）で作る
+  const complete = (projectId: string) => {
+    for (const task of tasks.list()) {
+      if (task.projectId === projectId && task.completedAt === null) tasks.setCompleted({ id: task.id, completed: true })
+    }
+    return projects.setCompleted({ id: projectId, completed: true })
+  }
 
   beforeEach(() => {
     temp = createTempDir()
@@ -72,7 +76,7 @@ describe('タスクの所属（Service・一時DB）', () => {
     const now = createClock()
     const generateId = () => `00000000-0000-4000-8000-${String(++n).padStart(12, '0')}`
     tasks = createTaskService({ ...taskServiceDeps(db), now, generateId })
-    projects = createProjectService({ repository: createProjectRepository(db), now, generateId })
+    projects = createProjectService({ ...projectServiceDeps(db), now, generateId })
   })
 
   afterEach(() => {
@@ -135,9 +139,10 @@ describe('タスクの所属（Service・一時DB）', () => {
 
   it('完了済みプロジェクトに既に所属している場合、同じ所属の再要求はエラーにも更新にもならない', () => {
     const a = projects.create({ name: 'A' })
-    const task = tasks.create({ title: 't', projectId: a.id })
+    const created = tasks.create({ title: 't', projectId: a.id })
     complete(a.id)
-    expect(tasks.setProject({ id: task.id, projectId: a.id })).toEqual(task)
+    const task = tasks.list().find((item) => item.id === created.id)
+    expect(tasks.setProject({ id: created.id, projectId: a.id })).toEqual(task)
   })
 
   it('完了済みプロジェクトへの移動は CONFLICT（所属・updatedAtは変えない）', () => {

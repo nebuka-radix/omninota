@@ -212,7 +212,13 @@ export async function connectCdp(url) {
     const deadline = Date.now() + timeoutMs
     for (;;) {
       if (await evaluate(`Boolean(${expression})`)) return
-      if (Date.now() > deadline) throw new TestFailure(`待機がタイムアウトしました: ${label}`)
+      if (Date.now() > deadline) {
+        // 失敗の原因を追えるよう、その時点の画面の状態を添える
+        const context = await evaluate(
+          `({ hash: location.hash, dialog: document.querySelector('[role=dialog]')?.innerText ?? null, active: document.activeElement ? document.activeElement.tagName + ':' + (document.activeElement.getAttribute('aria-label') ?? document.activeElement.getAttribute('data-testid') ?? '') : null, main: document.querySelector('main')?.innerText.replace(/\\n+/g, ' / ').slice(0, 200) ?? null })`
+        ).catch(() => null)
+        throw new TestFailure(`待機がタイムアウトしました: ${label} ${JSON.stringify(context)}`)
+      }
       await sleep(100)
     }
   }
@@ -239,9 +245,13 @@ export async function connectCdp(url) {
   }
   const focus = (selector) => evaluate(`document.querySelector(${JSON.stringify(selector)}).focus()`)
   const setInput = async (selector, value) => {
-    await evaluate(
-      `(() => { const i = document.querySelector(${JSON.stringify(selector)}); const s = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set; s.call(i, ${JSON.stringify(value)}); i.dispatchEvent(new Event('input', { bubbles: true })); })()`
+    const found = await evaluate(
+      `(() => { const i = document.querySelector(${JSON.stringify(selector)}); if (!(i instanceof HTMLInputElement)) return false; const s = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set; s.call(i, ${JSON.stringify(value)}); i.dispatchEvent(new Event('input', { bubbles: true })); return true })()`
     )
+    if (!found) {
+      const context = await evaluate(`({ hash: location.hash, detail: document.querySelector('#detail-panel')?.innerText.slice(0, 160) ?? null, dialog: document.querySelector('[role=dialog]')?.innerText ?? null })`)
+      throw new TestFailure(`入力欄が見つかりません: ${selector} ${JSON.stringify(context)}`)
+    }
     await sleep(100)
   }
   const byText = (selector, text) =>
@@ -280,12 +290,4 @@ export async function createDatabaseAt(file, count) {
   sqlite.pragma('busy_timeout = 5000')
   migrate(drizzle(sqlite), { migrationsFolder: folder })
   return sqlite
-}
-
-// 起動中のアプリとは別の接続で、一時DBを書き換える（業務ルール違反をMain側で検出させる検証用）
-export function openDatabaseWritable(file) {
-  const Database = require('better-sqlite3')
-  const db = new Database(file, { fileMustExist: true })
-  db.pragma('busy_timeout = 5000')
-  return db
 }

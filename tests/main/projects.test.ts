@@ -12,7 +12,7 @@ import {
   projectsListArgsSchema,
   projectsRenameArgsSchema
 } from '../../src/shared/validation/projects'
-import { createTempDir, MIGRATIONS_DIR } from '../helpers/temp-database'
+import { createTempDir, MIGRATIONS_DIR, projectServiceDeps } from '../helpers/temp-database'
 
 const MISSING_ID = '00000000-0000-4000-8000-000000000000'
 
@@ -85,7 +85,7 @@ describe('プロジェクトの保存（Service・一時DB）', () => {
     runMigrations(db, MIGRATIONS_DIR)
     n = 0
     service = createProjectService({
-      repository: createProjectRepository(db),
+      ...projectServiceDeps(db),
       now: createClock(),
       generateId: () => `00000000-0000-4000-8000-${String(++n).padStart(12, '0')}`
     })
@@ -130,7 +130,7 @@ describe('プロジェクトの保存（Service・一時DB）', () => {
 
   it('DBからの一覧は作成日時・IDの昇順（名前変更や挿入順に左右されない）', () => {
     const fixed = createProjectService({
-      repository: createProjectRepository(db),
+      ...projectServiceDeps(db),
       now: () => new Date('2026-11-09T00:00:00.000Z'),
       generateId: (() => {
         const ids = ['00000000-0000-4000-8000-00000000000c', '00000000-0000-4000-8000-00000000000a']

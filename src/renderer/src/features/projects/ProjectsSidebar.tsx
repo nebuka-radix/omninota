@@ -1,11 +1,23 @@
 import { useRef, useState, type FormEvent, type KeyboardEvent } from 'react'
-import { Alert, Box, CircularProgress, IconButton, List, ListItemButton, ListItemText, TextField, Tooltip, Typography } from '@mui/material'
+import {
+  Alert,
+  Box,
+  CircularProgress,
+  IconButton,
+  List,
+  ListItemButton,
+  ListItemText,
+  ListSubheader,
+  TextField,
+  Tooltip,
+  Typography
+} from '@mui/material'
 import { useQuery } from '@tanstack/react-query'
 import { useNavigate } from '@tanstack/react-router'
 import { Plus } from 'lucide-react'
-import { PROJECT_NAME_MAX_LENGTH } from '../../../../shared/contracts/projects'
+import { PROJECT_NAME_MAX_LENGTH, type ProjectDto } from '../../../../shared/contracts/projects'
 import { projectIdFromRoute } from '../../../../shared/contracts/workspace'
-import { sortProjects } from './project-order'
+import { groupProjects } from './project-order'
 import { projectListQueryOptions, useCreateProjectMutation } from './project-queries'
 
 // Projectsの左サイドバー: 作成欄とプロジェクト一覧。
@@ -107,28 +119,55 @@ export function ProjectsSidebar({ pathname }: { pathname: string }) {
       </Typography>
     )
   } else {
-    body = (
-      <List dense disablePadding aria-label="プロジェクト一覧" data-testid="project-list">
-        {sortProjects(projects.data).map((project) => {
-          const selected = project.id === selectedId
-          return (
-            <ListItemButton
-              key={project.id}
-              selected={selected}
-              aria-current={selected ? 'page' : undefined}
-              data-project-id={project.id}
-              onClick={() => void navigate({ to: '/projects/$projectId', params: { projectId: project.id } })}
-              sx={{ px: 4 }}
-            >
-              <ListItemText
-                primary={project.name}
-                secondary={project.completedAt !== null ? '完了済み' : undefined}
-                slotProps={{ primary: { noWrap: true, sx: { fontSize: 13 } }, secondary: { sx: { fontSize: 11 } } }}
-              />
-            </ListItemButton>
-          )
-        })}
+    // 区分（未完了・完了済み）ごとに表示する。区分の中は名前順（同名は作成日時・ID）。選択はルートで決まるため、完了操作で区分が変わっても維持される
+    const groups = groupProjects(projects.data)
+    const renderItem = (project: ProjectDto) => {
+      const selected = project.id === selectedId
+      return (
+        <ListItemButton
+          key={project.id}
+          selected={selected}
+          aria-current={selected ? 'page' : undefined}
+          data-project-id={project.id}
+          onClick={() => void navigate({ to: '/projects/$projectId', params: { projectId: project.id } })}
+          sx={{ px: 4 }}
+        >
+          <ListItemText
+            primary={project.name}
+            // 完了済みは色だけでなく文字でも示す
+            secondary={project.completedAt !== null ? '完了済み' : undefined}
+            slotProps={{ primary: { noWrap: true, sx: { fontSize: 13 } }, secondary: { sx: { fontSize: 11 } } }}
+          />
+        </ListItemButton>
+      )
+    }
+    const section = (key: 'open' | 'completed', label: string, items: ProjectDto[]) => (
+      <List
+        key={key}
+        dense
+        disablePadding
+        aria-labelledby={`project-section-${key}`}
+        data-testid={`project-section-${key}`}
+        subheader={
+          <ListSubheader id={`project-section-${key}`} disableSticky sx={{ px: 4, lineHeight: '28px', fontSize: 11, bgcolor: 'transparent' }}>
+            {label}（{items.length}）
+          </ListSubheader>
+        }
+      >
+        {items.length === 0 ? (
+          <Typography variant="caption" color="text.secondary" component="p" sx={{ px: 4, py: 0.5, m: 0 }}>
+            なし
+          </Typography>
+        ) : (
+          items.map(renderItem)
+        )}
       </List>
+    )
+    body = (
+      <Box data-testid="project-list" aria-label="プロジェクト一覧" role="group">
+        {section('open', '未完了', groups.open)}
+        {section('completed', '完了済み', groups.completed)}
+      </Box>
     )
   }
 

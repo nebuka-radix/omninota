@@ -10,6 +10,8 @@ export type ProjectRepository = {
   listAll(): ProjectRow[]
   // 更新した行を返す。対象がなければundefined
   updateName(id: string, name: string, updatedAt: string): ProjectRow | undefined
+  // 完了日時の更新（フェーズ5.3）。completedAt: null で未完了に戻す
+  updateCompletedAt(id: string, completedAt: string | null, updatedAt: string): ProjectRow | undefined
 }
 
 export function createProjectRepository(db: AppDatabase): ProjectRepository {
@@ -25,6 +27,9 @@ export function createProjectRepository(db: AppDatabase): ProjectRepository {
     },
     updateName(id, name, updatedAt) {
       return db.update(projects).set({ name, updatedAt }).where(eq(projects.id, id)).returning().get()
+    },
+    updateCompletedAt(id, completedAt, updatedAt) {
+      return db.update(projects).set({ completedAt, updatedAt }).where(eq(projects.id, id)).returning().get()
     }
   }
 }

@@ -13,7 +13,8 @@ function createDraft(options: { dirty: boolean; saveOk?: boolean; kind?: 'task' 
     }),
     discard: vi.fn(() => {
       dirty = false
-    })
+    }),
+    settle: vi.fn(async () => {})
   }
   return handlers
 }
@@ -109,5 +110,17 @@ describe('終了前の問い合わせの処理（Renderer）', () => {
     expect(await processFlushRequest('save', withDraft.deps)).toEqual({ outcome: 'draft-save-failed', draftKind: 'task' })
     expect(draft.save).not.toHaveBeenCalled()
     expect(draft.discard).not.toHaveBeenCalled()
+  })
+
+  it('編集欄で進行中の保存があれば、その後処理まで待ってから未保存の有無を判定する（保存済みを未保存と誤認しない）', async () => {
+    const draft = createDraft({ dirty: true })
+    // 保存の後処理が終わると「未保存なし」になる
+    draft.settle = vi.fn(async () => {
+      draft.discard()
+    })
+    const { deps: d, order } = deps(draft, 'saved')
+    expect(await processFlushRequest('check', d)).toEqual({ outcome: 'saved' })
+    expect(draft.settle).toHaveBeenCalledTimes(1)
+    expect(order).toEqual(['task-saves', 'wait', 'workspace'])
   })
 })

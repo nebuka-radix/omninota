@@ -1,4 +1,5 @@
 // 同じタスクへの更新（タイトル・完了状態・所属）を順番に1つずつ実行する（フェーズ5.2）。
+// フェーズ5.3から、同じプロジェクトの更新（名前・完了状態）も、キー projectSaveKey(id) で同じ仕組みを使う。
 // DOMやwindowに依存しない（ホストNode.jsのテストで検証する）。
 // - 各更新は「保存後のタスク全体」を返すため、順番に実行すれば、後から届いた応答が常に最新の状態になる
 //   （古い応答で、別の項目の新しい値を上書きしない）。
@@ -37,6 +38,11 @@ export function createTaskSaveQueue(): TaskSaveQueue {
       return results.every(Boolean)
     }
   }
+}
+
+// プロジェクトの更新に使うキー（タスクID（UUID）とは重ならない）
+export function projectSaveKey(projectId: string): string {
+  return `project:${projectId}`
 }
 
 // アプリ全体で1つ（Renderer内のモジュール状態）

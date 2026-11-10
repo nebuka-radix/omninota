@@ -18,7 +18,8 @@ const api: GtdApi = {
   projects: {
     list: () => ipcRenderer.invoke(IPC_CHANNELS.projectsList),
     create: (input) => ipcRenderer.invoke(IPC_CHANNELS.projectsCreate, input),
-    rename: (input) => ipcRenderer.invoke(IPC_CHANNELS.projectsRename, input)
+    rename: (input) => ipcRenderer.invoke(IPC_CHANNELS.projectsRename, input),
+    setCompleted: (input) => ipcRenderer.invoke(IPC_CHANNELS.projectsSetCompleted, input)
   },
   workspace: {
     get: () => ipcRenderer.invoke(IPC_CHANNELS.workspaceGet),

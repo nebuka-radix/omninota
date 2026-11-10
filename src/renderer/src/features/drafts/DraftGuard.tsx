@@ -16,6 +16,8 @@ export type DraftHandle = {
   // 保存に成功したらtrue。失敗時は入力を残したままfalse。
   save: () => Promise<boolean>
   discard: () => void
+  // 進行中の保存（Enterなどで始めたもの）の後処理まで終わるのを待つ。保存中でなければすぐ終わる（フェーズ5.3）
+  waitForSave: () => Promise<void>
 }
 
 type Choice = 'save' | 'discard' | 'cancel'
@@ -43,6 +45,9 @@ export function DraftGuardProvider({ children }: { children: ReactNode }) {
   const pendingRef = useRef<Promise<boolean> | null>(null)
 
   const dirtyHandles = () => [...handlesRef.current].filter((handle) => handle.isDirty())
+  const waitForDraftSaves = async () => {
+    await Promise.all([...handlesRef.current].map((handle) => handle.waitForSave()))
+  }
 
   const register = useCallback((handle: DraftHandle) => {
     handlesRef.current.add(handle)
@@ -55,6 +60,8 @@ export function DraftGuardProvider({ children }: { children: ReactNode }) {
     // 進行中のタスクの保存（所属の変更など）が終わるまで待つ。失敗していれば移動しない
     // （理由は詳細パネル・一覧に表示されている。黙って失わせない。フェーズ5.2）
     if (!(await taskSaveQueue.waitForIdle())) return false
+    // 編集欄で進行中の保存があれば、その後処理（保存済みへの切り替え）まで待ってから未保存の有無を判定する
+    await waitForDraftSaves()
     const target = options?.target
     const targets = dirtyHandles().filter(
       (handle) => !target || (handle.kind === target.kind && handle.targetId === target.id)
@@ -101,6 +108,7 @@ export function DraftGuardProvider({ children }: { children: ReactNode }) {
     () =>
       setDraftExitHandlers({
         isDirty: () => dirtyHandles().length > 0,
+        settle: waitForDraftSaves,
         kind: () => dirtyHandles()[0]?.kind ?? null,
         save: async () => {
           for (const handle of dirtyHandles()) {

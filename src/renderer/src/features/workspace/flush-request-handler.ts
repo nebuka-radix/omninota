@@ -8,6 +8,8 @@ export type DraftExitHandlers = {
   // 保存に成功したらtrue。失敗・無効な入力ならfalse（ドラフトと理由は画面に残る）
   save: () => Promise<boolean>
   discard: () => void
+  // 編集欄で進行中の保存の後処理まで待つ（未保存の有無を正しく判定するため。フェーズ5.3）
+  settle: () => Promise<void>
 }
 
 export type FlushResponse = { outcome: WorkspaceFlushOutcome; draftKind?: DraftKind }
@@ -32,6 +34,7 @@ export async function processFlushRequest(
 
   // 進行中の保存が失敗した場合は続行しない（理由は画面に表示されている。黙って終了しない）
   if (!(await deps.waitForTaskSaves())) return withKind('draft-save-failed')
+  await draft?.settle()
 
   if (draftAction === 'save' && draft?.isDirty()) {
     // 保存するのは問い合わせ時点のドラフト。保存中は入力欄が読み取り専用になる

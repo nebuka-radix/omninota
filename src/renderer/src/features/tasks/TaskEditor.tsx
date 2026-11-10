@@ -1,10 +1,13 @@
 import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from 'react'
 import { Alert, Box, Button, TextField, Typography } from '@mui/material'
+import { useQuery } from '@tanstack/react-query'
 import { CircleCheck, RotateCcw, Save, Undo2 } from 'lucide-react'
 import { isTaskCompleted, TASK_TITLE_MAX_LENGTH, type TaskDto } from '../../../../shared/contracts/tasks'
 import { useDraftGuard } from '../drafts/DraftGuard'
 import { formatTaskDateTime } from './TaskList'
 import { TaskProjectField } from './TaskProjectField'
+import { projectListQueryOptions } from '../projects/project-queries'
+import { reopenBlockedReason } from './task-rules'
 import { usePendingTaskIds, useSetTaskCompletedMutation, useUpdateTaskTitleMutation } from './task-queries'
 
 // 詳細パネルのタスク編集。タイトルは明示的な保存方式（入力のたびには保存しない）。
@@ -19,35 +22,52 @@ export function TaskEditor({ task }: { task: TaskDto }) {
   const setCompleted = useSetTaskCompletedMutation()
   const pendingTaskIds = usePendingTaskIds()
   const { register, confirmLeave } = useDraftGuard()
-  const submittingRef = useRef(false)
+  // 進行中の保存（DraftGuardが、保存の後処理まで終わるのを待てるようにする）
+  const inFlightRef = useRef<Promise<boolean> | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
 
+  // 最後に保存に成功したタイトル（応答のDTO）。Queryキャッシュからの再描画が届く前でも、保存済みの値と比べて未保存を判定する
+  // （入力欄の更新と同じ描画で切り替えるため、保存直後に「未保存」と誤認しない。フェーズ5.3）。
+  // キャッシュ側がそれ以降の更新（updatedAtが同じか新しい）を受け取ったら、キャッシュの値を使う。
+  const [lastSaved, setLastSaved] = useState<Pick<TaskDto, 'title' | 'updatedAt'> | null>(null)
+  const savedTitle = lastSaved && lastSaved.updatedAt > task.updatedAt ? lastSaved.title : task.title
+
   const busy = pendingTaskIds.has(task.id)
-  const dirty = draft.trim() !== task.title
+  const dirty = draft.trim() !== savedTitle
   const blank = draft.trim().length === 0
   const completed = isTaskCompleted(task)
+  // 完了済みプロジェクトのタスクは未完了に戻せない（理由を先に示す。保証はMain側。フェーズ5.3）
+  const projects = useQuery(projectListQueryOptions)
+  const reopenBlocked = reopenBlockedReason(task, projects.data)
 
-  const save = async (): Promise<boolean> => {
-    if (!dirty) return true
-    if (submittingRef.current) return false
-    submittingRef.current = true
-    try {
-      const saved = await updateTitle.mutateAsync({ id: task.id, title: draft })
-      // 保存後の値（前後の空白を除いたもの）を表示する
-      setDraft(saved.title)
-      return true
-    } catch {
-      // 失敗・無効な入力の理由は下のエラー表示に出る。すぐ修正できるよう入力欄へフォーカスを戻す
-      requestAnimationFrame(() => inputRef.current?.focus())
-      return false
-    } finally {
-      submittingRef.current = false
-    }
+  const save = (): Promise<boolean> => {
+    if (!dirty) return Promise.resolve(true)
+    // 保存中に重ねて呼ばれたら、同じ保存の結果を返す（二重送信しない）
+    if (inFlightRef.current) return inFlightRef.current
+    const run = (async () => {
+      try {
+        const saved = await updateTitle.mutateAsync({ id: task.id, title: draft })
+        // 保存後の値（前後の空白を除いたもの）を表示する
+        setDraft(saved.title)
+        setLastSaved({ title: saved.title, updatedAt: saved.updatedAt })
+        // 再描画を待たずに「未保存なし」にする（直後の確認・終了で、保存済みの編集を未保存と誤認しない。フェーズ5.3）
+        latest.current.dirty = false
+        return true
+      } catch {
+        // 失敗・無効な入力の理由は下のエラー表示に出る。すぐ修正できるよう入力欄へフォーカスを戻す
+        requestAnimationFrame(() => inputRef.current?.focus())
+        return false
+      } finally {
+        inFlightRef.current = null
+      }
+    })()
+    inFlightRef.current = run
+    return run
   }
 
   // DraftGuardから最新の状態を参照できるようにする
-  const latest = useRef({ dirty, save, discard: () => setDraft(task.title) })
-  latest.current = { dirty, save, discard: () => setDraft(task.title) }
+  const latest = useRef({ dirty, save, discard: () => setDraft(savedTitle) })
+  latest.current = { dirty, save, discard: () => setDraft(savedTitle) }
   useEffect(
     () =>
       register({
@@ -55,7 +75,10 @@ export function TaskEditor({ task }: { task: TaskDto }) {
         targetId: task.id,
         isDirty: () => latest.current.dirty,
         save: () => latest.current.save(),
-        discard: () => latest.current.discard()
+        discard: () => latest.current.discard(),
+        waitForSave: async () => {
+          await inFlightRef.current
+        }
       }),
     [register, task.id]
   )
@@ -74,7 +97,7 @@ export function TaskEditor({ task }: { task: TaskDto }) {
   }
 
   const toggleCompleted = async () => {
-    if (busy) return
+    if (busy || reopenBlocked) return
     if (!(await confirmLeave({ target: { kind: 'task', id: task.id } }))) return
     setCompleted.mutate({ id: task.id, completed: !completed })
   }
@@ -124,7 +147,7 @@ export function TaskEditor({ task }: { task: TaskDto }) {
             size="small"
             disabled={!dirty || updateTitle.isPending}
             onClick={() => {
-              setDraft(task.title)
+              setDraft(savedTitle)
               updateTitle.reset()
             }}
             startIcon={<Undo2 size={14} aria-hidden />}
@@ -147,13 +170,18 @@ export function TaskEditor({ task }: { task: TaskDto }) {
         <Button
           size="small"
           variant="outlined"
-          disabled={busy}
+          disabled={busy || reopenBlocked !== null}
           onClick={() => void toggleCompleted()}
           startIcon={completed ? <RotateCcw size={14} aria-hidden /> : <CircleCheck size={14} aria-hidden />}
         >
           {setCompleted.isPending ? '更新中…' : completed ? '未完了に戻す' : '完了にする'}
         </Button>
       </Box>
+      {reopenBlocked && (
+        <Typography variant="caption" color="text.secondary" component="p" sx={{ mt: 1 }} data-testid="task-reopen-blocked">
+          {reopenBlocked}
+        </Typography>
+      )}
       {setCompleted.isError && (
         <Alert severity="error" variant="outlined" sx={{ mt: 2 }}>
           完了状態を更新できませんでした: {setCompleted.error.message}

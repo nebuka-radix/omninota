@@ -14,7 +14,13 @@ export type RenameProjectInput = {
   name: string
 }
 
-// 日時はUTCのISO 8601文字列。completedAt: 未完了ならnull（フェーズ5.1では常にnull。完了操作は5.3）
+// 完了・完了の取り消し（フェーズ5.3）。目的の状態を指定する（トグルではない）。
+export type SetProjectCompletedInput = {
+  id: string
+  completed: boolean
+}
+
+// 日時はUTCのISO 8601文字列。completedAt: 未完了ならnull（完了・取り消しはフェーズ5.3の projects.setCompleted）
 export type ProjectDto = {
   id: string
   name: string

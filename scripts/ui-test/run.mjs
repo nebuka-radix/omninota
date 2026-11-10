@@ -1,5 +1,5 @@
 // UIテストの実行（Electronの非表示ウィンドウ、またはセカンダリディスプレイへの非アクティブ表示）。
-// 使い方: node scripts/ui-test/run.mjs <hidden|secondary> [--display <ID>] [--keep]
+// 使い方: node scripts/ui-test/run.mjs <hidden|secondary> [--display <ID>] [--keep] [--only <シナリオ名の一部>]
 //   npm run test:ui            … hidden（ビルドしてから実行）
 //   npm run test:ui:secondary  … secondary（GTD_TEST_DISPLAY_ID か --display で表示先を指定できる）
 // 一時userDataは os.tmpdir() に作り、すべて成功したら削除する（失敗時・--keep 指定時は残して場所を表示する）。
@@ -16,6 +16,7 @@ import {
   sleep,
   TestFailure
 } from './lib.mjs'
+import { projectCompletionScenarios } from './scenarios-project-completion.mjs'
 import { taskProjectScenarios } from './scenarios-task-projects.mjs'
 
 const args = process.argv.slice(2)
@@ -27,6 +28,9 @@ if (mode !== 'hidden' && mode !== 'secondary') {
 const displayArgIndex = args.indexOf('--display')
 const displayId = displayArgIndex >= 0 ? args[displayArgIndex + 1] : process.env.GTD_TEST_DISPLAY_ID
 const keep = args.includes('--keep')
+// --only <文字列>: 名前にその文字列を含むシナリオだけを実行する（不安定な箇所の調査用。前のシナリオの結果に依存するものは単独で動かない）
+const onlyArgIndex = args.indexOf('--only')
+const only = onlyArgIndex >= 0 ? args[onlyArgIndex + 1] : null
 
 const root = mkdtempSync(join(tmpdir(), 'gtd-ui-test-'))
 const mainDir = join(root, 'userData')
@@ -259,11 +263,14 @@ const scenarios = [
 
 // フェーズ5.2: タスクのプロジェクト所属とプロジェクト内タスク表示
 scenarios.push(...taskProjectScenarios({ withApp, root }))
+// フェーズ5.3: プロジェクトの完了ルール
+scenarios.push(...projectCompletionScenarios({ withApp, root }))
 
 console.log(`UIテスト（${mode}${displayId ? `、表示先 ${displayId}` : ''}）一時ディレクトリ: ${root}`)
 let failed = 0
 let stopped = null
 for (const [name, run] of scenarios) {
+  if (only && !name.includes(only)) continue
   const started = Date.now()
   try {
     await run()
@@ -283,7 +290,8 @@ if (stopped) {
   console.log(`一時ディレクトリ（残しています）: ${root}`)
   process.exit(3)
 }
-console.log(`\n${scenarios.length - failed} 件成功 / ${failed} 件失敗`)
+const executed = only ? scenarios.filter(([name]) => name.includes(only)).length : scenarios.length
+console.log(`\n${executed - failed} 件成功 / ${failed} 件失敗`)
 if (failed === 0 && !keep) {
   rmSync(root, { recursive: true, force: true })
   console.log('一時ディレクトリを削除しました')

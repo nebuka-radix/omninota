@@ -17,3 +17,9 @@ export const renameProjectInputSchema = z.strictObject({ id: projectIdSchema, na
 export const projectsListArgsSchema = z.tuple([])
 export const projectsCreateArgsSchema = z.tuple([createProjectInputSchema])
 export const projectsRenameArgsSchema = z.tuple([renameProjectInputSchema])
+
+export const setProjectCompletedInputSchema = z.strictObject({
+  id: projectIdSchema,
+  completed: z.boolean({ error: '完了状態は true / false で指定してください。' })
+})
+export const projectsSetCompletedArgsSchema = z.tuple([setProjectCompletedInputSchema])

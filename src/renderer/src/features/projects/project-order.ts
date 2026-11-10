@@ -19,3 +19,12 @@ export function compareProjects(a: ProjectDto, b: ProjectDto): number {
 export function sortProjects(projects: readonly ProjectDto[]): ProjectDto[] {
   return [...projects].sort(compareProjects)
 }
+
+// サイドバーの区分（フェーズ5.3）。各区分の中は compareProjects と同じ名前順・タイブレーカー
+export function groupProjects(projects: readonly ProjectDto[]): { open: ProjectDto[]; completed: ProjectDto[] } {
+  const sorted = sortProjects(projects)
+  return {
+    open: sorted.filter((project) => project.completedAt === null),
+    completed: sorted.filter((project) => project.completedAt !== null)
+  }
+}

@@ -3,7 +3,7 @@ import { Alert, Box, Button, IconButton, TextField, Tooltip, Typography } from '
 import { Pencil, Save, Undo2 } from 'lucide-react'
 import { PROJECT_NAME_MAX_LENGTH, type ProjectDto } from '../../../../shared/contracts/projects'
 import { useDraftGuard } from '../drafts/DraftGuard'
-import { useRenameProjectMutation } from './project-queries'
+import { usePendingProjectIds, useRenameProjectMutation } from './project-queries'
 
 // プロジェクト名の見出しと編集（明示的な保存方式）。
 // - 編集中の値はドラフト（key=プロジェクトIDで作り直す）。一覧の再取得では上書きしない。
@@ -13,32 +13,41 @@ export function ProjectNameEditor({ project }: { project: ProjectDto }) {
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState(project.name)
   const rename = useRenameProjectMutation()
+  // 同じプロジェクトの更新（完了・取り消しを含む）が進行中なら、名前の保存・編集開始を受け付けない（フェーズ5.3）
+  const busy = usePendingProjectIds().has(project.id)
   const { register, confirmLeave } = useDraftGuard()
   const inputRef = useRef<HTMLInputElement>(null)
-  const submittingRef = useRef(false)
+  // 進行中の保存（DraftGuardが、保存の後処理まで終わるのを待てるようにする）
+  const inFlightRef = useRef<Promise<boolean> | null>(null)
 
   const dirty = editing && draft.trim() !== project.name
   const blank = draft.trim().length === 0
 
-  const save = async (): Promise<boolean> => {
+  const save = (): Promise<boolean> => {
     if (!dirty) {
       setEditing(false)
-      return true
+      return Promise.resolve(true)
     }
-    if (submittingRef.current) return false
-    submittingRef.current = true
-    try {
-      const saved = await rename.mutateAsync({ id: project.id, name: draft })
-      setDraft(saved.name)
-      setEditing(false)
-      return true
-    } catch {
-      // 失敗・無効な入力の理由は下のエラー表示に出る。すぐ修正できるよう入力欄へフォーカスを戻す
-      requestAnimationFrame(() => inputRef.current?.focus())
-      return false
-    } finally {
-      submittingRef.current = false
-    }
+    // 保存中に重ねて呼ばれたら、同じ保存の結果を返す（二重送信しない）
+    if (inFlightRef.current) return inFlightRef.current
+    const run = (async () => {
+      try {
+        const saved = await rename.mutateAsync({ id: project.id, name: draft })
+        setDraft(saved.name)
+        setEditing(false)
+        // 再描画を待たずに「未保存なし」にする（直後の確認で、保存済みの編集を未保存と誤認しない。フェーズ5.3）
+        latest.current.dirty = false
+        return true
+      } catch {
+        // 失敗・無効な入力の理由は下のエラー表示に出る。すぐ修正できるよう入力欄へフォーカスを戻す
+        requestAnimationFrame(() => inputRef.current?.focus())
+        return false
+      } finally {
+        inFlightRef.current = null
+      }
+    })()
+    inFlightRef.current = run
+    return run
   }
 
   const cancel = () => {
@@ -57,7 +66,10 @@ export function ProjectNameEditor({ project }: { project: ProjectDto }) {
         targetId: project.id,
         isDirty: () => latest.current.dirty,
         save: () => latest.current.save(),
-        discard: () => latest.current.cancel()
+        discard: () => latest.current.cancel(),
+        waitForSave: async () => {
+          await inFlightRef.current
+        }
       }),
     [register, project.id]
   )
@@ -76,7 +88,7 @@ export function ProjectNameEditor({ project }: { project: ProjectDto }) {
 
   const handleSubmit = (event: FormEvent) => {
     event.preventDefault()
-    if (!dirty || blank || rename.isPending) {
+    if (!dirty || blank || rename.isPending || busy) {
       if (!dirty) cancel()
       return
     }
@@ -95,9 +107,12 @@ export function ProjectNameEditor({ project }: { project: ProjectDto }) {
           {project.name}
         </Typography>
         <Tooltip title="名前を変更">
-          <IconButton aria-label="プロジェクト名を変更" onClick={() => void startEditing()} sx={{ color: 'text.secondary' }}>
-            <Pencil size={14} aria-hidden />
-          </IconButton>
+          {/* 無効なボタンでもツールチップを出せるよう span で包む */}
+          <span>
+            <IconButton aria-label="プロジェクト名を変更" disabled={busy} onClick={() => void startEditing()} sx={{ color: 'text.secondary' }}>
+              <Pencil size={14} aria-hidden />
+            </IconButton>
+          </span>
         </Tooltip>
       </Box>
     )
@@ -132,7 +147,7 @@ export function ProjectNameEditor({ project }: { project: ProjectDto }) {
           type="submit"
           size="small"
           variant="contained"
-          disabled={!dirty || blank || rename.isPending}
+          disabled={!dirty || blank || busy}
           startIcon={<Save size={14} aria-hidden />}
         >
           {rename.isPending ? '保存中…' : '保存'}

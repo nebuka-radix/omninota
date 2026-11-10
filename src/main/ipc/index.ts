@@ -4,7 +4,8 @@ import { appGetInfoArgsSchema } from '../../shared/validation/app'
 import {
   projectsCreateArgsSchema,
   projectsListArgsSchema,
-  projectsRenameArgsSchema
+  projectsRenameArgsSchema,
+  projectsSetCompletedArgsSchema
 } from '../../shared/validation/projects'
 import {
   tasksCreateArgsSchema,
@@ -123,6 +124,16 @@ export function registerIpcHandlers(deps: {
       argsSchema: projectsRenameArgsSchema,
       policy,
       run: ([input]) => projectService.rename(input)
+    })
+  )
+
+  ipcMain.handle(
+    IPC_CHANNELS.projectsSetCompleted,
+    createIpcHandler({
+      channel: IPC_CHANNELS.projectsSetCompleted,
+      argsSchema: projectsSetCompletedArgsSchema,
+      policy,
+      run: ([input]) => projectService.setCompleted(input)
     })
   )
 

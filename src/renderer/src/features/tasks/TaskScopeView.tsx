@@ -1,14 +1,16 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Alert, Box, CircularProgress, InputAdornment, TextField, ToggleButton, ToggleButtonGroup, Typography } from '@mui/material'
 import { useQuery } from '@tanstack/react-query'
 import { useTable, type SortingState } from '@tanstack/react-table'
 import { Search } from 'lucide-react'
 import type { TaskDto } from '../../../../shared/contracts/tasks'
 import { useDraftGuard } from '../drafts/DraftGuard'
+import { projectListQueryOptions } from '../projects/project-queries'
 import { useWorkspace } from '../workspace/WorkspaceContext'
 import { TASK_LIST_HELP_ID, TaskList } from './TaskList'
 import { TaskQuickAdd } from './TaskQuickAdd'
 import { taskListQueryOptions, usePendingTaskIds, useSetTaskCompletedMutation } from './task-queries'
+import { reopenBlockedReason, shouldClearSearchToRevealOpen } from './task-rules'
 import { isTaskInScope, scopeProjectId, taskScopeKey, type TaskScope } from './task-scope'
 import {
   DEFAULT_TASK_STATUS,
@@ -28,6 +30,9 @@ const STATUS_LABELS: Record<TaskStatusFilter, string> = { open: '未完了', com
 // Queryが全件を取得し、Tableが範囲・状態・検索で絞り込んでソートし、Virtualが表示範囲だけを描画する。
 // （仮想化は描画量を減らすだけで、DBからの取得件数は減らない）
 // - 検索・状態フィルターはこのコンポーネントの状態。範囲を切り替える時は key で作り直して初期化する。
+//   状態の初期値は呼び出し側が決める（完了済みプロジェクトは「完了」。フェーズ5.3）。
+// - revealOpenRequest が増えたら「未完了のタスクを表示」: 状態を未完了にし、検索で隠れる未完了タスクがあれば検索をクリアし、
+//   先頭へスクロールする（範囲・選択・ドラフトは変えない。フェーズ5.3）。
 // - ソートは呼び出し側が持つ（プロジェクトを切り替えても維持する）。
 // - 別の範囲を開いたら、タスクの選択を解除する（WorkspaceContext.enterTaskScope）。
 export function TaskScopeView({
@@ -36,7 +41,9 @@ export function TaskScopeView({
   addTargetLabel,
   addDisabledReason,
   sorting,
-  onSortingChange
+  onSortingChange,
+  initialStatus = DEFAULT_TASK_STATUS,
+  revealOpenRequest = 0
 }: {
   scope: TaskScope
   // 一覧の説明（「プロジェクトに属さないタスク」など。対象外の表示に使う）
@@ -45,6 +52,8 @@ export function TaskScopeView({
   addDisabledReason?: string | undefined
   sorting: SortingState
   onSortingChange: (updater: SortingState | ((current: SortingState) => SortingState)) => void
+  initialStatus?: TaskStatusFilter
+  revealOpenRequest?: number
 }) {
   const tasksQuery = useQuery(taskListQueryOptions)
   const data = tasksQuery.data ?? EMPTY_TASKS
@@ -52,6 +61,7 @@ export function TaskScopeView({
   const { confirmLeave } = useDraftGuard()
   const pendingTaskIds = usePendingTaskIds()
   const setCompleted = useSetTaskCompletedMutation()
+  const projectsQuery = useQuery(projectListQueryOptions)
   const scopeKey = taskScopeKey(scope)
   // 呼び出し側が毎回新しいオブジェクトを渡しても、範囲が同じなら同じ値を使う（Tableの絞り込みを作り直さない）
   const stableScope = useMemo(() => scope, [scopeKey]) // scope は scopeKey と一対一
@@ -62,9 +72,21 @@ export function TaskScopeView({
 
   // 検索・表示切り替えは画面内の状態（保存しない）
   const [search, setSearch] = useState('')
-  const [status, setStatus] = useState<TaskStatusFilter>(DEFAULT_TASK_STATUS)
+  const [status, setStatus] = useState<TaskStatusFilter>(initialStatus)
   // 完了切り替えの結果を読み上げる（ライブリージョン）
   const [announcement, setAnnouncement] = useState('')
+  // 操作できない理由（完了済みプロジェクトのタスクを未完了に戻そうとした時。Main側でも拒否する）
+  const [blockedNotice, setBlockedNotice] = useState<string | null>(null)
+
+  // 「未完了のタスクを表示」の要求（マウント時の値は処理済みとして扱う）
+  const handledRevealRef = useRef(revealOpenRequest)
+  useEffect(() => {
+    if (revealOpenRequest === handledRevealRef.current) return
+    handledRevealRef.current = revealOpenRequest
+    setStatus('open')
+    if (shouldClearSearchToRevealOpen(data, stableScope, search)) setSearch('')
+    setAnnouncement('未完了のタスクを表示しました')
+  }, [revealOpenRequest, data, stableScope, search])
 
   // Tableへ渡す状態は値が変わった時だけ作り直す（毎回新しい配列だと行モデルが作り直される）
   const columnFilters = useMemo(() => scopeAndStatusFilterState(stableScope, status), [stableScope, status])
@@ -92,6 +114,13 @@ export function TaskScopeView({
 
   const handleToggleCompleted = async (task: TaskDto) => {
     if (pendingTaskIds.has(task.id)) return
+    const blocked = reopenBlockedReason(task, projectsQuery.data)
+    if (blocked) {
+      setBlockedNotice(blocked)
+      setAnnouncement(blocked)
+      return
+    }
+    setBlockedNotice(null)
     // 未保存の編集があるタスクは、完了操作の前に確認する（入力を黙って失わない）
     if (!(await confirmLeave({ target: { kind: 'task', id: task.id } }))) return
     setCompleted.mutate(
@@ -164,6 +193,11 @@ export function TaskScopeView({
             完了状態を更新できませんでした: {setCompleted.error.message}
           </Alert>
         )}
+        {blockedNotice && (
+          <Alert severity="info" variant="outlined" sx={{ mb: 2 }} onClose={() => setBlockedNotice(null)} data-testid="task-blocked-notice">
+            {blockedNotice}
+          </Alert>
+        )}
         {selectedOutOfScope && (
           <Alert severity="info" variant="outlined" sx={{ mb: 2, py: 0 }} data-testid="selected-out-of-scope">
             選択中のタスクは、この一覧（{scopeLabel}）の対象外です（所属を変更したため。詳細パネルには表示しています）。
@@ -202,7 +236,7 @@ export function TaskScopeView({
             selectedTaskId={selectedTaskId}
             pendingTaskIds={pendingTaskIds}
             sorting={sorting}
-            resetScrollKey={`${scopeKey}\u0000${search}\u0000${status}\u0000${JSON.stringify(sorting)}`}
+            resetScrollKey={`${scopeKey}\u0000${search}\u0000${status}\u0000${JSON.stringify(sorting)}\u0000${revealOpenRequest}`}
             onSort={(column) => onSortingChange((current) => nextSorting(current, column))}
             onSelect={(taskId) => void handleSelect(taskId)}
             onToggleCompleted={(task) => void handleToggleCompleted(task)}
