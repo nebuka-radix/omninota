@@ -2,6 +2,11 @@ import { ipcMain } from 'electron'
 import { IPC_CHANNELS, type AppInfo } from '../../shared/contracts/ipc'
 import { appGetInfoArgsSchema } from '../../shared/validation/app'
 import {
+  milestonesCreateArgsSchema,
+  milestonesListArgsSchema,
+  milestonesRenameArgsSchema
+} from '../../shared/validation/milestones'
+import {
   projectsCreateArgsSchema,
   projectsListArgsSchema,
   projectsRenameArgsSchema,
@@ -11,7 +16,7 @@ import {
   tasksCreateArgsSchema,
   tasksListArgsSchema,
   tasksSetCompletedArgsSchema,
-  tasksSetProjectArgsSchema,
+  tasksSetAssignmentArgsSchema,
   tasksUpdateTitleArgsSchema
 } from '../../shared/validation/tasks'
 import {
@@ -20,6 +25,7 @@ import {
   workspaceSaveArgsSchema
 } from '../../shared/validation/workspace'
 import type { FlushRequester } from '../lifecycle/workspace-flush'
+import type { MilestoneService } from '../services/milestone-service'
 import type { ProjectService } from '../services/project-service'
 import type { TaskService } from '../services/task-service'
 import type { WorkspaceSettingsService } from '../services/workspace-settings-service'
@@ -32,10 +38,11 @@ export function registerIpcHandlers(deps: {
   getAppInfo: () => AppInfo
   taskService: TaskService
   projectService: ProjectService
+  milestoneService: MilestoneService
   workspaceSettingsService: WorkspaceSettingsService
   flushRequester: FlushRequester
 }): void {
-  const { policy, taskService, projectService, workspaceSettingsService } = deps
+  const { policy, taskService, projectService, milestoneService, workspaceSettingsService } = deps
 
   ipcMain.handle(
     IPC_CHANNELS.appGetInfo,
@@ -88,12 +95,42 @@ export function registerIpcHandlers(deps: {
   )
 
   ipcMain.handle(
-    IPC_CHANNELS.tasksSetProject,
+    IPC_CHANNELS.tasksSetAssignment,
     createIpcHandler({
-      channel: IPC_CHANNELS.tasksSetProject,
-      argsSchema: tasksSetProjectArgsSchema,
+      channel: IPC_CHANNELS.tasksSetAssignment,
+      argsSchema: tasksSetAssignmentArgsSchema,
       policy,
-      run: ([input]) => taskService.setProject(input)
+      run: ([input]) => taskService.setAssignment(input)
+    })
+  )
+
+  ipcMain.handle(
+    IPC_CHANNELS.milestonesList,
+    createIpcHandler({
+      channel: IPC_CHANNELS.milestonesList,
+      argsSchema: milestonesListArgsSchema,
+      policy,
+      run: () => milestoneService.list()
+    })
+  )
+
+  ipcMain.handle(
+    IPC_CHANNELS.milestonesCreate,
+    createIpcHandler({
+      channel: IPC_CHANNELS.milestonesCreate,
+      argsSchema: milestonesCreateArgsSchema,
+      policy,
+      run: ([input]) => milestoneService.create(input)
+    })
+  )
+
+  ipcMain.handle(
+    IPC_CHANNELS.milestonesRename,
+    createIpcHandler({
+      channel: IPC_CHANNELS.milestonesRename,
+      argsSchema: milestonesRenameArgsSchema,
+      policy,
+      run: ([input]) => milestoneService.rename(input)
     })
   )
 

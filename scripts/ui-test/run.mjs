@@ -16,6 +16,7 @@ import {
   sleep,
   TestFailure
 } from './lib.mjs'
+import { milestoneScenarios } from './scenarios-milestones.mjs'
 import { projectCompletionScenarios } from './scenarios-project-completion.mjs'
 import { taskProjectScenarios } from './scenarios-task-projects.mjs'
 
@@ -265,6 +266,8 @@ const scenarios = [
 scenarios.push(...taskProjectScenarios({ withApp, root }))
 // フェーズ5.3: プロジェクトの完了ルール
 scenarios.push(...projectCompletionScenarios({ withApp, root }))
+// フェーズ5.4: マイルストン・Inboxからの紐付け・幅広ナビゲーション
+scenarios.push(...milestoneScenarios({ withApp, root }))
 
 console.log(`UIテスト（${mode}${displayId ? `、表示先 ${displayId}` : ''}）一時ディレクトリ: ${root}`)
 let failed = 0

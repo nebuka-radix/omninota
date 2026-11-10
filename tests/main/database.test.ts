@@ -64,6 +64,7 @@ describe('DB・マイグレーション・Repository（ホストNode.js）', () 
       id: 'id-1',
       title: '牛乳を買う',
       projectId: null,
+      milestoneId: null,
       createdAt: '2026-11-09T01:02:03.004Z',
       updatedAt: '2026-11-09T01:02:03.004Z',
       completedAt: null

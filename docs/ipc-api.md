@@ -36,15 +36,18 @@ type IpcErrorDetails = { kind: 'project-has-open-tasks'; openTaskCount: number }
 | window.gtd | チャンネル | 入力 | 出力 |
 |---|---|---|---|
 | `app.getInfo()` | `app:get-info` | なし | `AppInfo` |
-| `tasks.create(input)` | `tasks:create` | `{ title: string, projectId?: string \| null }` | `TaskDto` |
+| `tasks.create(input)` | `tasks:create` | `{ title: string, projectId?: string \| null, milestoneId?: string \| null }` | `TaskDto` |
 | `tasks.list()` | `tasks:list` | なし | `TaskDto[]` |
 | `tasks.updateTitle(input)` | `tasks:update-title` | `{ id, title }` | `TaskDto`（保存後） |
 | `tasks.setCompleted(input)` | `tasks:set-completed` | `{ id, completed }` | `TaskDto`（保存後） |
-| `tasks.setProject(input)` | `tasks:set-project` | `{ id, projectId: string \| null }` | `TaskDto`（保存後。フェーズ5.2） |
+| `tasks.setAssignment(input)` | `tasks:set-assignment` | `{ id, projectId: string \| null, milestoneId: string \| null }` | `TaskDto`（保存後。フェーズ5.4。5.2の `tasks.setProject` を置き換え） |
 | `projects.list()` | `projects:list` | なし | `ProjectDto[]` |
 | `projects.create(input)` | `projects:create` | `{ name }` | `ProjectDto` |
 | `projects.rename(input)` | `projects:rename` | `{ id, name }` | `ProjectDto`（保存後） |
 | `projects.setCompleted(input)` | `projects:set-completed` | `{ id, completed }` | `ProjectDto`（保存後。フェーズ5.3） |
+| `milestones.list()` | `milestones:list` | なし | `MilestoneDto[]`（全プロジェクト分。作成日時・IDの昇順。フェーズ5.4） |
+| `milestones.create(input)` | `milestones:create` | `{ projectId, name }` | `MilestoneDto` |
+| `milestones.rename(input)` | `milestones:rename` | `{ id, name }` | `MilestoneDto`（保存後） |
 | `workspace.get()` | `workspace:get` | なし | `WorkspaceSettings` |
 | `workspace.save(settings)` | `workspace:save` | `WorkspaceSettings` | `WorkspaceSettings` |
 | `workspace.onFlushRequest(listener)` | `workspace:flush-request`（Main → Renderer） | `{ requestId, draftAction }` | 購読解除関数 |
@@ -80,7 +83,31 @@ type IpcErrorDetails = { kind: 'project-has-open-tasks'; openTaskCount: number }
   確認順は「タスクの存在 → 同じ状態なら変更なしの成功 → 所属プロジェクトの完了状態 → 更新」で、1つのトランザクションで行う。
   完了にする要求（`completed: true`）は、所属によらず許可する。
 
-### tasks.create の所属・tasks.setProject（フェーズ5.2）
+### tasks.setAssignment・tasks.create のマイルストン・milestones（フェーズ5.4）
+
+- `tasks.setProject`（5.2）は廃止し、プロジェクトとマイルストンを1回で保存する `tasks.setAssignment` に置き換えた
+  （プロジェクトとマイルストンを別々のAPIで順番に更新し、途中で不整合な状態を作らないため。呼び出し元は詳細パネル・Inboxの紐付け・テスト）。
+- 入力: `{ id, projectId, milestoneId }`。両方必須（解除は両方 `null`）。`milestoneId` だけを指定した形は INVALID_INPUT。
+- Main側の確認順（1つのトランザクション）:
+  1. タスクの存在（NOT_FOUND）
+  2. プロジェクト・マイルストンの両方が同じなら、変更しない成功（updatedAtも変えない。完了済みプロジェクトでも同じ）
+  3. プロジェクトの存在（NOT_FOUND「指定したプロジェクトが見つかりません。」）→ マイルストンの存在（NOT_FOUND「指定したマイルストンが見つかりません。」）
+     → マイルストンがそのプロジェクトのものか（CONFLICT「指定したマイルストンは、そのプロジェクトに属していません。」）
+     → プロジェクトが未完了か（CONFLICT）
+  4. project_id・milestone_id・updated_at を1回の UPDATE で更新（プロジェクトだけを変える場合も milestone_id を指定値（null）で上書きし、
+     旧プロジェクトのマイルストンを残さない）。ID・タイトル・作成日時・完了日時は変えない。
+- 完了済みプロジェクトから外（未所属・別の未完了プロジェクト）への移動は許可。完了済みプロジェクト内でのマイルストン変更は拒否（移動とみなす）。
+- `tasks.create`: `milestoneId` は省略可。指定する場合は `projectId` も必要で、上記3と同じ確認を行う。
+- `milestones.create`: プロジェクトの存在（NOT_FOUND）・未完了（CONFLICT「完了済みのプロジェクトにはマイルストンを追加できません。」）。
+  名前は前後空白を除去、空白のみは INVALID_INPUT、最大200文字（`MILESTONE_NAME_MAX_LENGTH`）、同名可。IDと日時はMain側で付与。
+- `milestones.rename`: 存在しないIDは NOT_FOUND。同じ名前なら更新しない。完了済みプロジェクトのマイルストンでも変更できる。
+
+```ts
+type MilestoneDto = { id: string; projectId: string; name: string; createdAt: string; updatedAt: string }
+// TaskDto に milestoneId: string | null を追加（projectId が null なら常に null）
+```
+
+### tasks.create の所属・tasks.setProject（フェーズ5.2。5.4で setAssignment に置き換え）
 
 - `tasks.create`: `projectId` は省略可（フェーズ5.1までの呼び出しと互換。省略・nullは未所属）。指定する場合はUUID。
   指定したプロジェクトが存在しなければ NOT_FOUND（「指定したプロジェクトが見つかりません。」）、完了済みなら CONFLICT。
@@ -101,6 +128,7 @@ type TaskDto = {
   updatedAt: string
   completedAt: string | null
   projectId: string | null // 所属するプロジェクト。nullは未所属（フェーズ5.2）
+  milestoneId: string | null // 所属するマイルストン。nullは未設定（フェーズ5.4）
 } // 日時はUTCのISO 8601
 ```
 

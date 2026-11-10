@@ -8,10 +8,9 @@ import type { PaneKey } from '../../features/workspace/pane-layout'
 import { usePaneLayout } from '../../features/workspace/use-pane-layout'
 import { useWorkspace } from '../../features/workspace/WorkspaceContext'
 import { vscodeColors } from '../../theme'
-import { ActivityBar } from './ActivityBar'
 import { DetailPanel } from './DetailPanel'
 import { MainPanel } from './MainPanel'
-import { Sidebar } from './Sidebar'
+import { NavigationPane } from './NavigationPane'
 import { StatusBar } from './StatusBar'
 import { TopBar } from './TopBar'
 
@@ -130,7 +129,6 @@ export function AppShell() {
       <TopBar detailVisible={settings.detailVisible} onToggleDetail={() => void toggleDetail()} toggleButtonRef={toggleButtonRef} />
 
       <Box sx={{ gridArea: 'body', display: 'flex', minWidth: 0, minHeight: 0, ...separatorStyles }}>
-        <ActivityBar pathname={pathname} />
         <Group
           id="workspace-panes"
           orientation="horizontal"
@@ -149,11 +147,12 @@ export function AppShell() {
             groupResizeBehavior="preserve-pixel-size"
             style={{ backgroundColor: vscodeColors.sideBarBackground }}
           >
-            <Sidebar pathname={pathname} />
+            {/* 幅広のナビゲーション（フェーズ5.4。旧アクティビティバー＋サイドバー）。幅の保存は従来の sidebarWidth を使う */}
+            <NavigationPane pathname={pathname} />
           </Panel>
           <PaneSeparator
             id="sidebar-separator"
-            label="サイドバーの幅を調整"
+            label="ナビゲーションの幅を調整"
             pane="sidebar"
             onOperate={pane.markOperated}
             onReset={pane.resetToDefault}

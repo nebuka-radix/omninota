@@ -36,6 +36,13 @@
       "when": 1794271063391,
       "tag": "0004_add_task_project_id",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1794276373360,
+      "tag": "0005_add_milestones",
+      "breakpoints": true
     }
   ]
 }

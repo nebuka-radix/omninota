@@ -8,7 +8,7 @@ import { createProjectService, type ProjectService } from '../../src/main/servic
 import { createTaskService, type TaskService } from '../../src/main/services/task-service'
 import {
   tasksCreateArgsSchema,
-  tasksSetProjectArgsSchema
+  tasksSetAssignmentArgsSchema
 } from '../../src/shared/validation/tasks'
 import { createTempDir, MIGRATIONS_DIR, projectServiceDeps, taskServiceDeps } from '../helpers/temp-database'
 
@@ -47,7 +47,7 @@ describe('タスクの所属（入力検証）', () => {
     ['余分なキー', [{ id: projectId, projectId: null, title: 'a' }]],
     ['引数なし', []]
   ])('所属変更: 不正な形（%s）を拒否する', (_label, args) => {
-    expect(tasksSetProjectArgsSchema.safeParse(args).success).toBe(false)
+    expect(tasksSetAssignmentArgsSchema.safeParse(args).success).toBe(false)
   })
 })
 
@@ -116,15 +116,15 @@ describe('タスクの所属（Service・一時DB）', () => {
     const created = tasks.create({ title: 'タスク' })
     const done = tasks.setCompleted({ id: created.id, completed: true })
 
-    const toA = tasks.setProject({ id: created.id, projectId: a.id })
+    const toA = tasks.setAssignment({ id: created.id, projectId: a.id, milestoneId: null })
     expect(toA).toEqual({ ...done, projectId: a.id, updatedAt: toA.updatedAt })
     expect(toA.updatedAt > done.updatedAt).toBe(true)
 
-    const toB = tasks.setProject({ id: created.id, projectId: b.id })
+    const toB = tasks.setAssignment({ id: created.id, projectId: b.id, milestoneId: null })
     expect(toB).toMatchObject({ id: created.id, title: 'タスク', createdAt: created.createdAt, completedAt: done.completedAt, projectId: b.id })
     expect(toB.updatedAt > toA.updatedAt).toBe(true)
 
-    const unassigned = tasks.setProject({ id: created.id, projectId: null })
+    const unassigned = tasks.setAssignment({ id: created.id, projectId: null, milestoneId: null })
     expect(unassigned).toMatchObject({ projectId: null, completedAt: done.completedAt, createdAt: created.createdAt })
     expect(unassigned.updatedAt > toB.updatedAt).toBe(true)
   })
@@ -132,9 +132,9 @@ describe('タスクの所属（Service・一時DB）', () => {
   it('同じ所属への再要求は変更なしの成功（updatedAtも変えない）', () => {
     const a = projects.create({ name: 'A' })
     const task = tasks.create({ title: 't', projectId: a.id })
-    expect(tasks.setProject({ id: task.id, projectId: a.id })).toEqual(task)
+    expect(tasks.setAssignment({ id: task.id, projectId: a.id, milestoneId: null })).toEqual(task)
     const inbox = tasks.create({ title: 'u' })
-    expect(tasks.setProject({ id: inbox.id, projectId: null })).toEqual(inbox)
+    expect(tasks.setAssignment({ id: inbox.id, projectId: null, milestoneId: null })).toEqual(inbox)
   })
 
   it('完了済みプロジェクトに既に所属している場合、同じ所属の再要求はエラーにも更新にもならない', () => {
@@ -142,14 +142,14 @@ describe('タスクの所属（Service・一時DB）', () => {
     const created = tasks.create({ title: 't', projectId: a.id })
     complete(a.id)
     const task = tasks.list().find((item) => item.id === created.id)
-    expect(tasks.setProject({ id: created.id, projectId: a.id })).toEqual(task)
+    expect(tasks.setAssignment({ id: created.id, projectId: a.id, milestoneId: null })).toEqual(task)
   })
 
   it('完了済みプロジェクトへの移動は CONFLICT（所属・updatedAtは変えない）', () => {
     const done = projects.create({ name: '完了済み' })
     complete(done.id)
     const task = tasks.create({ title: 't' })
-    expect(() => tasks.setProject({ id: task.id, projectId: done.id })).toThrow(
+    expect(() => tasks.setAssignment({ id: task.id, projectId: done.id, milestoneId: null })).toThrow(
       expect.objectContaining({ code: 'CONFLICT', message: '完了済みのプロジェクトにはタスクを追加・移動できません。' })
     )
     expect(createTaskRepository(db).findById(task.id)).toMatchObject({ projectId: null, updatedAt: task.updatedAt })
@@ -161,14 +161,14 @@ describe('タスクの所属（Service・一時DB）', () => {
     const t1 = tasks.create({ title: 't1', projectId: done.id })
     const t2 = tasks.create({ title: 't2', projectId: done.id })
     complete(done.id)
-    expect(tasks.setProject({ id: t1.id, projectId: null }).projectId).toBeNull()
-    expect(tasks.setProject({ id: t2.id, projectId: open.id }).projectId).toBe(open.id)
+    expect(tasks.setAssignment({ id: t1.id, projectId: null, milestoneId: null }).projectId).toBeNull()
+    expect(tasks.setAssignment({ id: t2.id, projectId: open.id, milestoneId: null }).projectId).toBe(open.id)
   })
 
   it('存在しないタスクは NOT_FOUND（タスク）、存在しない移動先は NOT_FOUND（プロジェクト）', () => {
-    expect(() => tasks.setProject({ id: MISSING_ID, projectId: null })).toThrow(/対象のタスクが見つかりません/)
+    expect(() => tasks.setAssignment({ id: MISSING_ID, projectId: null, milestoneId: null })).toThrow(/対象のタスクが見つかりません/)
     const task = tasks.create({ title: 't' })
-    expect(() => tasks.setProject({ id: task.id, projectId: MISSING_ID })).toThrow(/指定したプロジェクトが見つかりません/)
+    expect(() => tasks.setAssignment({ id: task.id, projectId: MISSING_ID, milestoneId: null })).toThrow(/指定したプロジェクトが見つかりません/)
     expect(createTaskRepository(db).findById(task.id)?.projectId).toBeNull()
   })
 
@@ -181,7 +181,7 @@ describe('タスクの所属（Service・一時DB）', () => {
 
   it('外部キー: 存在しないプロジェクトIDはDBでも保存できない', () => {
     const task = tasks.create({ title: 't' })
-    expect(() => createTaskRepository(db).updateProjectId(task.id, MISSING_ID, '2026-11-10T10:00:00.000Z')).toThrow(
+    expect(() => createTaskRepository(db).updateAssignment(task.id, MISSING_ID, null, '2026-11-10T10:00:00.000Z')).toThrow(
       /FOREIGN KEY/
     )
   })
@@ -193,13 +193,13 @@ describe('タスクの所属（Service・一時DB）', () => {
       ...taskServiceDeps(db),
       repository: {
         ...createTaskRepository(db),
-        updateProjectId: () => {
+        updateAssignment: () => {
           db.$client.prepare('UPDATE tasks SET title = ? WHERE id = ?').run('途中の変更', task.id)
           throw new Error('書き込み失敗')
         }
       }
     })
-    expect(() => failing.setProject({ id: task.id, projectId: a.id })).toThrow('書き込み失敗')
+    expect(() => failing.setAssignment({ id: task.id, projectId: a.id, milestoneId: null })).toThrow('書き込み失敗')
     // 同じトランザクション内の変更はROLLBACKされる
     expect(createTaskRepository(db).findById(task.id)).toMatchObject({ title: 't', projectId: null })
   })
@@ -207,7 +207,7 @@ describe('タスクの所属（Service・一時DB）', () => {
   it('再接続後も所属が復元される', () => {
     const a = projects.create({ name: 'A' })
     const t1 = tasks.create({ title: 't1', projectId: a.id })
-    const t2 = tasks.setProject({ id: tasks.create({ title: 't2' }).id, projectId: a.id })
+    const t2 = tasks.setAssignment({ id: tasks.create({ title: 't2' }).id, projectId: a.id, milestoneId: null })
     closeDatabase(db)
     db = openDatabase(dbFile)
     runMigrations(db, MIGRATIONS_DIR)
@@ -226,11 +226,11 @@ describe('タスクの所属（Service・一時DB）', () => {
     const event: InvokeEventLike = { sender: { id: 1 }, senderFrame: { url: 'file:///index.html', parent: null } }
     const logger = { warn: vi.fn(), error: vi.fn() }
     const setProject = createIpcHandler({
-      channel: 'tasks:set-project',
-      argsSchema: tasksSetProjectArgsSchema,
+      channel: 'tasks:set-assignment',
+      argsSchema: tasksSetAssignmentArgsSchema,
       policy,
       logger,
-      run: ([input]) => tasks.setProject(input)
+      run: ([input]) => tasks.setAssignment(input)
     })
     const create = createIpcHandler({
       channel: 'tasks:create',
@@ -243,16 +243,16 @@ describe('タスクの所属（Service・一時DB）', () => {
     complete(done.id)
     const task = tasks.create({ title: 't' })
 
-    expect(await setProject(event, { id: task.id, projectId: 'x' })).toMatchObject({ ok: false, error: { code: 'INVALID_INPUT' } })
-    expect(await setProject(event, { id: MISSING_ID, projectId: null })).toEqual({
+    expect(await setProject(event, { id: task.id, projectId: 'x', milestoneId: null })).toMatchObject({ ok: false, error: { code: 'INVALID_INPUT' } })
+    expect(await setProject(event, { id: MISSING_ID, projectId: null, milestoneId: null })).toEqual({
       ok: false,
       error: { code: 'NOT_FOUND', message: '対象のタスクが見つかりません。' }
     })
-    expect(await setProject(event, { id: task.id, projectId: MISSING_ID })).toEqual({
+    expect(await setProject(event, { id: task.id, projectId: MISSING_ID, milestoneId: null })).toEqual({
       ok: false,
       error: { code: 'NOT_FOUND', message: '指定したプロジェクトが見つかりません。' }
     })
-    expect(await setProject(event, { id: task.id, projectId: done.id })).toEqual({
+    expect(await setProject(event, { id: task.id, projectId: done.id, milestoneId: null })).toEqual({
       ok: false,
       error: { code: 'CONFLICT', message: '完了済みのプロジェクトにはタスクを追加・移動できません。' }
     })

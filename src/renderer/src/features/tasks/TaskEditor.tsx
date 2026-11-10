@@ -5,7 +5,7 @@ import { CircleCheck, RotateCcw, Save, Undo2 } from 'lucide-react'
 import { isTaskCompleted, TASK_TITLE_MAX_LENGTH, type TaskDto } from '../../../../shared/contracts/tasks'
 import { useDraftGuard } from '../drafts/DraftGuard'
 import { formatTaskDateTime } from './TaskList'
-import { TaskProjectField } from './TaskProjectField'
+import { TaskAssignmentField } from './TaskAssignmentField'
 import { projectListQueryOptions } from '../projects/project-queries'
 import { reopenBlockedReason } from './task-rules'
 import { usePendingTaskIds, useSetTaskCompletedMutation, useUpdateTaskTitleMutation } from './task-queries'
@@ -188,7 +188,7 @@ export function TaskEditor({ task }: { task: TaskDto }) {
         </Alert>
       )}
 
-      <TaskProjectField task={task} busy={busy} />
+      <TaskAssignmentField task={task} busy={busy} />
 
       <Box component="dl" sx={{ display: 'grid', gridTemplateColumns: 'auto 1fr', columnGap: 3, rowGap: 1.5, mt: 4, mb: 0 }}>
         {dates

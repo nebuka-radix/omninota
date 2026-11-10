@@ -6,7 +6,6 @@ import { isAllowedAppUrl } from './infrastructure/app-paths'
 
 // 全ペインの最小幅を並べられるウィンドウ最小幅（境界線・余白として少し足す）
 export const MIN_WINDOW_WIDTH =
-  WORKSPACE_LIMITS.activityBarWidth +
   WORKSPACE_LIMITS.sidebarWidth.min +
   WORKSPACE_LIMITS.mainMinWidth +
   WORKSPACE_LIMITS.detailWidth.min +

@@ -122,7 +122,7 @@ describe('プロジェクトの完了ルール（Service・一時DB）', () => {
   it('外へ移したタスクは数えない（移動後に完了できる）', () => {
     const p = projects.create({ name: 'P' })
     const t = tasks.create({ title: 'open', projectId: p.id })
-    tasks.setProject({ id: t.id, projectId: null })
+    tasks.setAssignment({ id: t.id, projectId: null, milestoneId: null })
     expect(projects.setCompleted({ id: p.id, completed: true }).completedAt).not.toBeNull()
   })
 
@@ -165,7 +165,7 @@ describe('プロジェクトの完了ルール（Service・一時DB）', () => {
     projects.setCompleted({ id: p.id, completed: true })
 
     expect(() => tasks.create({ title: 'new', projectId: p.id })).toThrow(expect.objectContaining({ code: 'CONFLICT' }))
-    expect(() => tasks.setProject({ id: inbox.id, projectId: p.id })).toThrow(expect.objectContaining({ code: 'CONFLICT' }))
+    expect(() => tasks.setAssignment({ id: inbox.id, projectId: p.id, milestoneId: null })).toThrow(expect.objectContaining({ code: 'CONFLICT' }))
     const beforeReopen = createTaskRepository(db).findById(t1.id)
     expect(() => tasks.setCompleted({ id: t1.id, completed: false })).toThrow(
       expect.objectContaining({
@@ -179,7 +179,7 @@ describe('プロジェクトの完了ルール（Service・一時DB）', () => {
 
     expect(tasks.updateTitle({ id: t1.id, title: 't1（編集）' }).title).toBe('t1（編集）')
     expect(projects.rename({ id: p.id, name: 'P（編集）' })).toMatchObject({ name: 'P（編集）', completedAt: expect.any(String) })
-    expect(tasks.setProject({ id: t2.id, projectId: q.id }).projectId).toBe(q.id)
+    expect(tasks.setAssignment({ id: t2.id, projectId: q.id, milestoneId: null }).projectId).toBe(q.id)
 
     // 外へ移したタスクは未完了に戻せる。プロジェクトを未完了に戻せば、所属タスクも未完了に戻せる
     expect(tasks.setCompleted({ id: t2.id, completed: false }).completedAt).toBeNull()

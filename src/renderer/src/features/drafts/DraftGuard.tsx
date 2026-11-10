@@ -22,7 +22,7 @@ export type DraftHandle = {
 
 type Choice = 'save' | 'discard' | 'cancel'
 
-export const DRAFT_LABELS: Record<DraftKind, string> = { task: 'タスクのタイトル', project: 'プロジェクト名' }
+export const DRAFT_LABELS: Record<DraftKind, string> = { task: 'タスクのタイトル', project: 'プロジェクト名', milestone: 'マイルストン名' }
 
 type DraftGuardValue = {
   register: (handle: DraftHandle) => () => void
@@ -96,7 +96,7 @@ export function DraftGuardProvider({ children }: { children: ReactNode }) {
     return pendingRef.current
   }, [])
 
-  // 画面遷移（ActivityBar・プロジェクトの選択など）の前に確認する。Electronでは beforeunload は使わない。
+  // 画面遷移（ナビゲーション・プロジェクトの選択など）の前に確認する。Electronでは beforeunload は使わない。
   // 確認が終わってから遷移するので、キャンセル時は表示中の画面・プロジェクト・選択を変えない。
   useBlocker({
     shouldBlockFn: async () => !(await confirmLeave()),

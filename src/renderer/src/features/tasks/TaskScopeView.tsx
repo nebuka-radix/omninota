@@ -1,15 +1,34 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Alert, Box, CircularProgress, InputAdornment, TextField, ToggleButton, ToggleButtonGroup, Typography } from '@mui/material'
+import {
+  Alert,
+  Box,
+  Button,
+  CircularProgress,
+  InputAdornment,
+  TextField,
+  ToggleButton,
+  ToggleButtonGroup,
+  Typography
+} from '@mui/material'
 import { useQuery } from '@tanstack/react-query'
 import { useTable, type SortingState } from '@tanstack/react-table'
-import { Search } from 'lucide-react'
+import { Pencil, Plus, Search } from 'lucide-react'
+import type { ProjectDto } from '../../../../shared/contracts/projects'
 import type { TaskDto } from '../../../../shared/contracts/tasks'
+import { milestoneListQueryOptions } from '../milestones/milestone-queries'
 import { useDraftGuard } from '../drafts/DraftGuard'
 import { projectListQueryOptions } from '../projects/project-queries'
 import { useWorkspace } from '../workspace/WorkspaceContext'
+import { AssignMenu } from './AssignMenu'
+import { buildTaskGroups, milestonesOf, type Assignment, type TaskGroup } from './assignment'
 import { TASK_LIST_HELP_ID, TaskList } from './TaskList'
 import { TaskQuickAdd } from './TaskQuickAdd'
-import { taskListQueryOptions, usePendingTaskIds, useSetTaskCompletedMutation } from './task-queries'
+import {
+  taskListQueryOptions,
+  usePendingTaskIds,
+  useSetTaskAssignmentMutation,
+  useSetTaskCompletedMutation
+} from './task-queries'
 import { reopenBlockedReason, shouldClearSearchToRevealOpen } from './task-rules'
 import { isTaskInScope, scopeProjectId, taskScopeKey, type TaskScope } from './task-scope'
 import {
@@ -35,6 +54,12 @@ const STATUS_LABELS: Record<TaskStatusFilter, string> = { open: '未完了', com
 //   先頭へスクロールする（範囲・選択・ドラフトは変えない。フェーズ5.3）。
 // - ソートは呼び出し側が持つ（プロジェクトを切り替えても維持する）。
 // - 別の範囲を開いたら、タスクの選択を解除する（WorkspaceContext.enterTaskScope）。
+// フェーズ5.4:
+// - Inbox: 各行の「紐付け」（キーボードは M）から AssignMenu を開き、最終的な所属先を1回で保存する。
+//   保存に成功した後だけ（Queryキャッシュの更新で）一覧から消える。失敗時は行を残し、理由を表示する。
+// - プロジェクト: マイルストン別のグループ（マイルストンの作成順、最後に「マイルストン未設定」）を、1つの仮想リストに並べる。
+//   検索・状態・ソートは全グループ共通。空のグループも見出しと「＋タスク追加」を表示する。
+//   「＋タスク追加」は上の追加欄の追加先をそのグループに切り替えてフォーカスする（入力欄を仮想行の中に置かない）。
 export function TaskScopeView({
   scope,
   scopeLabel,
@@ -43,7 +68,9 @@ export function TaskScopeView({
   sorting,
   onSortingChange,
   initialStatus = DEFAULT_TASK_STATUS,
-  revealOpenRequest = 0
+  revealOpenRequest = 0,
+  project,
+  onRenameMilestone
 }: {
   scope: TaskScope
   // 一覧の説明（「プロジェクトに属さないタスク」など。対象外の表示に使う）
@@ -54,6 +81,9 @@ export function TaskScopeView({
   onSortingChange: (updater: SortingState | ((current: SortingState) => SortingState)) => void
   initialStatus?: TaskStatusFilter
   revealOpenRequest?: number
+  // プロジェクト画面の場合の対象プロジェクト（マイルストン別の表示・追加先の表示に使う）
+  project?: ProjectDto | undefined
+  onRenameMilestone?: ((milestoneId: string) => void) | undefined
 }) {
   const tasksQuery = useQuery(taskListQueryOptions)
   const data = tasksQuery.data ?? EMPTY_TASKS
@@ -62,6 +92,13 @@ export function TaskScopeView({
   const pendingTaskIds = usePendingTaskIds()
   const setCompleted = useSetTaskCompletedMutation()
   const projectsQuery = useQuery(projectListQueryOptions)
+  const milestonesQuery = useQuery(milestoneListQueryOptions)
+  const setAssignment = useSetTaskAssignmentMutation()
+  // 紐付けメニューの対象（Inbox）
+  const [assignTarget, setAssignTarget] = useState<{ task: TaskDto; anchor: HTMLElement } | null>(null)
+  // プロジェクト画面の追加先（null = マイルストン未設定）
+  const [addMilestoneId, setAddMilestoneId] = useState<string | null>(null)
+  const quickAddInputRef = useRef<HTMLInputElement>(null)
   const scopeKey = taskScopeKey(scope)
   // 呼び出し側が毎回新しいオブジェクトを渡しても、範囲が同じなら同じ値を使う（Tableの絞り込みを作り直さない）
   const stableScope = useMemo(() => scope, [scopeKey]) // scope は scopeKey と一対一
@@ -100,6 +137,14 @@ export function TaskScopeView({
     onSortingChange
   })
   const visibleTasks = table.getRowModel().rows.map((row) => row.original)
+  const projectMilestones = useMemo(
+    () => (project ? milestonesOf(milestonesQuery.data ?? [], project.id) : []),
+    [project, milestonesQuery.data]
+  )
+  // マイルストン別のグループ（プロジェクト画面だけ）。Tableで絞り込み・ソートした順序のまま振り分ける
+  const groups = project ? buildTaskGroups(visibleTasks, projectMilestones) : null
+  const addMilestone = projectMilestones.find((milestone) => milestone.id === addMilestoneId) ?? null
+  const projectCompleted = project !== undefined && project.completedAt !== null
   const scopeCount = useMemo(() => data.filter((task) => isTaskInScope(task, stableScope)).length, [data, stableScope])
 
   const selectedTask = selectedTaskId ? data.find((task) => task.id === selectedTaskId) : undefined
@@ -132,11 +177,76 @@ export function TaskScopeView({
     )
   }
 
+  // Inboxの行からの紐付け。最終的な所属先を1回で保存する（成功した後だけ一覧から消える）
+  const handleAssign = (task: TaskDto, assignment: Assignment) => {
+    if (pendingTaskIds.has(task.id)) return
+    setAssignment.reset()
+    setAssignment.mutate(
+      { id: task.id, ...assignment },
+      {
+        onSuccess: (saved) => {
+          const projectName = projectsQuery.data?.find((item) => item.id === saved.projectId)?.name ?? ''
+          setAnnouncement(`「${saved.title}」を「${projectName}」に紐付けました`)
+        }
+      }
+    )
+  }
+
+  // マイルストンの見出し（プロジェクト画面）。操作はlistboxの外の通常のボタン
+  const renderGroupHeader = (group: TaskGroup) => (
+    <>
+      <Typography component="span" noWrap sx={{ fontSize: 12, fontWeight: 600, minWidth: 0 }} data-testid="group-label">
+        {group.label}
+      </Typography>
+      <Typography component="span" sx={{ fontSize: 11, color: 'text.secondary', flexShrink: 0 }}>
+        {group.tasks.length} 件
+      </Typography>
+      <Box sx={{ ml: 'auto', display: 'flex', gap: 1, flexShrink: 0 }}>
+        <Button
+          size="small"
+          startIcon={<Plus size={12} aria-hidden />}
+          disabled={projectCompleted}
+          aria-label={`「${group.label}」にタスクを追加`}
+          data-add-group={group.milestoneId ?? ''}
+          onClick={() => {
+            setAddMilestoneId(group.milestoneId)
+            requestAnimationFrame(() => quickAddInputRef.current?.focus())
+          }}
+          sx={{ fontSize: 11, py: 0, minWidth: 0 }}
+        >
+          タスク追加
+        </Button>
+        {group.milestoneId !== null && onRenameMilestone && (
+          <Button
+            size="small"
+            startIcon={<Pencil size={12} aria-hidden />}
+            aria-label={`マイルストン「${group.label}」の名前を変更`}
+            data-rename-milestone={group.milestoneId}
+            onClick={() => onRenameMilestone(group.milestoneId as string)}
+            sx={{ fontSize: 11, py: 0, minWidth: 0 }}
+          >
+            名前変更
+          </Button>
+        )}
+      </Box>
+    </>
+  )
+
+  const quickAddTarget = project
+    ? `「${project.name}」${addMilestone ? ` › ${addMilestone.name}` : '（マイルストン未設定）'}に追加`
+    : addTargetLabel
+
   return (
     <>
       {/* 一覧より上の領域は縮めない（一覧だけがスクロールする） */}
       <Box sx={{ flexShrink: 0 }}>
-        <TaskQuickAdd projectId={scopeProjectId(scope)} targetLabel={addTargetLabel} disabledReason={addDisabledReason} />
+        <TaskQuickAdd
+          projectId={scopeProjectId(scope)}
+          milestoneId={addMilestone ? addMilestone.id : null}
+          targetLabel={quickAddTarget}
+          disabledReason={addDisabledReason}
+          inputRef={quickAddInputRef}
+        />
 
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 2, flexWrap: 'wrap' }}>
           <TextField
@@ -177,7 +287,7 @@ export function TaskScopeView({
           </Typography>
         </Box>
         <Typography id={TASK_LIST_HELP_ID} variant="caption" color="text.secondary" component="p" sx={{ mb: 1 }}>
-          一覧の操作: ↑↓ で移動、Enter で選択、Space で完了／未完了の切り替え
+          一覧の操作: ↑↓ で移動、Enter で選択、Space で完了／未完了の切り替え{scope.kind === 'inbox' ? '、M で紐付け' : ''}
         </Typography>
         <Box
           role="status"
@@ -188,6 +298,11 @@ export function TaskScopeView({
           {announcement}
         </Box>
 
+        {setAssignment.isError && (
+          <Alert severity="error" variant="outlined" sx={{ mb: 2 }} onClose={() => setAssignment.reset()} data-testid="assign-error">
+            紐付けできませんでした: {setAssignment.error.message}
+          </Alert>
+        )}
         {setCompleted.isError && (
           <Alert severity="error" variant="outlined" sx={{ mb: 2 }} onClose={() => setCompleted.reset()}>
             完了状態を更新できませんでした: {setCompleted.error.message}
@@ -219,19 +334,24 @@ export function TaskScopeView({
         <Alert severity="error" variant="outlined">
           タスクを読み込めませんでした: {tasksQuery.error.message}
         </Alert>
-      ) : scopeCount === 0 ? (
+      ) : scopeCount === 0 && !groups ? (
         <Typography variant="body2" color="text.secondary" role="status">
           タスクはまだありません。
         </Typography>
       ) : (
         <>
-          {visibleTasks.length === 0 && (
+          {visibleTasks.length === 0 && scopeCount > 0 && (
             <Typography variant="body2" color="text.secondary" role="status" sx={{ mb: 1 }}>
               条件に一致するタスクはありません。
             </Typography>
           )}
           <TaskList
             tasks={visibleTasks}
+            groups={groups}
+            renderGroupHeader={renderGroupHeader}
+            onRequestAssign={
+              scope.kind === 'inbox' ? (task, anchor) => !pendingTaskIds.has(task.id) && setAssignTarget({ task, anchor }) : undefined
+            }
             totalCount={scopeCount}
             selectedTaskId={selectedTaskId}
             pendingTaskIds={pendingTaskIds}
@@ -242,6 +362,14 @@ export function TaskScopeView({
             onToggleCompleted={(task) => void handleToggleCompleted(task)}
           />
         </>
+      )}
+      {assignTarget && (
+        <AssignMenu
+          task={assignTarget.task}
+          anchor={assignTarget.anchor}
+          onChoose={(assignment) => handleAssign(assignTarget.task, assignment)}
+          onClose={() => setAssignTarget(null)}
+        />
       )}
     </>
   )

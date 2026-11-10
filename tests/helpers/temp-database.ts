@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { AppDatabase } from '../../src/main/db/client'
 import { createTransactionRunner } from '../../src/main/db/transaction'
+import { createMilestoneRepository } from '../../src/main/repositories/milestone-repository'
 import { createProjectRepository } from '../../src/main/repositories/project-repository'
 import { createTaskRepository } from '../../src/main/repositories/task-repository'
 
@@ -23,6 +24,16 @@ export function createTempDir(): { dir: string; cleanup: () => void } {
 export function taskServiceDeps(db: AppDatabase) {
   return {
     repository: createTaskRepository(db),
+    findProject: createProjectRepository(db).findById,
+    findMilestone: createMilestoneRepository(db).findById,
+    transaction: createTransactionRunner(db)
+  }
+}
+
+// MilestoneServiceの依存（フェーズ5.4）
+export function milestoneServiceDeps(db: AppDatabase) {
+  return {
+    repository: createMilestoneRepository(db),
     findProject: createProjectRepository(db).findById,
     transaction: createTransactionRunner(db)
   }

@@ -30,7 +30,7 @@ function insertOldTasks(db: AppDatabase): void {
   for (const task of oldTasks) insert.run(task.id, task.title, task.at, task.at)
 }
 const expectedAfterUpgrade = oldTasks
-  .map((task) => ({ id: task.id, title: task.title, createdAt: task.at, updatedAt: task.at, completedAt: null, projectId: null }))
+  .map((task) => ({ id: task.id, title: task.title, createdAt: task.at, updatedAt: task.at, completedAt: null, projectId: null, milestoneId: null }))
   .reverse() // 新しい順（既存タスクは未所属で移行される）
 
 // 旧スキーマのDBから、当時の列だけでタスクを読む（現在のRepositoryは新しい列も選択するため使わない）
@@ -104,7 +104,7 @@ describe('既存データを保持したマイグレーション', () => {
 
     const upgraded = openDatabase(dbFile)
     expect(runMigrations(upgraded, MIGRATIONS_DIR)).toEqual({ appliedBefore: 3, appliedAfter: MIGRATION_COUNT })
-    expect(createTaskRepository(upgraded).listAll()).toEqual(before.map((task) => ({ ...task, projectId: null })))
+    expect(createTaskRepository(upgraded).listAll()).toEqual(before.map((task) => ({ ...task, projectId: null, milestoneId: null })))
     expect(createSettingsRepository(upgraded).get('workspace')?.value).toBe(workspaceValue)
     expect(upgraded.$client.prepare('SELECT COUNT(*) AS c FROM projects').get()).toEqual({ c: 0 })
     closeDatabase(upgraded)
@@ -188,14 +188,14 @@ describe('既存データを保持したマイグレーション', () => {
     const upgraded = openDatabase(dbFile)
     expect(runMigrations(upgraded, MIGRATIONS_DIR)).toEqual({ appliedBefore: 4, appliedAfter: MIGRATION_COUNT })
     // 既存タスクはID・タイトル・日時・完了日時を保持し、未所属（projectId = null）になる
-    expect(createTaskRepository(upgraded).listAll()).toEqual(beforeTasks.map((task) => ({ ...task, projectId: null })))
+    expect(createTaskRepository(upgraded).listAll()).toEqual(beforeTasks.map((task) => ({ ...task, projectId: null, milestoneId: null })))
     expect(upgraded.$client.prepare('SELECT * FROM projects ORDER BY id').all()).toEqual(beforeProjects)
     expect(createSettingsRepository(upgraded).get('workspace')?.value).toBe(workspaceValue)
 
     // 外部キー（projects.id）と索引
-    expect(upgraded.$client.prepare('PRAGMA foreign_key_list(tasks)').all()).toEqual([
-      expect.objectContaining({ table: 'projects', from: 'project_id', to: 'id' })
-    ])
+    expect(upgraded.$client.prepare('PRAGMA foreign_key_list(tasks)').all()).toEqual(
+      expect.arrayContaining([expect.objectContaining({ table: 'projects', from: 'project_id', to: 'id' })])
+    )
     const indexes = upgraded.$client.prepare('PRAGMA index_list(tasks)').all() as { name: string }[]
     expect(indexes.map((index) => index.name)).toContain('tasks_project_id_idx')
     expect(upgraded.$client.prepare('PRAGMA foreign_key_check').all()).toEqual([])
@@ -211,7 +211,7 @@ describe('既存データを保持したマイグレーション', () => {
       appliedBefore: MIGRATION_COUNT,
       appliedAfter: MIGRATION_COUNT
     })
-    expect(createTaskRepository(restarted).listAll()).toEqual(beforeTasks.map((task) => ({ ...task, projectId: null })))
+    expect(createTaskRepository(restarted).listAll()).toEqual(beforeTasks.map((task) => ({ ...task, projectId: null, milestoneId: null })))
     closeDatabase(restarted)
   })
 })

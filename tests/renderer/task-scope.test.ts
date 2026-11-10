@@ -1,7 +1,7 @@
 import { constructTable, tableFeatures, type SortingState } from '@tanstack/react-table'
 import { storeReactivityBindings } from '@tanstack/table-core/store-reactivity-bindings'
 import { describe, expect, it } from 'vitest'
-import { buildProjectOptions, toProjectIdValue } from '../../src/renderer/src/features/tasks/project-options'
+import { assignmentValue, buildAssignmentOptions, parseAssignmentValue } from '../../src/renderer/src/features/tasks/assignment'
 import { createTaskSaveQueue } from '../../src/renderer/src/features/tasks/task-save-queue'
 import { INBOX_SCOPE, isTaskInScope, scopeProjectId, taskScopeKey, type TaskScope } from '../../src/renderer/src/features/tasks/task-scope'
 import {
@@ -24,7 +24,8 @@ const task = (id: string, title: string, projectId: string | null, completed = f
   createdAt,
   updatedAt: createdAt,
   completedAt: completed ? '2026-11-10T01:00:00.000Z' : null,
-  projectId
+  projectId,
+  milestoneId: null
 })
 
 describe('表示範囲（Inbox / プロジェクト）', () => {
@@ -86,7 +87,7 @@ describe('Table: 表示範囲と状態・検索・ソートの組み合わせ', 
   })
 })
 
-describe('詳細パネルの所属の選択肢', () => {
+describe('詳細パネルの所属の選択肢（5.4でプロジェクト・マイルストンの1つの選択に拡張）', () => {
   const project = (id: string, name: string, createdAt: string, completedAt: string | null = null): ProjectDto => ({
     id,
     name,
@@ -98,37 +99,49 @@ describe('詳細パネルの所属の選択肢', () => {
   const work2 = project('bbbbbbbb-0000-4000-8000-000000000002', '仕事', '2026-11-02T00:00:00.000Z')
   const home = project('cccccccc-0000-4000-8000-000000000003', '家', '2026-11-03T00:00:00.000Z')
   const done = project('dddddddd-0000-4000-8000-000000000004', '完了P', '2026-11-04T00:00:00.000Z', '2026-11-05T00:00:00.000Z')
+  const values = (built: ReturnType<typeof buildAssignmentOptions>) => [
+    built.unassigned.value,
+    ...built.groups.flatMap((group) => group.options.map((option) => option.value))
+  ]
+  const none = { projectId: null, milestoneId: null }
 
-  it('未所属と未完了プロジェクトを選べる。完了済みは候補に出さない', () => {
-    const options = buildProjectOptions([work1, home, done], null)
-    expect(options.map((option) => option.value)).toEqual(['', home.id, work1.id])
-    expect(options[0]).toEqual({ value: '', label: '未所属（Inbox）', disabled: false })
-    expect(options.every((option) => !option.disabled)).toBe(true)
+  it('未所属と未完了プロジェクト（マイルストン未設定）を選べる。完了済みは候補に出さない', () => {
+    const built = buildAssignmentOptions([work1, home, done], [], none)
+    expect(values(built)).toEqual(['', `${home.id}:`, `${work1.id}:`])
+    expect(built.unassigned).toEqual({ value: '', label: '未所属（Inbox）', disabled: false })
+    expect(built.groups.flatMap((group) => group.options).every((option) => !option.disabled)).toBe(true)
   })
 
   it('同名のプロジェクトはIDで区別し、作成日時とIDの先頭を補助情報として付ける', () => {
-    const options = buildProjectOptions([work2, work1, home], null)
-    const labels = options.filter((option) => option.value === work1.id || option.value === work2.id).map((option) => option.label)
-    expect(new Set(options.map((option) => option.value)).size).toBe(options.length)
-    expect(labels[0]).toContain('ID aaaaaaaa')
-    expect(labels[1]).toContain('ID bbbbbbbb')
-    expect(labels[0]).not.toBe(labels[1])
-    expect(options.find((option) => option.value === home.id)?.label).toBe('家')
+    const built = buildAssignmentOptions([work2, work1, home], [], none)
+    const labels = built.groups.map((group) => group.label)
+    expect(labels.filter((label) => label.includes('ID aaaaaaaa'))).toHaveLength(1)
+    expect(labels.filter((label) => label.includes('ID bbbbbbbb'))).toHaveLength(1)
+    expect(labels).toContain('家')
+    expect(new Set(values(built)).size).toBe(values(built).length)
   })
 
   it('現在の所属が完了済みなら、その名前を「完了済み」として表示する（選択不可。空欄・未所属に見せない）', () => {
-    const options = buildProjectOptions([work1, done], done.id)
-    expect(options.find((option) => option.value === done.id)).toEqual({ value: done.id, label: '完了P（完了済み）', disabled: true })
+    const built = buildAssignmentOptions([work1, done], [], { projectId: done.id, milestoneId: null })
+    const option = built.groups.flatMap((group) => group.options).find((item) => item.value === `${done.id}:`)
+    expect(option).toEqual({ value: `${done.id}:`, label: '完了P（完了済み） — マイルストン未設定', disabled: true })
+    expect(built.unknown).toBeNull()
   })
 
-  it('一覧にない所属は「不明なプロジェクト」として値を保つ', () => {
+  it('一覧にない所属は「不明」として値を保つ', () => {
     const missing = 'eeeeeeee-0000-4000-8000-000000000005'
-    expect(buildProjectOptions([work1], missing).at(-1)).toEqual({ value: missing, label: '不明なプロジェクト', disabled: true })
+    expect(buildAssignmentOptions([work1], [], { projectId: missing, milestoneId: null }).unknown).toEqual({
+      value: `${missing}:`,
+      label: '不明なプロジェクト・マイルストン',
+      disabled: true
+    })
   })
 
-  it('選択値の変換（空文字 = 未所属）', () => {
-    expect(toProjectIdValue('')).toBeNull()
-    expect(toProjectIdValue(work1.id)).toBe(work1.id)
+  it('選択値の変換（空文字 = 未所属、"<P>:" = プロジェクトだけ、"<P>:<M>" = マイルストン）', () => {
+    expect(parseAssignmentValue('')).toEqual(none)
+    expect(parseAssignmentValue(`${work1.id}:`)).toEqual({ projectId: work1.id, milestoneId: null })
+    expect(parseAssignmentValue(`${work1.id}:m1`)).toEqual({ projectId: work1.id, milestoneId: 'm1' })
+    expect(assignmentValue({ projectId: work1.id, milestoneId: 'm1' })).toBe(`${work1.id}:m1`)
   })
 })
 

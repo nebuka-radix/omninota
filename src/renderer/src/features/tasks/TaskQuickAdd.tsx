@@ -1,4 +1,4 @@
-import { useRef, useState, type FormEvent, type KeyboardEvent } from 'react'
+import { useRef, useState, type FormEvent, type KeyboardEvent, type Ref } from 'react'
 import { Alert, Box, Button, TextField, Typography } from '@mui/material'
 import { Plus } from 'lucide-react'
 import { TASK_TITLE_MAX_LENGTH } from '../../../../shared/contracts/tasks'
@@ -11,14 +11,19 @@ import { useCreateTaskMutation } from './task-queries'
 // - 未送信の入力は未保存確認（DraftGuard）の対象にしない（既存方針）
 const TARGET_ID = 'task-quick-add-target'
 
+// - milestoneId: 追加先のマイルストン（フェーズ5.4。プロジェクト画面で選んだグループ）。nullはマイルストン未設定
 export function TaskQuickAdd({
   projectId,
+  milestoneId = null,
   targetLabel,
-  disabledReason
+  disabledReason,
+  inputRef
 }: {
   projectId: string | null
+  milestoneId?: string | null
   targetLabel: string
   disabledReason?: string | undefined
+  inputRef?: Ref<HTMLInputElement>
 }) {
   const [title, setTitle] = useState('')
   const createTask = useCreateTaskMutation()
@@ -29,7 +34,7 @@ export function TaskQuickAdd({
     if (submittingRef.current || disabledReason !== undefined) return
     submittingRef.current = true
     createTask.mutate(
-      { title, projectId },
+      { title, projectId, milestoneId: projectId === null ? null : milestoneId },
       {
         // 成功した場合だけ入力を消す。失敗時は入力を残す。
         onSuccess: () => setTitle(''),
@@ -73,6 +78,7 @@ export function TaskQuickAdd({
           fullWidth
           autoComplete="off"
           disabled={disabled}
+          inputRef={inputRef}
           slotProps={{
             htmlInput: {
               'aria-label': 'タスクのタイトル',

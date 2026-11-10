@@ -12,8 +12,9 @@ export type TaskRepository = {
   // 更新した行を返す。対象がなければundefined。
   updateTitle(id: string, title: string, updatedAt: string): TaskRow | undefined
   updateCompletedAt(id: string, completedAt: string | null, updatedAt: string): TaskRow | undefined
-  // 所属の変更・解除（フェーズ5.2）。projectIdの存在・状態の確認はServiceで行う（外部キーでも保証される）
-  updateProjectId(id: string, projectId: string | null, updatedAt: string): TaskRow | undefined
+  // 所属（プロジェクト・マイルストン）の変更・解除を1回の更新で行う（フェーズ5.4）。
+  // 存在・組み合わせ・完了状態の確認はServiceで行う（存在は外部キーでも保証される）
+  updateAssignment(id: string, projectId: string | null, milestoneId: string | null, updatedAt: string): TaskRow | undefined
   // プロジェクトに所属する未完了タスクの件数（フェーズ5.3。プロジェクトの完了判定に使う。索引 tasks_project_id_idx）
   countOpenByProject(projectId: string): number
 }
@@ -35,8 +36,8 @@ export function createTaskRepository(db: AppDatabase): TaskRepository {
     updateCompletedAt(id, completedAt, updatedAt) {
       return db.update(tasks).set({ completedAt, updatedAt }).where(eq(tasks.id, id)).returning().get()
     },
-    updateProjectId(id, projectId, updatedAt) {
-      return db.update(tasks).set({ projectId, updatedAt }).where(eq(tasks.id, id)).returning().get()
+    updateAssignment(id, projectId, milestoneId, updatedAt) {
+      return db.update(tasks).set({ projectId, milestoneId, updatedAt }).where(eq(tasks.id, id)).returning().get()
     },
     countOpenByProject(projectId) {
       const row = db

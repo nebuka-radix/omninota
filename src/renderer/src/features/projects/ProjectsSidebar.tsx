@@ -17,6 +17,7 @@ import { useNavigate } from '@tanstack/react-router'
 import { Plus } from 'lucide-react'
 import { PROJECT_NAME_MAX_LENGTH, type ProjectDto } from '../../../../shared/contracts/projects'
 import { projectIdFromRoute } from '../../../../shared/contracts/workspace'
+import { formatTaskDateTime } from '../tasks/TaskList'
 import { groupProjects } from './project-order'
 import { projectListQueryOptions, useCreateProjectMutation } from './project-queries'
 
@@ -121,6 +122,15 @@ export function ProjectsSidebar({ pathname }: { pathname: string }) {
   } else {
     // 区分（未完了・完了済み）ごとに表示する。区分の中は名前順（同名は作成日時・ID）。選択はルートで決まるため、完了操作で区分が変わっても維持される
     const groups = groupProjects(projects.data)
+    // 同名のプロジェクトは、作成日時とIDの先頭を副テキストで示して判別できるようにする（フェーズ5.4）
+    const nameCounts = new Map<string, number>()
+    for (const project of projects.data) nameCounts.set(project.name, (nameCounts.get(project.name) ?? 0) + 1)
+    const secondaryOf = (project: ProjectDto) => {
+      const parts: string[] = []
+      if (project.completedAt !== null) parts.push('完了済み')
+      if ((nameCounts.get(project.name) ?? 0) > 1) parts.push(`${formatTaskDateTime(project.createdAt)} 作成・ID ${project.id.slice(0, 8)}`)
+      return parts.length > 0 ? parts.join('・') : undefined
+    }
     const renderItem = (project: ProjectDto) => {
       const selected = project.id === selectedId
       return (
@@ -135,7 +145,7 @@ export function ProjectsSidebar({ pathname }: { pathname: string }) {
           <ListItemText
             primary={project.name}
             // 完了済みは色だけでなく文字でも示す
-            secondary={project.completedAt !== null ? '完了済み' : undefined}
+            secondary={secondaryOf(project)}
             slotProps={{ primary: { noWrap: true, sx: { fontSize: 13 } }, secondary: { sx: { fontSize: 11 } } }}
           />
         </ListItemButton>

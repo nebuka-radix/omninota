@@ -18,6 +18,7 @@ const task = (id: string, title: string, createdAt: string, completedAt: string 
   createdAt,
   updatedAt: createdAt,
   projectId: null,
+  milestoneId: null,
   completedAt
 })
 

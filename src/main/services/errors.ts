@@ -50,3 +50,21 @@ export function taskInCompletedProjectConflict(): BusinessError {
     '完了済みのプロジェクトのタスクは未完了に戻せません。先にプロジェクトを未完了に戻してください。'
   )
 }
+
+// マイルストン（フェーズ5.4）
+export function milestoneNotFound(): BusinessError {
+  return new BusinessError('NOT_FOUND', '対象のマイルストンが見つかりません。')
+}
+
+export function targetMilestoneNotFound(): BusinessError {
+  return new BusinessError('NOT_FOUND', '指定したマイルストンが見つかりません。')
+}
+
+// 指定したマイルストンが、指定したプロジェクトに属していない
+export function milestoneProjectMismatch(): BusinessError {
+  return new BusinessError('CONFLICT', '指定したマイルストンは、そのプロジェクトに属していません。')
+}
+
+export function milestoneInCompletedProjectConflict(): BusinessError {
+  return new BusinessError('CONFLICT', '完了済みのプロジェクトにはマイルストンを追加できません。')
+}

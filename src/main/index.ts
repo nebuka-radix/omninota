@@ -18,9 +18,11 @@ import {
   unsavedDraftDialogText
 } from './lifecycle/workspace-flush'
 import { createScriptedMessageBox, type MessageBoxAdapter } from './lifecycle/message-box'
+import { createMilestoneRepository } from './repositories/milestone-repository'
 import { createProjectRepository } from './repositories/project-repository'
 import { createSettingsRepository } from './repositories/settings-repository'
 import { createTaskRepository } from './repositories/task-repository'
+import { createMilestoneService } from './services/milestone-service'
 import { createProjectService } from './services/project-service'
 import { createTaskService } from './services/task-service'
 import { createWorkspaceSettingsService } from './services/workspace-settings-service'
@@ -286,11 +288,18 @@ if (!app.requestSingleInstanceLock()) {
     const projectRepository = createProjectRepository(database)
     const taskRepository = createTaskRepository(database)
     const transaction = createTransactionRunner(database)
+    const milestoneRepository = createMilestoneRepository(database)
     registerIpcHandlers({
       policy: { getWindow: () => mainWindow, isAllowedUrl: isAppUrl },
       getAppInfo,
       taskService: createTaskService({
         repository: taskRepository,
+        findProject: projectRepository.findById,
+        findMilestone: milestoneRepository.findById,
+        transaction
+      }),
+      milestoneService: createMilestoneService({
+        repository: milestoneRepository,
         findProject: projectRepository.findById,
         transaction
       }),

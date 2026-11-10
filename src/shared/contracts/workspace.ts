@@ -26,8 +26,7 @@ export const WORKSPACE_LIMITS = {
   sidebarWidth: { min: 180, max: 480 },
   detailWidth: { min: 220, max: 560 },
   // メインパネルの最小幅（保存はしない。ウィンドウ最小幅の計算に使う）
-  mainMinWidth: 320,
-  activityBarWidth: 48
+  mainMinWidth: 320
 } as const
 
 // 保存形式のバージョン。形式を変えるときに上げ、読み取り時に移行・検証する。

@@ -289,6 +289,28 @@ check → unsaved-draft → ダイアログ（保存して終了 / 保存せず�
     比較相手を切り替える（Queryキャッシュからの再描画が少し遅れて届く間も、未保存と判定しない。キャッシュが同じか新しい更新を
     受け取ったらキャッシュの値を使う）。プロジェクト名の編集欄は、保存成功時に同じ描画で編集状態を終えるため該当しない。
 
+### マイルストンとInboxからの紐付け（フェーズ5.4）
+
+- 所属の値: `{ projectId, milestoneId }`（`features/tasks/assignment.ts`）。保存は `tasks.setAssignment` の1回だけ。
+- Inboxの紐付け: 各行の「紐付け」ボタン（マウス用。Tab移動の対象は増やさない）と、一覧での `M` キー（現在行）で `AssignMenu` を開く。
+  1段目でプロジェクト（未完了だけ。同名は作成日時・IDで判別）を選び、2段目で「このプロジェクトに紐付け（マイルストン未設定）」か
+  マイルストンを選んだ時点で1回だけ保存する。Esc・外側のクリックでは保存しない。保存中の行は操作できない。
+  保存に成功すると Query キャッシュが更新され、Inboxの範囲から外れて行が消える。失敗時は行を残し、一覧の上に理由を表示する。
+- 一覧の意味付け: listbox / option はそのまま。見出し行と「紐付け」ボタンは listbox の外側の重ね合わせ層（`task-list-overlay`）に描画し、
+  option の中に操作要素を置かない（表面的な role の追加はしていない）。option の読み上げ名にマイルストン名を含める。
+- プロジェクト画面: Tableで絞り込み・ソートしたタスクを `buildTaskGroups` でマイルストン別（作成順、最後に「マイルストン未設定」）に分け、
+  `flattenRows` で見出し行とタスク行のフラットな行にして、1つのスクロール領域・1つの仮想リストで描画する。
+  キーは見出しが `group:<マイルストンID>` / `group:unset`、タスクがタスクID（衝突しない）。キーボードの現在行の移動はタスク行だけ（見出しは飛ばす）。
+  検索・状態・ソートは全グループ共通。空のグループも見出しを表示する。
+- グループの「タスク追加」は、上の追加欄の追加先をそのグループに切り替えてフォーカスする（入力欄を仮想行の中に置かない）。
+  マイルストン内からの追加は projectId と milestoneId、未設定からは projectId だけを明示して保存する。完了済みプロジェクトでは無効。
+- マイルストンの登録欄は見出しの下。名前変更は見出しの「名前変更」で一覧の外に編集欄を開く（`MilestoneForms.tsx`）。
+  編集欄は DraftGuard に `kind: 'milestone'` で登録する（画面遷移・別の編集・終了時の確認は既存の仕組みと共通。終了時のダイアログは
+  「マイルストン名に未保存の変更があります」の文言になるだけで、別のダイアログは作らない）。
+- 詳細パネル: `TaskAssignmentField` の1つの select（optgroup ごとにプロジェクト、「— マイルストン未設定」とマイルストン）で選び、1回で保存する。
+- 更新の競合: タスクの更新は従来どおり保存キューで同じタスクごとに順番に送る。マイルストン名の変更はキー `milestone:<ID>` で同じキューを使う。
+  所属の保存中の画面遷移・終了は、既存の仕組み（保存の完了を待ち、失敗していれば中断）で取りこぼさない。
+
 ### タスク一覧の表示範囲と所属（フェーズ5.2）
 
 - 表示範囲 `TaskScope`: `{ kind: 'inbox' }`（プロジェクトに属さないタスク）/ `{ kind: 'project', projectId }`
@@ -323,11 +345,16 @@ check → unsaved-draft → ダイアログ（保存して終了 / 保存せず�
 
 ```text
 TopBar（固定）
-ActivityBar（固定48px）| Sidebar | MainPanel | DetailPanel   ← react-resizable-panels の Group
+Navigation（幅広。旧 Sidebar の Panel を使う）| MainPanel | DetailPanel   ← react-resizable-panels の Group
 StatusBar（固定）
 ```
 
-- Sidebar・DetailPanelは `groupResizeBehavior="preserve-pixel-size"`、MainPanelが残りの幅を使う。
+- フェーズ5.4で、固定48pxのアクティビティバーと独立したSidebarを削除し、1つの幅広ナビゲーション（`NavigationPane.tsx`）にした。
+  中身は Inbox（未完了件数）/ Projects（登録欄・未完了と完了済みの区分つき一覧。折りたたみ可、折りたたみ中も選択中の名前を表示）/ 設定。
+  ナビゲーション全体を縦スクロールする。幅は従来の左ペインの希望幅（Workspace設定の `sidebarWidth`、既定240px、180〜480px）を
+  そのまま使う（保存形式・キーは変えない。既存の設定を書き換えない）。境界線の名前は「ナビゲーションの幅を調整」。
+  ウィンドウの最小幅の計算からアクティビティバーの48pxを除いた。
+- Navigation・DetailPanelは `groupResizeBehavior="preserve-pixel-size"`、MainPanelが残りの幅を使う。
 - 各ペインは縦方向だけスクロールし、ウィンドウ全体には横スクロールを出さない。
 - 境界（Separator）はキーボード操作（矢印・Home/End）とARIA属性をライブラリが提供する。
 - 幅は「希望幅（保存する値）」と「実寸（表示する値）」を分ける（フェーズ3.1）。

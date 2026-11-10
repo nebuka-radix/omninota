@@ -221,7 +221,41 @@ WAL使用中は、稼働中のDBファイルを単純コピーしてもバック
 将来のスキーマ更新前バックアップは、`src/main/db/migrate.ts` の `runMigrations()` 先頭
 （未適用のマイグレーションがある場合）に追加する。
 
+### 0005_add_milestones（フェーズ5.4）
+
+- 生成SQL: `CREATE TABLE milestones (...)`（project_id は projects.id への外部キー、NOT NULL）、索引 `milestones_project_id_idx`、
+  `ALTER TABLE tasks ADD milestone_id text REFERENCES milestones(id)`、索引 `tasks_milestone_id_idx`。
+  テーブルの再作成はしない。過去のマイグレーション（0000〜0004）は変更していない。スキーマ定義から `db:generate` で生成した。
+- 既存タスクは project_id・タイトル・状態・日時をそのまま保持し、milestone_id は NULL になる（結合テスト・UIテストで確認）。
+
+| 列（milestones） | 型 | 内容 |
+|---|---|---|
+| id | TEXT PRIMARY KEY | UUID v4（Main側で生成） |
+| project_id | TEXT NOT NULL REFERENCES projects(id) | 所属プロジェクト（付け替えは未対応） |
+| name | TEXT NOT NULL | 前後空白を除去した名前（最大200文字、`MILESTONE_NAME_MAX_LENGTH`）。同名可 |
+| created_at / updated_at | TEXT NOT NULL | UTCのISO 8601。表示順は created_at・id の昇順 |
+
+DBで保証する範囲とServiceで保証する範囲:
+
+| 規則 | 保証する場所 |
+|---|---|
+| tasks.project_id は存在するプロジェクト | DB（外部キー）＋ Service（NOT_FOUND を返すため事前に確認） |
+| tasks.milestone_id は存在するマイルストン | DB（外部キー）＋ Service |
+| milestones.project_id は存在するプロジェクト | DB（外部キー・NOT NULL）＋ Service |
+| milestone_id があれば project_id もある（マイルストンだけの所属を禁止） | 入力検証（Zod）＋ Service（DBのCHECK制約はない） |
+| milestone_id のマイルストンは、同じタスクの project_id のプロジェクトに属する | Service（トランザクション内で確認。DBの複合外部キーはない） |
+| 完了済みプロジェクトへの追加・移動・マイルストン登録の拒否 | Service（トランザクション内で確認） |
+
+- CHECK制約・複合外部キーを既存の tasks テーブルに後から加えるには、SQLiteではテーブルの再作成が必要になるため、今回は行わなかった。
+  タスクの所属を書き換える経路は TaskService（create / setAssignment）だけで、どちらも確認と更新を1つのトランザクションで行う。
+- **既存のDB（通常利用 GTD・開発 GTD-dev）は、次にアプリを通常起動した時に未適用のマイグレーション（0003〜0005 / 0004〜0005）が適用される。**
+  起動前に、アプリを終了した状態で下記の手順でバックアップを取ること（docs/getting-started.md）。今回の作業では両DBを起動・更新していない。
+
 ### 手動バックアップ（バックアップ機能の実装前）
+
+通常は `zsh scripts/backup-user-db.zsh`（通常利用DB）/ `--dev`（開発DB）を使う（docs/getting-started.md）。
+SQLiteの `.backup` で書き出し、integrity_check・適用済みマイグレーション数・テーブルの件数を記録する。
+元DBは読み取り専用で開き（-wal がない場合は immutable の読み取り専用URI）、元DB・WAL・SHMは削除しない。以下は手作業で行う場合の手順。
 
 アプリを終了した状態で、SQLiteのオンラインバックアップAPI（sqlite3 CLIの `.backup`）を使う。
 稼働中のWAL使用DBのファイルを単純コピーしたものはバックアップとして扱わない。

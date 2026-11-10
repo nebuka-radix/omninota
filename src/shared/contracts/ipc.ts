@@ -1,7 +1,8 @@
 // IPC契約: 型とチャンネル名の定数だけを置く。実行時依存を持たない。
 // Main / Preload / Rendererのどこからimportしてもよい。
 import type { CreateProjectInput, ProjectDto, RenameProjectInput, SetProjectCompletedInput } from './projects'
-import type { CreateTaskInput, SetTaskCompletedInput, SetTaskProjectInput, TaskDto, UpdateTaskTitleInput } from './tasks'
+import type { CreateMilestoneInput, MilestoneDto, RenameMilestoneInput } from './milestones'
+import type { CreateTaskInput, SetTaskAssignmentInput, SetTaskCompletedInput, TaskDto, UpdateTaskTitleInput } from './tasks'
 import type { WorkspaceSettings } from './workspace'
 
 export const IPC_CHANNELS = {
@@ -10,11 +11,14 @@ export const IPC_CHANNELS = {
   tasksList: 'tasks:list',
   tasksUpdateTitle: 'tasks:update-title',
   tasksSetCompleted: 'tasks:set-completed',
-  tasksSetProject: 'tasks:set-project',
+  tasksSetAssignment: 'tasks:set-assignment',
   projectsList: 'projects:list',
   projectsCreate: 'projects:create',
   projectsRename: 'projects:rename',
   projectsSetCompleted: 'projects:set-completed',
+  milestonesList: 'milestones:list',
+  milestonesCreate: 'milestones:create',
+  milestonesRename: 'milestones:rename',
   workspaceGet: 'workspace:get',
   workspaceSave: 'workspace:save',
   // Main → Renderer: 終了・ウィンドウを閉じる前に、確定済みのWorkspace状態の保存完了を問い合わせる
@@ -42,7 +46,7 @@ export type WorkspaceFlushRequest = {
 }
 
 // 未保存ドラフトの対象（終了時のダイアログの文言に使う。フェーズ5.1）
-export const DRAFT_KINDS = ['task', 'project'] as const
+export const DRAFT_KINDS = ['task', 'project', 'milestone'] as const
 export type DraftKind = (typeof DRAFT_KINDS)[number]
 
 export type WorkspaceFlushResult = {
@@ -98,8 +102,8 @@ export type GtdApi = {
     // 用途別の更新API。任意の列は更新できない。成功時は保存後のタスクを返す。
     updateTitle: (input: UpdateTaskTitleInput) => Promise<IpcResult<TaskDto>>
     setCompleted: (input: SetTaskCompletedInput) => Promise<IpcResult<TaskDto>>
-    // 所属の変更・解除（フェーズ5.2）
-    setProject: (input: SetTaskProjectInput) => Promise<IpcResult<TaskDto>>
+    // 所属（プロジェクト・マイルストン）の変更・解除を1回で保存する（フェーズ5.4。5.2の setProject を置き換え）
+    setAssignment: (input: SetTaskAssignmentInput) => Promise<IpcResult<TaskDto>>
   }
   // 用途別のAPI（一覧・作成・名前変更はフェーズ5.1、完了・取り消しは5.3）
   projects: {
@@ -108,6 +112,12 @@ export type GtdApi = {
     rename: (input: RenameProjectInput) => Promise<IpcResult<ProjectDto>>
     // 完了・完了の取り消し（フェーズ5.3）。未完了のタスクがあれば CONFLICT（details: project-has-open-tasks）
     setCompleted: (input: SetProjectCompletedInput) => Promise<IpcResult<ProjectDto>>
+  }
+  // マイルストン（フェーズ5.4）。一覧は全プロジェクト分（少量）。完了・削除・並べ替えはない
+  milestones: {
+    list: () => Promise<IpcResult<MilestoneDto[]>>
+    create: (input: CreateMilestoneInput) => Promise<IpcResult<MilestoneDto>>
+    rename: (input: RenameMilestoneInput) => Promise<IpcResult<MilestoneDto>>
   }
   // Workspace設定専用。任意の設定キーは扱わない。
   workspace: {

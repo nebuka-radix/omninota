@@ -4,6 +4,9 @@ import { useQuery } from '@tanstack/react-query'
 import type { SortingState } from '@tanstack/react-table'
 import { FolderKanban } from 'lucide-react'
 import { Page } from '../components/Page'
+import { useDraftGuard } from '../features/drafts/DraftGuard'
+import { MilestoneCreateForm, MilestoneNameEditor } from '../features/milestones/MilestoneForms'
+import { milestoneListQueryOptions } from '../features/milestones/milestone-queries'
 import { ProjectCompletionControl } from '../features/projects/ProjectCompletionControl'
 import { ProjectNameEditor } from '../features/projects/ProjectNameEditor'
 import { projectListQueryOptions } from '../features/projects/project-queries'
@@ -35,6 +38,18 @@ export function ProjectPage({ projectId }: { projectId: string }) {
   const [sorting, setSorting] = useState<SortingState>(DEFAULT_TASK_SORTING)
   // 「未完了のタスクを表示」の要求回数（TaskScopeView が増えた時だけ反応する）
   const [revealOpenRequest, setRevealOpenRequest] = useState(0)
+  // 名前を編集中のマイルストン（一覧の見出しの「名前変更」で開く。フェーズ5.4）
+  const [editingMilestoneId, setEditingMilestoneId] = useState<string | null>(null)
+  const milestones = useQuery(milestoneListQueryOptions)
+  const { confirmLeave } = useDraftGuard()
+  // 表示中のプロジェクトのマイルストンだけを編集対象にする（プロジェクトを切り替えたら閉じる）
+  const editingMilestone = milestones.data?.find((item) => item.id === editingMilestoneId && item.projectId === projectId)
+  const openMilestoneEditor = async (milestoneId: string) => {
+    if (milestoneId === editingMilestoneId) return
+    // 別の編集（マイルストン名・プロジェクト名・タスクのタイトル）が未保存なら、先に既存の確認を行う
+    if (!(await confirmLeave())) return
+    setEditingMilestoneId(milestoneId)
+  }
 
   let body
   switch (state.kind) {
@@ -78,6 +93,20 @@ export function ProjectPage({ projectId }: { projectId: string }) {
             project={state.project}
             onRevealOpenTasks={() => setRevealOpenRequest((count) => count + 1)}
           />
+          <MilestoneCreateForm
+            key={`milestone-create-${state.project.id}`}
+            projectId={state.project.id}
+            disabledReason={
+              state.project.completedAt !== null ? '完了済みのプロジェクトにはマイルストンを追加できません' : undefined
+            }
+          />
+          {editingMilestone && (
+            <MilestoneNameEditor
+              key={editingMilestone.id}
+              milestone={editingMilestone}
+              onClose={() => setEditingMilestoneId(null)}
+            />
+          )}
           <TaskScopeView
             key={state.project.id}
             scope={{ kind: 'project', projectId: state.project.id }}
@@ -92,6 +121,8 @@ export function ProjectPage({ projectId }: { projectId: string }) {
             onSortingChange={setSorting}
             initialStatus={initialStatusForProject(state.project)}
             revealOpenRequest={revealOpenRequest}
+            project={state.project}
+            onRenameMilestone={(milestoneId) => void openMilestoneEditor(milestoneId)}
           />
         </>
       )

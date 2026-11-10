@@ -1,6 +1,6 @@
 import { FolderKanban, Inbox, Settings, type LucideIcon } from 'lucide-react'
 
-// 実在する画面の表示名・アイコン・移動先。ActivityBar・Sidebar・StatusBarで共通に使う。
+// 実在する画面の表示名・アイコン・移動先。ナビゲーション（NavigationPane）・StatusBarで共通に使う。
 export type ScreenId = 'inbox' | 'projects' | 'settings'
 
 export const SCREENS: Record<ScreenId, { label: string; icon: LucideIcon; path: '/inbox' | '/projects' | '/settings' }> = {

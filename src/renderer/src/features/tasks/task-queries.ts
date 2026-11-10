@@ -1,8 +1,8 @@
 import { queryOptions, useMutation, useMutationState, useQueryClient, type QueryClient } from '@tanstack/react-query'
 import type {
   CreateTaskInput,
+  SetTaskAssignmentInput,
   SetTaskCompletedInput,
-  SetTaskProjectInput,
   TaskDto,
   UpdateTaskTitleInput
 } from '../../../../shared/contracts/tasks'
@@ -18,7 +18,7 @@ export const taskMutationKeys = {
   create: [...taskKeys.all, 'create'] as const,
   updateTitle: [...taskKeys.all, 'update-title'] as const,
   setCompleted: [...taskKeys.all, 'set-completed'] as const,
-  setProject: [...taskKeys.all, 'set-project'] as const
+  setAssignment: [...taskKeys.all, 'set-assignment'] as const
 }
 
 // タスク一覧の正本はこのQuery（全件）。Inbox・プロジェクトの一覧、詳細、件数はすべてここから導出する。
@@ -72,13 +72,13 @@ export function useSetTaskCompletedMutation() {
   })
 }
 
-// 所属の変更・解除（フェーズ5.2）。詳細パネルで選んだら即時保存する。
-export function useSetTaskProjectMutation() {
+// 所属（プロジェクト・マイルストン）の変更・解除（フェーズ5.4）。最終的な所属先を1回で保存する。
+export function useSetTaskAssignmentMutation() {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationKey: taskMutationKeys.setProject,
-    mutationFn: (input: SetTaskProjectInput) =>
-      taskSaveQueue.run(input.id, () => unwrapIpc(window.gtd.tasks.setProject(input))),
+    mutationKey: taskMutationKeys.setAssignment,
+    mutationFn: (input: SetTaskAssignmentInput) =>
+      taskSaveQueue.run(input.id, () => unwrapIpc(window.gtd.tasks.setAssignment(input))),
     onSuccess: (saved) => replaceTaskInList(queryClient, saved)
   })
 }
@@ -102,7 +102,7 @@ export function usePendingTaskIds(): ReadonlySet<string> {
 const TASK_UPDATE_KEYS: readonly unknown[] = [
   taskMutationKeys.updateTitle[1],
   taskMutationKeys.setCompleted[1],
-  taskMutationKeys.setProject[1]
+  taskMutationKeys.setAssignment[1]
 ]
 
 function isTaskUpdateKey(key: readonly unknown[] | undefined): boolean {

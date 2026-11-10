@@ -2,7 +2,8 @@
 // run.mjs から呼ぶ。すべて専用の一時userData（root配下）だけを使う。
 import { randomUUID } from 'node:crypto'
 import { join } from 'node:path'
-import { assert, createDatabaseAt, openDatabaseReadOnly, requestQuit, sleep } from './lib.mjs'
+import { readFileSync } from 'node:fs'
+import { assert, createDatabaseAt, openDatabaseReadOnly, PROJECT_ROOT, requestQuit, sleep } from './lib.mjs'
 
 const collator = new Intl.Collator('ja', { numeric: true, sensitivity: 'base' })
 
@@ -39,12 +40,14 @@ export function taskProjectScenarios({ withApp, root }) {
     await c.click(`document.querySelector(${JSON.stringify(`[data-testid=task-list] [data-task-id="${taskId}"]`)})`)
     await c.waitFor(`document.querySelector('[data-testid=task-editor]')`, 3000, '詳細の表示')
   }
-  const chooseProject = (c, value) =>
+  // 詳細パネルの所属の選択（5.4から値は "<プロジェクトID>:<マイルストンID>"。ここではプロジェクトだけ・未所属を選ぶ）
+  const chooseProject = (c, projectId) =>
     c.evaluate(
-      `(() => { const s = document.querySelector('[data-testid=task-project-select]'); const set = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value').set; set.call(s, ${JSON.stringify(value)}); s.dispatchEvent(new Event('change', { bubbles: true })); })()`
+      `(() => { const s = document.querySelector('[data-testid=task-project-select]'); const set = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value').set; set.call(s, ${JSON.stringify(projectId === '' ? '' : `${projectId}:`)}); s.dispatchEvent(new Event('change', { bubbles: true })); })()`
     )
   const selectState = (c) =>
-    c.evaluate(`(() => { const s = document.querySelector('[data-testid=task-project-select]'); return s ? { value: s.value, label: s.selectedOptions[0]?.textContent, disabled: s.disabled, options: [...s.options].map((o) => ({ value: o.value, label: o.textContent, disabled: o.disabled })) } : null })()`)
+    // value はプロジェクトIDの部分だけを返す（5.2のシナリオの判定を変えないため）
+    c.evaluate(`(() => { const s = document.querySelector('[data-testid=task-project-select]'); const pid = (v) => v.split(':')[0]; return s ? { value: pid(s.value), rawValue: s.value, label: s.selectedOptions[0]?.textContent, disabled: s.disabled, options: [...s.options].map((o) => ({ value: pid(o.value), rawValue: o.value, label: o.textContent, disabled: o.disabled })) } : null })()`)
   const titleDraft = (c) => c.evaluate(`document.querySelector('[data-testid=task-editor] input:not([type=hidden])')?.value`)
   const setTitleDraft = (c, value) => c.setInput('[data-testid=task-editor] input:not([type=hidden])', value)
 
@@ -68,7 +71,9 @@ export function taskProjectScenarios({ withApp, root }) {
 
         await withApp({ label: 'migration', userDataDir: migrationDir }, async (app) => {
           const c = app.cdp
-          assert(app.logs.some((line) => line.includes('migrations applied: 4 -> 5')), '0004だけを適用する', app.logs.filter((l) => l.includes('[db]')))
+          // 0004以降（現在の最新まで）だけを適用する
+          const latest = JSON.parse(readFileSync(join(PROJECT_ROOT, 'migrations', 'meta', '_journal.json'), 'utf8')).entries.length
+          assert(app.logs.some((line) => line.includes(`migrations applied: 4 -> ${latest}`)), '0004以降だけを適用する', app.logs.filter((l) => l.includes('[db]')))
           await c.waitFor(`location.hash === ${JSON.stringify(`#/projects/${projectId}`)}`, 5000, '保存済みの画面（プロジェクト）を復元')
           const settings = await api(c, 'window.gtd.workspace.get()')
           assert(JSON.stringify(settings) === JSON.stringify(workspace), 'Workspace設定を保持', settings)
@@ -76,7 +81,7 @@ export function taskProjectScenarios({ withApp, root }) {
           assert(tasks.every((task) => task.projectId === null), '既存タスクは未所属', tasks)
           await c.waitFor(`document.querySelector('[data-testid=project-name]')?.textContent === '移行前のプロジェクト'`, 5000, 'プロジェクト名の表示')
           assert(
-            (await c.evaluate(`document.querySelector('[data-testid=task-add-target]')?.textContent`)) === '「移行前のプロジェクト」に追加',
+            (await c.evaluate(`document.querySelector('[data-testid=task-add-target]')?.textContent`)) === '「移行前のプロジェクト」（マイルストン未設定）に追加',
             'プロジェクト画面に追加欄を表示'
           )
           await openInbox(c)
@@ -115,7 +120,8 @@ export function taskProjectScenarios({ withApp, root }) {
           // プロジェクト画面: 追加先の明示、作成時の所属、範囲の絞り込み
           await openProject(c, ids.work1)
           const target = await c.evaluate(`document.querySelector('[data-testid=task-add-target]')?.textContent`)
-          assert(target === '「仕事」に追加', '追加欄に追加先を表示', target)
+          // 5.4から、マイルストンの指定がない場合は「（マイルストン未設定）」と明示する
+          assert(target === '「仕事」（マイルストン未設定）に追加', '追加欄に追加先を表示', target)
           await addTask(c, '仕事1のタスク')
           await c.waitFor(`document.querySelectorAll('[data-testid=task-list] [role=option]').length === 1`, 5000, 'プロジェクトの一覧に追加')
           const all = await tasksById(c)
@@ -138,7 +144,7 @@ export function taskProjectScenarios({ withApp, root }) {
           await selectRow(c, ids.inboxTask)
           const options = await selectState(c)
           assert(options.value === '' && options.label === '未所属（Inbox）', '未所属の表示', options)
-          const workLabels = options.options.filter((o) => o.value === ids.work1 || o.value === ids.work2).map((o) => o.label)
+          const workLabels = options.options.filter((o) => o.rawValue === `${ids.work1}:` || o.rawValue === `${ids.work2}:`).map((o) => o.label)
           assert(workLabels.length === 2 && workLabels[0] !== workLabels[1] && workLabels.every((l) => l.includes('ID ')), '同名プロジェクトを判別できる', workLabels)
 
           // タイトルのドラフトを残したまま所属を変更 → ドラフトは上書きされない。一覧から外れても詳細を表示
@@ -165,7 +171,7 @@ export function taskProjectScenarios({ withApp, root }) {
           await setTitleDraft(c, '同時操作のドラフト')
           await c.evaluate(`(() => {
             const s = document.querySelector('[data-testid=task-project-select]')
-            Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value').set.call(s, ${JSON.stringify(ids.work2)})
+            Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value').set.call(s, ${JSON.stringify(`${ids.work2}:`)})
             s.dispatchEvent(new Event('change', { bubbles: true }))
             document.querySelector('[data-testid=task-editor] form').requestSubmit()
           })()`)
@@ -173,7 +179,7 @@ export function taskProjectScenarios({ withApp, root }) {
           await sleep(300)
           const concurrent = await c.evaluate(`({ select: document.querySelector('[data-testid=task-project-select]').value, draft: document.querySelector('[data-testid=task-editor] input:not([type=hidden])').value, helper: document.querySelector('[data-testid=task-editor] .MuiFormHelperText-root')?.textContent })`)
           assert(
-            concurrent.select === ids.work2 && concurrent.draft === '同時操作のドラフト' && concurrent.helper !== '未保存の変更があります',
+            concurrent.select === `${ids.work2}:` && concurrent.draft === '同時操作のドラフト' && concurrent.helper !== '未保存の変更があります',
             '画面も両方の新しい値（所属を古い値に戻さず、タイトルも保存済み）',
             concurrent
           )
@@ -258,11 +264,11 @@ export function taskProjectScenarios({ withApp, root }) {
           assert(sidebar.includes('完了済み'), 'サイドバーで完了済みを区別', sidebar)
           await selectRow(c, ids.homeTask)
           const current = await selectState(c)
-          assert(current.value === ids.home && current.label === '家（完了済み）', '完了済みの所属を現在値として表示（空欄・未所属に見せない）', current)
+          assert(current.value === ids.home && current.label.startsWith('家（完了済み）'), '完了済みの所属を現在値として表示（空欄・未所属に見せない）', current)
           assert(!current.options.some((o) => o.value !== ids.home && o.label.includes('完了済み')), '他の完了済みは候補に出さない', current.options)
           await chooseProject(c, '')
           await c.waitFor(`(async () => (await window.gtd.tasks.list()).data.find((t) => t.id === ${JSON.stringify(ids.homeTask)}).projectId === null)()`, 5000, '完了済みから未所属へ移動')
-          const conflict = await apiRaw(c, `window.gtd.tasks.setProject({ id: ${JSON.stringify(ids.homeTask)}, projectId: ${JSON.stringify(ids.home)} })`)
+          const conflict = await apiRaw(c, `window.gtd.tasks.setAssignment({ id: ${JSON.stringify(ids.homeTask)}, projectId: ${JSON.stringify(ids.home)}, milestoneId: null })`)
           assert(!conflict.ok && conflict.error.code === 'CONFLICT', '完了済みへの移動はCONFLICT', conflict)
           const quit = await requestQuit(app)
           assert(quit?.code === 0, '正常終了', quit)
