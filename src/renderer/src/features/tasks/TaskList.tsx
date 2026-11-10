@@ -73,7 +73,6 @@ export function SortHeader({
   )
 }
 
-export const TASK_LIST_HELP_ID = 'task-list-help'
 
 // 1件選択のリスト（role="listbox"）。DOMフォーカスはリスト本体に置き、
 // 現在行は aria-activedescendant で示す（仮想化で行要素が入れ替わってもフォーカスを失わない）。
@@ -342,7 +341,6 @@ export function TaskList({
             ref={listRef}
             role="listbox"
             aria-label={listLabel ?? `タスク一覧（${orderedTasks.length}件表示 / 全${totalCount}件）`}
-            aria-describedby={TASK_LIST_HELP_ID}
             aria-activedescendant={listFocused ? activeId : undefined}
             tabIndex={0}
             onKeyDown={handleKeyDown}

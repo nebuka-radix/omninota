@@ -21,7 +21,7 @@ import { projectListQueryOptions } from '../projects/project-queries'
 import { useWorkspace } from '../workspace/WorkspaceContext'
 import { AssignMenu } from './AssignMenu'
 import { buildTaskGroups, milestonesOf, type Assignment } from './assignment'
-import { SortHeader, TASK_LIST_HELP_ID, TaskList } from './TaskList'
+import { SortHeader, TaskList } from './TaskList'
 import { TaskRowMenu, useTaskDeletion } from './TaskDeletion'
 import { TaskQuickAdd } from './TaskQuickAdd'
 import {
@@ -262,10 +262,6 @@ export function TaskScopeView({
             {visibleTasks.length} 件表示 / 全 {scopeCount} 件
           </Typography>
         </Box>
-        <Typography id={TASK_LIST_HELP_ID} variant="caption" color="text.secondary" component="p" sx={{ mb: 1 }}>
-          一覧の操作: ↑↓ で移動、Enter で選択、Space で完了／未完了の切り替え
-          {scope.kind === 'inbox' ? '、M で紐付け' : '、← → で隣のカードへ'}、Delete で削除、Shift+F10 でメニュー
-        </Typography>
         <Box
           role="status"
           aria-live="polite"

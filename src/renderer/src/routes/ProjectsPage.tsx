@@ -17,7 +17,7 @@ import { vscodeColors } from '../theme'
 // /projects: 未選択
 export function ProjectsIndexPage() {
   return (
-    <Page title="Project" icon={FolderKanban}>
+    <Page title="Project" icon={FolderKanban} titleHidden>
       <Typography variant="body2" color="text.secondary">
         左のサイドバーからプロジェクトを選択するか、「NEW PROJECT」で新しいプロジェクトを作成してください。
       </Typography>
@@ -30,7 +30,7 @@ export function ProjectsIndexPage() {
 // フェーズ5.6: 名前を保存すると、プロジェクトと「新しいマイルストン」を1つのトランザクションで作る（保存後のカードの位置に予告として示す）。
 export function NewProjectPage() {
   return (
-    <Page title="Project" icon={FolderKanban} fill>
+    <Page title="Project" icon={FolderKanban} fill titleHidden>
       <Box sx={{ flexShrink: 0 }}>
         <ProjectNameEditor project={null} />
       </Box>
@@ -140,7 +140,8 @@ export function ProjectPage({ projectId }: { projectId: string }) {
   }
 
   return (
-    <Page title="Project" icon={FolderKanban} fill={state.kind === 'found'}>
+    // フェーズ5.7: 画面種別の「Project」の行は表示しない（個別のプロジェクト名と編集は残す。見出しは読み上げ用に残す）
+    <Page title="Project" icon={FolderKanban} fill={state.kind === 'found'} titleHidden>
       {body}
     </Page>
   )

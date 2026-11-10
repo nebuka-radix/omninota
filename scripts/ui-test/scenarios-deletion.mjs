@@ -339,7 +339,7 @@ export function deletionScenarios({ withApp, root }) {
 
           // 最後のマイルストンを削除した後: カードはなく、NEW MILESTONE だけ。タスクの追加・紐付けはできない（作り直さない）
           const board = await c.evaluate(`({ cards: document.querySelectorAll('[data-testid=milestone-card]').length, note: !!document.querySelector('[data-testid=no-milestone-note]'), newTask: !!document.querySelector('[data-testid^=new-task-]'), newMilestone: document.querySelector('[data-testid=new-milestone-button]')?.disabled })`)
-          assert(board.cards === 0 && board.note && !board.newTask && board.newMilestone === false, '0件: NEW MILESTONE を表示し、タスクは追加できない', board)
+          assert(board.cards === 0 && !board.note && !board.newTask && board.newMilestone === false, '0件: NEW MILESTONE を表示し、タスクは追加できない', board)
           assert((await milestones(c)).filter((m) => m.projectId === ids.mp).length === 0, '自動で作り直さない')
           const rejected = await apiRaw(c, `window.gtd.tasks.create({ title: 'x', projectId: ${JSON.stringify(ids.mp)} })`)
           assert(!rejected.ok && rejected.error.code === 'INVALID_INPUT', 'プロジェクトだけの指定は拒否', rejected)

@@ -1,5 +1,4 @@
 import { useState } from 'react'
-import { Typography } from '@mui/material'
 import type { SortingState } from '@tanstack/react-table'
 import { Inbox } from 'lucide-react'
 import { Page } from '../components/Page'
@@ -12,10 +11,8 @@ import { DEFAULT_TASK_SORTING } from '../features/tasks/task-table'
 export function InboxPage() {
   const [sorting, setSorting] = useState<SortingState>(DEFAULT_TASK_SORTING)
   return (
-    <Page title="Inbox" icon={Inbox} fill>
-      <Typography variant="body2" color="text.secondary" sx={{ mt: -2, mb: 3, flexShrink: 0 }} data-testid="scope-description">
-        プロジェクトに属さないタスク
-      </Typography>
+    // フェーズ5.7: タイトル行・説明行は表示しない（見出しは読み上げ用に残す）
+    <Page title="Inbox" icon={Inbox} fill titleHidden>
       <TaskScopeView
         scope={INBOX_SCOPE}
         scopeLabel="Inbox: プロジェクトに属さないタスク"

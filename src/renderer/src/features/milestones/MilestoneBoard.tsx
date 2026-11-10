@@ -365,8 +365,8 @@ function CardMenu({
 
 // プロジェクト画面のマイルストン別カード（フェーズ5.5）。
 // - マイルストン1件につき縦長のカード1枚（マイルストンの作成順）、その後に NEW MILESTONE。
-//   フェーズ5.6で「マイルストン未設定」のカードは廃止した。マイルストンが0件なら、カードの代わりに説明と NEW MILESTONE だけを表示する
-//   （マイルストンを作成するまでタスクは追加できない）。
+//   フェーズ5.6で「マイルストン未設定」のカードは廃止した。マイルストンが0件なら、カード列の左端に NEW MILESTONE だけを表示する
+//   （案内文は出さない。フェーズ5.7。マイルストンを作成するまでタスクは追加できない）。
 // - 見出しのメニュー（…）から名前の変更・マイルストンの削除（フェーズ5.6）。
 // - カードはメイン領域の中で横に並べ、収まらない分はカードの列だけを横スクロールする（ウィンドウ・左右のペインは横スクロールさせない）。
 // - カードの高さは利用できる高さに合わせ、タスクはカードの中で縦スクロールする。カードごとに別の仮想リスト（大量タスクでも全件は描画しない）。
@@ -424,6 +424,12 @@ export function MilestoneBoard({
     setEditingMilestoneId(milestoneId)
   }
 
+  // マイルストンが0件になったら（最後のマイルストンの削除を含む）、カード列を先頭までスクロールし、NEW MILESTONE を最初から見せる
+  const empty = groups.length === 0
+  useEffect(() => {
+    if (empty && boardRef.current) boardRef.current.scrollLeft = 0
+  }, [empty])
+
   const focusCard = (index: number) => {
     const group = groups[index]
     if (!group) return
@@ -456,13 +462,6 @@ export function MilestoneBoard({
           pr: 2
         }}
       >
-        {groups.length === 0 && (
-          <Box sx={{ flex: '0 0 auto', width: 260, pt: 0.5 }} role="note" data-testid="no-milestone-note">
-            <Typography variant="body2" color="text.secondary">
-              マイルストンがありません。NEW MILESTONE でマイルストンを作成すると、タスクを追加できます。
-            </Typography>
-          </Box>
-        )}
         {groups.map((group, index) => {
           const editing = editingMilestone?.id === group.milestoneId
           const cardName = `マイルストン「${group.label}」`

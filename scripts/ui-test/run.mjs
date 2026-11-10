@@ -18,6 +18,7 @@ import {
 } from './lib.mjs'
 import { cardScenarios } from './scenarios-cards.mjs'
 import { deletionScenarios } from './scenarios-deletion.mjs'
+import { layoutScenarios } from './scenarios-layout.mjs'
 import { milestoneScenarios } from './scenarios-milestones.mjs'
 import { projectCompletionScenarios } from './scenarios-project-completion.mjs'
 import { taskProjectScenarios } from './scenarios-task-projects.mjs'
@@ -276,6 +277,8 @@ scenarios.push(...milestoneScenarios({ withApp, root }))
 // フェーズ5.5: 左サイドバー・新規プロジェクト・右サイドバーのプロジェクト詳細・マイルストン別カード
 scenarios.push(...cardScenarios({ withApp, root }))
 scenarios.push(...deletionScenarios({ withApp, root }))
+// フェーズ5.7: メインパネルの簡素化
+scenarios.push(...layoutScenarios({ withApp, root }))
 
 console.log(`UIテスト（${mode}${displayId ? `、表示先 ${displayId}` : ''}）一時ディレクトリ: ${root}`)
 let failed = 0

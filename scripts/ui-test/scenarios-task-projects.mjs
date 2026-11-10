@@ -96,9 +96,9 @@ export function taskProjectScenarios({ withApp, root }) {
           const tasks = await api(c, 'window.gtd.tasks.list()')
           assert(tasks.every((task) => task.projectId === null), '既存タスクは未所属', tasks)
           await c.waitFor(`document.querySelector('[data-testid=project-name]')?.textContent === '移行前のプロジェクト'`, 5000, 'プロジェクト名の表示')
-          // フェーズ5.6: 移行したプロジェクトにはマイルストンがない（移行で作らない）。カードはなく、説明と NEW MILESTONE だけ
+          // フェーズ5.6: 移行したプロジェクトにはマイルストンがない（移行で作らない）。カードはなく NEW MILESTONE だけ（5.7で案内文も削除）
           const card = await c.evaluate(`({ cards: document.querySelectorAll('[data-testid=milestone-card]').length, note: !!document.querySelector('[data-testid=no-milestone-note]'), newTask: !!document.querySelector('[data-testid^=new-task-]'), newMilestone: document.querySelector('[data-testid=new-milestone-button]')?.disabled })`)
-          assert(card.cards === 0 && card.note && !card.newTask && card.newMilestone === false, 'マイルストン0件: NEW MILESTONE だけを表示し、タスクは追加できない', card)
+          assert(card.cards === 0 && !card.note && !card.newTask && card.newMilestone === false, 'マイルストン0件: NEW MILESTONE だけを表示し、タスクは追加できない', card)
           await openInbox(c)
           await c.click(c.byText('button', 'すべて'))
           const shown = (await listIds(c)).sort()
@@ -147,8 +147,8 @@ export function taskProjectScenarios({ withApp, root }) {
 
           // Inbox: 未所属だけ。追加は未所属
           await openInbox(c)
-          const description = await c.evaluate(`document.querySelector('[data-testid=scope-description]')?.textContent`)
-          assert(description === 'プロジェクトに属さないタスク', 'Inboxの説明', description)
+          // フェーズ5.7: Inboxの説明行は表示しない
+          assert(!(await c.evaluate(`!!document.querySelector('[data-testid=scope-description]')`)), 'Inboxの説明行はない')
           assert(JSON.stringify(await listIds(c)) === JSON.stringify([ids.inboxTask]), 'Inboxは未所属のタスクだけ', await listIds(c))
           await addTask(c, 'Inboxで追加')
           await c.waitFor(`document.querySelectorAll('[data-testid=task-list] [role=option]').length === 2`, 5000, 'Inboxに追加')
