@@ -1,6 +1,7 @@
 import { queryOptions, useMutation, useMutationState, useQueryClient, type QueryClient } from '@tanstack/react-query'
 import type {
   CreateTaskInput,
+  DeleteTaskInput,
   SetTaskAssignmentInput,
   SetTaskCompletedInput,
   TaskDto,
@@ -18,7 +19,8 @@ export const taskMutationKeys = {
   create: [...taskKeys.all, 'create'] as const,
   updateTitle: [...taskKeys.all, 'update-title'] as const,
   setCompleted: [...taskKeys.all, 'set-completed'] as const,
-  setAssignment: [...taskKeys.all, 'set-assignment'] as const
+  setAssignment: [...taskKeys.all, 'set-assignment'] as const,
+  delete: [...taskKeys.all, 'delete'] as const
 }
 
 // タスク一覧の正本はこのQuery（全件）。Inbox・プロジェクトの一覧、詳細、件数はすべてここから導出する。
@@ -83,7 +85,22 @@ export function useSetTaskAssignmentMutation() {
   })
 }
 
-// 更新中（タイトル・完了状態・所属）のタスクID。同じタスクへの重複操作を制限するために使う。
+// タスクの削除（フェーズ5.6）。同じタスクの保存キューに並べ、先に始めた更新の後に実行する
+// （削除した後に、遅れた更新が届いて対象を作り直すことはない。Mainは非表示・削除済みへの更新を NOT_FOUND にする）。
+// 成功したら一覧キャッシュからその行だけを除き、DBから取り直す。失敗時はキャッシュを変えない（行を残す）。
+export function useDeleteTaskMutation() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationKey: taskMutationKeys.delete,
+    mutationFn: (input: DeleteTaskInput) => taskSaveQueue.run(input.id, () => unwrapIpc(window.gtd.tasks.delete(input))),
+    onSuccess: (result) => {
+      queryClient.setQueryData<TaskDto[]>(taskKeys.list(), (tasks) => tasks?.filter((task) => task.id !== result.id))
+      void queryClient.invalidateQueries({ queryKey: taskKeys.list() })
+    }
+  })
+}
+
+// 更新中（タイトル・完了状態・所属・削除）のタスクID。同じタスクへの重複操作を制限するために使う。
 export function usePendingTaskIds(): ReadonlySet<string> {
   const ids = useMutationState({
     filters: { status: 'pending', predicate: (mutation) => isTaskUpdateKey(mutation.options.mutationKey) },
@@ -102,7 +119,8 @@ export function usePendingTaskIds(): ReadonlySet<string> {
 const TASK_UPDATE_KEYS: readonly unknown[] = [
   taskMutationKeys.updateTitle[1],
   taskMutationKeys.setCompleted[1],
-  taskMutationKeys.setAssignment[1]
+  taskMutationKeys.setAssignment[1],
+  taskMutationKeys.delete[1]
 ]
 
 function isTaskUpdateKey(key: readonly unknown[] | undefined): boolean {

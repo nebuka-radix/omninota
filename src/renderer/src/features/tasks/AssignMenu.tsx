@@ -9,8 +9,8 @@ import { projectListQueryOptions } from '../projects/project-queries'
 import { disambiguatedNames, milestonesOf, type Assignment } from './assignment'
 
 // Inboxの行から使う「紐付け」メニュー（フェーズ5.4）。2段階で選び、最終的な所属先を選んだ時点で1回だけ onChoose を呼ぶ。
-// 1. プロジェクトを選ぶ（未完了のプロジェクトだけ。完了済みには追加できない）
-// 2. 「このプロジェクトに紐付け（マイルストン未設定）」か、そのプロジェクトのマイルストンを選ぶ（戻るも可）
+// 1. プロジェクトを選ぶ（未完了のプロジェクトだけ。完了済みには追加できない。マイルストンが0件のプロジェクトは選べない）
+// 2. そのプロジェクトのマイルストンを選ぶ（戻るも可）。フェーズ5.6で「このプロジェクトに紐付け（マイルストン未設定）」は廃止した
 // Esc・外側のクリックで閉じた場合は何も保存しない。最後に使った所属先への自動割り当てはしない。
 // キーボード: MUI の Menu（↑↓・Enter・Esc）。開いた時と段階が変わった時は先頭の項目にフォーカスする。
 export function AssignMenu({
@@ -29,6 +29,7 @@ export function AssignMenu({
   const [projectId, setProjectId] = useState<string | null>(null)
 
   const openProjects = sortProjects(projects.data ?? []).filter((project) => project.completedAt === null)
+  const milestoneCount = (projectId: string) => milestonesOf(milestones.data ?? [], projectId).length
   const projectLabels = disambiguatedNames(projects.data ?? [])
   const chosenProject = openProjects.find((project) => project.id === projectId)
 
@@ -58,24 +59,29 @@ export function AssignMenu({
       ...(openProjects.length === 0
         ? [
             <MenuItem key="none" disabled>
-              未完了のプロジェクトがありません（左の Projects から登録）
+              未完了のプロジェクトがありません（左の NEW PROJECT から作成）
             </MenuItem>
           ]
-        : openProjects.map((project, index) => (
-            <MenuItem
-              key={project.id}
-              autoFocus={index === 0}
-              data-assign-project-id={project.id}
-              onClick={() => setProjectId(project.id)}
-              sx={{ fontSize: 13, gap: 1 }}
-            >
-              <FolderKanban size={14} aria-hidden />
-              {projectLabels.get(project.id) ?? project.name}
-              <Typography component="span" sx={{ ml: 'auto', pl: 2, fontSize: 11, color: 'text.secondary' }} aria-hidden>
-                ›
-              </Typography>
-            </MenuItem>
-          )))
+        : openProjects.map((project) => {
+            // マイルストンが0件のプロジェクトには紐付けできない（理由を項目に示し、選べなくする）
+            const empty = milestoneCount(project.id) === 0
+            return (
+              <MenuItem
+                key={project.id}
+                autoFocus={project.id === openProjects.find((item) => milestoneCount(item.id) > 0)?.id}
+                disabled={empty}
+                data-assign-project-id={project.id}
+                onClick={() => setProjectId(project.id)}
+                sx={{ fontSize: 13, gap: 1 }}
+              >
+                <FolderKanban size={14} aria-hidden />
+                {projectLabels.get(project.id) ?? project.name}
+                <Typography component="span" sx={{ ml: 'auto', pl: 2, fontSize: 11, color: 'text.secondary' }}>
+                  {empty ? 'マイルストンなし' : <span aria-hidden>›</span>}
+                </Typography>
+              </MenuItem>
+            )
+          }))
     ]
   } else {
     const own = milestonesOf(milestones.data ?? [], chosenProject.id)
@@ -90,22 +96,20 @@ export function AssignMenu({
       <ListSubheader key="title" sx={{ lineHeight: '28px', fontSize: 11 }}>
         「{name}」
       </ListSubheader>,
-      <MenuItem
-        key="project-only"
-        autoFocus
-        data-assign-milestone-id=""
-        onClick={() => choose({ projectId: chosenProject.id, milestoneId: null })}
-        sx={{ fontSize: 13, gap: 1 }}
-      >
-        <FolderKanban size={14} aria-hidden />
-        このプロジェクトに紐付け（マイルストン未設定）
-      </MenuItem>,
-      ...own.map((milestone) => (
+      ...(own.length === 0
+        ? [
+            <MenuItem key="none" disabled>
+              マイルストンがありません（プロジェクト画面で作成）
+            </MenuItem>
+          ]
+        : []),
+      ...own.map((milestone, index) => (
         <MenuItem
           key={milestone.id}
+          autoFocus={index === 0}
           data-assign-milestone-id={milestone.id}
           onClick={() => choose({ projectId: chosenProject.id, milestoneId: milestone.id })}
-          sx={{ fontSize: 13, gap: 1, pl: 4 }}
+          sx={{ fontSize: 13, gap: 1 }}
         >
           <Flag size={14} aria-hidden />
           {milestoneLabels.get(milestone.id) ?? milestone.name}

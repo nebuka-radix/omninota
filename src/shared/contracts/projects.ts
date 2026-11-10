@@ -28,3 +28,27 @@ export type ProjectDto = {
   updatedAt: string
   completedAt: string | null
 }
+
+// 削除の確認内容（フェーズ5.6）。件数はDBで数える。taskCount は既に非表示のタスク（マイルストンの削除で非表示になったもの）を含む総数
+export type ProjectDeletionSummary = {
+  id: string
+  name: string
+  completedAt: string | null
+  milestoneCount: number
+  taskCount: number
+  hiddenTaskCount: number
+}
+
+// 削除（フェーズ5.6）。確認した時の件数を渡す。DBの件数と違えば削除せず CONFLICT（deletion-scope-changed）
+export type DeleteProjectInput = {
+  id: string
+  expectedMilestoneCount: number
+  expectedTaskCount: number
+}
+
+// 配下のマイルストン・タスクは削除せず、所属を外して非表示にする
+export type DeleteProjectResult = {
+  id: string
+  milestoneCount: number
+  taskCount: number
+}

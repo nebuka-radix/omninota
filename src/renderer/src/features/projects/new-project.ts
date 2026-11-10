@@ -13,3 +13,8 @@ export function rememberNewProjectReturn(pathname: string): void {
 export function newProjectReturnRoute(): WorkspaceRoute {
   return returnRoute
 }
+
+// 削除したプロジェクトの画面へは戻らない（フェーズ5.6）
+export function forgetNewProjectReturn(projectId: string): void {
+  if (returnRoute === `/projects/${projectId}`) returnRoute = '/projects'
+}

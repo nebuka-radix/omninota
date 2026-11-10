@@ -3,8 +3,7 @@ import {
   buildAssignmentOptions,
   buildTaskGroups,
   groupKey,
-  sameAssignment,
-  UNSET_GROUP_KEY
+  sameAssignment
 } from '../../src/renderer/src/features/tasks/assignment'
 import type { MilestoneDto } from '../../src/shared/contracts/milestones'
 import type { ProjectDto } from '../../src/shared/contracts/projects'
@@ -42,31 +41,30 @@ const mSame = milestone('33333333-0000-4000-8000-000000000003', P, 'M1', '2026-1
 const mq = milestone('44444444-0000-4000-8000-000000000004', Q, 'MQ', '2026-11-01T00:00:00.000Z')
 
 describe('マイルストン別のグループ', () => {
-  it('マイルストンは作成順、最後に「マイルストン未設定」。空のグループも残す。タスクの並びは渡した順（ソート済み）', () => {
-    const groups = buildTaskGroups([task('t1', m1.id), task('t2', null), task('t3', m1.id)], [m1, m2])
+  it('マイルストンは作成順。空のグループも残す。タスクの並びは渡した順（ソート済み）。「マイルストン未設定」のグループはない（フェーズ5.6）', () => {
+    const groups = buildTaskGroups([task('t1', m1.id), task('t3', m1.id)], [m1, m2])
     expect(groups.map((group) => [group.key, group.label, group.tasks.map((t) => t.id)])).toEqual([
       [groupKey(m2.id), 'M2', []],
-      [groupKey(m1.id), 'M1', ['t1', 't3']],
-      [UNSET_GROUP_KEY, 'マイルストン未設定', ['t2']]
+      [groupKey(m1.id), 'M1', ['t1', 't3']]
     ])
   })
 
-  it('マイルストン0件でも「マイルストン未設定」のグループがある', () => {
-    expect(buildTaskGroups([], []).map((group) => group.key)).toEqual([UNSET_GROUP_KEY])
+  it('マイルストン0件ならグループ（カード）も0件', () => {
+    expect(buildTaskGroups([], [])).toEqual([])
   })
 
-  it('同名のマイルストンは判別できるラベルにする。一覧にないマイルストンのタスクは「未設定」に表示（失わない）', () => {
-    const groups = buildTaskGroups([task('t1', 'missing-milestone')], [m1, mSame])
-    const labels = groups.slice(0, 2).map((group) => group.label)
+  it('同名のマイルストンは判別できるラベルにする。一覧にないマイルストンのタスクはどのグループにも入れない', () => {
+    const groups = buildTaskGroups([task('t1', 'missing-milestone'), task('t2', null)], [m1, mSame])
+    const labels = groups.map((group) => group.label)
     expect(labels[0]).not.toBe(labels[1])
     expect(labels.every((label) => label.startsWith('M1（'))).toBe(true)
-    expect(groups.at(-1)?.tasks.map((t) => t.id)).toEqual(['t1'])
+    expect(groups.flatMap((group) => group.tasks)).toEqual([])
   })
 })
 
 describe('カードのキー', () => {
-  it('カードのキーは "group:<マイルストンID>" と "group:unset" で、タスクID（UUID）と衝突せず、互いに重複しない', () => {
-    const groups = buildTaskGroups([task('t1', m1.id), task('t2', null)], [m1, m2, mSame])
+  it('カードのキーは "group:<マイルストンID>" で、タスクID（UUID）と衝突せず、互いに重複しない', () => {
+    const groups = buildTaskGroups([task('t1', m1.id), task('t2', mSame.id)], [m1, m2, mSame])
     const keys = groups.map((group) => group.key)
     expect(new Set(keys).size).toBe(keys.length)
     expect(keys.every((key) => key.startsWith('group:'))).toBe(true)
@@ -77,19 +75,28 @@ describe('カードのキー', () => {
 })
 
 describe('詳細パネルの選択肢（マイルストンを含む）', () => {
-  it('プロジェクトごとに「マイルストン未設定」とマイルストン（作成順）を並べる。他プロジェクトのマイルストンは混ぜない', () => {
+  it('プロジェクトごとにマイルストン（作成順）だけを並べる（プロジェクトだけの選択肢はない）。他プロジェクトのマイルストンは混ぜない', () => {
     const built = buildAssignmentOptions([project(P, 'P'), project(Q, 'Q')], [m1, m2, mq], { projectId: null, milestoneId: null })
     expect(built.groups.map((group) => group.options.map((option) => option.value))).toEqual([
-      [`${P}:`, `${P}:${m2.id}`, `${P}:${m1.id}`],
-      [`${Q}:`, `${Q}:${mq.id}`]
+      [`${P}:${m2.id}`, `${P}:${m1.id}`],
+      [`${Q}:${mq.id}`]
     ])
+    expect(built.groups.flatMap((group) => group.options).every((option) => !option.disabled)).toBe(true)
+  })
+
+  it('マイルストンが0件のプロジェクトは、選べない選択肢で理由を示す（所属の値とは重ならない）', () => {
+    const built = buildAssignmentOptions([project(P, 'P'), project(Q, 'Q')], [mq], { projectId: null, milestoneId: null })
+    const pGroup = built.groups.find((group) => group.label === 'P')
+    expect(pGroup?.options).toHaveLength(1)
+    expect(pGroup?.options[0]).toMatchObject({ disabled: true })
+    expect(pGroup?.options[0]?.label).toContain('マイルストンがありません')
+    expect(pGroup?.options[0]?.value.startsWith(`${P}:`)).toBe(false)
   })
 
   it('完了済みプロジェクトは、現在の所属の場合だけ（現在のマイルストンだけを）選択不可で表示する', () => {
     const done = project(P, 'P', '2026-11-05T00:00:00.000Z')
     const built = buildAssignmentOptions([done, project(Q, 'Q')], [m1, m2, mq], { projectId: P, milestoneId: m1.id })
-    expect(built.groups.find((group) => group.options[0]?.value === `${P}:`)?.options.map((option) => [option.value, option.disabled])).toEqual([
-      [`${P}:`, true],
+    expect(built.groups.find((group) => group.options[0]?.value.startsWith(`${P}:`))?.options.map((option) => [option.value, option.disabled])).toEqual([
       [`${P}:${m1.id}`, true]
     ])
     expect(built.unknown).toBeNull()

@@ -7,7 +7,8 @@ import { sortProjects } from '../projects/project-order'
 
 export type Assignment = { projectId: string | null; milestoneId: string | null }
 
-// 詳細パネルの select の値（未所属 = 空文字、プロジェクトだけ = "<projectId>:"、マイルストン = "<projectId>:<milestoneId>"）
+// 詳細パネルの select の値（未所属 = 空文字、マイルストン = "<projectId>:<milestoneId>"）。
+// フェーズ5.6でプロジェクトだけの所属は廃止した（選択肢に出さない。Mainでも拒否する）
 export const UNASSIGNED_VALUE = ''
 
 export function assignmentValue(assignment: Assignment): string {
@@ -60,10 +61,14 @@ export function milestonesOf(milestones: readonly MilestoneDto[], projectId: str
 }
 
 export type AssignmentOption = { value: string; label: string; disabled: boolean }
+
+// マイルストンが0件のプロジェクトを示す、選べない選択肢の値（所属の値とは重ならない）
+const NO_MILESTONE_VALUE_PREFIX = 'no-milestone:'
 export type AssignmentOptionGroup = { label: string; options: AssignmentOption[] }
 
-// 詳細パネルの所属の選択肢。1つの select で「未所属」「プロジェクトだけ」「マイルストン」を選び、1回で保存する。
-// - 未完了のプロジェクトとそのマイルストンを選べる。完了済みのプロジェクトは、現在の所属の場合だけ表示する（選択不可）。
+// 詳細パネルの所属の選択肢。1つの select で「未所属」か「マイルストン」を選び、1回で保存する。
+// - 未完了のプロジェクトのマイルストンを選べる。完了済みのプロジェクトは、現在の所属の場合だけ表示する（選択不可）。
+// - マイルストンが0件のプロジェクトは選べない（理由を無効な選択肢で示す。フェーズ5.6）。
 // - 同名のプロジェクト・マイルストンは作成日時とIDの先頭で区別する。
 // - 現在値が一覧にない（取得のずれなど）場合も、値を失わないよう「不明」として表示する。
 export function buildAssignmentOptions(
@@ -80,9 +85,7 @@ export function buildAssignmentOptions(
     const name = `${projectLabels.get(project.id) ?? project.name}${completed ? '（完了済み）' : ''}`
     const own = milestonesOf(milestones, project.id)
     const milestoneLabels = disambiguatedNames(own)
-    const options: AssignmentOption[] = [
-      { value: assignmentValue({ projectId: project.id, milestoneId: null }), label: `${name} — マイルストン未設定`, disabled: completed }
-    ]
+    const options: AssignmentOption[] = []
     for (const milestone of own) {
       if (completed && milestone.id !== current.milestoneId) continue
       options.push({
@@ -90,6 +93,9 @@ export function buildAssignmentOptions(
         label: `${name} › ${milestoneLabels.get(milestone.id) ?? milestone.name}`,
         disabled: completed
       })
+    }
+    if (options.length === 0) {
+      options.push({ value: `${NO_MILESTONE_VALUE_PREFIX}${project.id}`, label: `${name} — マイルストンがありません（プロジェクト画面で作成）`, disabled: true })
     }
     groups.push({ label: name, options })
   }
@@ -103,18 +109,19 @@ export function buildAssignmentOptions(
   }
 }
 
-// プロジェクト画面のグループ（マイルストン別。マイルストンは作成順、最後に「マイルストン未設定」）。
+// プロジェクト画面のグループ（マイルストン別。マイルストンは作成順）。
 // tasks は表示中のタスク（検索・状態・ソート済み）。空のマイルストンも表示する。
 // フェーズ5.5から、グループ1つをカード1枚として表示する（カードごとに別の仮想リスト。key はカードの安定したID）。
+// フェーズ5.6で「マイルストン未設定」のグループは廃止した（表示中のプロジェクトのタスクは必ずマイルストンに所属する）。
+// 一覧にないマイルストンのタスク（取得のずれの間だけ起こり得る）は、どのカードにも入れない（次の取得で揃う）。
 export type TaskGroup = {
   key: string
-  milestoneId: string | null
+  milestoneId: string
   label: string
   tasks: TaskDto[]
 }
 
-export const UNSET_GROUP_KEY = 'group:unset'
-export const groupKey = (milestoneId: string | null) => (milestoneId === null ? UNSET_GROUP_KEY : `group:${milestoneId}`)
+export const groupKey = (milestoneId: string) => `group:${milestoneId}`
 
 export function buildTaskGroups(tasks: readonly TaskDto[], milestones: readonly MilestoneDto[]): TaskGroup[] {
   const labels = disambiguatedNames(milestones)
@@ -124,12 +131,9 @@ export function buildTaskGroups(tasks: readonly TaskDto[], milestones: readonly 
     label: labels.get(milestone.id) ?? milestone.name,
     tasks: []
   }))
-  const unset: TaskGroup = { key: UNSET_GROUP_KEY, milestoneId: null, label: 'マイルストン未設定', tasks: [] }
   const byId = new Map(groups.map((group) => [group.milestoneId, group]))
   for (const task of tasks) {
-    // 一覧にないマイルストン（取得のずれ）のタスクも失わないよう「未設定」に表示する
-    const group = (task.milestoneId !== null && byId.get(task.milestoneId)) || unset
-    group.tasks.push(task)
+    if (task.milestoneId !== null) byId.get(task.milestoneId)?.tasks.push(task)
   }
-  return [...groups, unset]
+  return groups
 }

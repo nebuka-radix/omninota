@@ -30,7 +30,15 @@ type DraftGuardValue = {
   // 進行中のタスクの保存があれば、その完了を先に待つ（失敗していればfalse）。
   // target を指定すると、その対象の編集だけを確認する（完了操作など）。
   confirmLeave: (options?: { target?: { kind: DraftKind; id: string } }) => Promise<boolean>
+  // 削除の前に使う（フェーズ5.6）。進行中の保存（保存キュー・編集欄の保存）が終わるまで待つ。保存の失敗は表示済みのため、ここでは止めない
+  settle: () => Promise<void>
+  // 指定した対象（削除する対象と、その配下）に未保存の編集があるか
+  hasDirty: (match: (target: DraftTarget) => boolean) => boolean
+  // 指定した対象の編集だけを破棄する（削除に成功した後。他の対象の編集は残す）
+  discard: (match: (target: DraftTarget) => boolean) => void
 }
+
+export type DraftTarget = { kind: DraftKind; id: string }
 
 const DraftGuardContext = createContext<DraftGuardValue | null>(null)
 
@@ -123,7 +131,24 @@ export function DraftGuardProvider({ children }: { children: ReactNode }) {
     []
   )
 
-  const value = useMemo(() => ({ register, confirmLeave }), [register, confirmLeave])
+  const settle = useCallback(async () => {
+    await taskSaveQueue.waitForIdle()
+    await waitForDraftSaves()
+  }, [])
+  const hasDirty = useCallback(
+    (match: (target: DraftTarget) => boolean) => dirtyHandles().some((handle) => match({ kind: handle.kind, id: handle.targetId })),
+    []
+  )
+  const discard = useCallback((match: (target: DraftTarget) => boolean) => {
+    for (const handle of dirtyHandles()) {
+      if (match({ kind: handle.kind, id: handle.targetId })) handle.discard()
+    }
+  }, [])
+
+  const value = useMemo(
+    () => ({ register, confirmLeave, settle, hasDirty, discard }),
+    [register, confirmLeave, settle, hasDirty, discard]
+  )
   const choose = (choice: Choice) => prompt?.resolve(choice)
   const label = DRAFT_LABELS[promptKind]
 

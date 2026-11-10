@@ -1,7 +1,7 @@
 // フェーズ5.3: プロジェクトの完了ルールのUIシナリオ。run.mjs から呼ぶ。専用の一時userData（root配下）だけを使う。
 // 完了・取り消しは、画面の操作（見出しのボタン）と、Preloadが公開する用途別API（projects.setCompleted）で行う。DBは直接変更しない。
 import { join } from 'node:path'
-import { assert, closeInlineCreate, requestQuit, sleep } from './lib.mjs'
+import { assert, closeInlineCreate, firstMilestoneId, requestQuit, sleep } from './lib.mjs'
 
 export function projectCompletionScenarios({ withApp, root }) {
   const dir = join(root, 'userData-completion')
@@ -45,9 +45,11 @@ export function projectCompletionScenarios({ withApp, root }) {
         withApp({ label: 'completion', userDataDir: dir }, async (app) => {
           const c = app.cdp
           ids.p = (await api(c, `window.gtd.projects.create({ name: 'リリース' })`)).id
-          ids.a = (await api(c, `window.gtd.tasks.create({ title: 'リリース資料', projectId: ${JSON.stringify(ids.p)} })`)).id
-          ids.b = (await api(c, `window.gtd.tasks.create({ title: '告知文', projectId: ${JSON.stringify(ids.p)} })`)).id
-          ids.c = (await api(c, `window.gtd.tasks.create({ title: '完了済みの準備', projectId: ${JSON.stringify(ids.p)} })`)).id
+          // 5.6: プロジェクトのタスクは作成時の「新しいマイルストン」に置く
+          const pm = JSON.stringify(await firstMilestoneId(c, ids.p))
+          ids.a = (await api(c, `window.gtd.tasks.create({ title: 'リリース資料', projectId: ${JSON.stringify(ids.p)}, milestoneId: ${pm} })`)).id
+          ids.b = (await api(c, `window.gtd.tasks.create({ title: '告知文', projectId: ${JSON.stringify(ids.p)}, milestoneId: ${pm} })`)).id
+          ids.c = (await api(c, `window.gtd.tasks.create({ title: '完了済みの準備', projectId: ${JSON.stringify(ids.p)}, milestoneId: ${pm} })`)).id
           await api(c, `window.gtd.tasks.setCompleted({ id: ${JSON.stringify(ids.c)}, completed: true })`)
           ids.inbox = (await api(c, `window.gtd.tasks.create({ title: '別の未完了（未所属）' })`)).id
           await reload(c)
@@ -87,7 +89,7 @@ export function projectCompletionScenarios({ withApp, root }) {
           const section = await sectionOf(c, ids.p)
           assert(section.section === 'project-section-completed' && section.current === 'page' && section.text.includes('完了済み'), 'サイドバーの「完了済み」区分へ移り、選択を維持（文字でも表示）', section)
           assert(await pressed(c, 'open'), '同じ画面のまま完了しても、表示フィルターは変えない')
-          const add = await c.evaluate(`({ disabled: document.querySelector('[data-testid=new-task-unset-button]').disabled, text: document.querySelector('[data-testid=project-completed-notice]')?.textContent ?? '' })`)
+          const add = await c.evaluate(`({ disabled: document.querySelector('[data-testid=milestone-card] [data-testid^=new-task-][data-testid$=-button]').disabled, text: document.querySelector('[data-testid=project-completed-notice]')?.textContent ?? '' })`)
           assert(add.disabled && add.text.includes('完了済み'), 'NEW TASK は無効で理由を表示', add)
           assert((await task(c, ids.inbox)).completedAt === null, '他のタスクは変わらない')
 
@@ -197,12 +199,13 @@ export function projectCompletionScenarios({ withApp, root }) {
           // タスクのタイトルを編集中に取り消し → 破棄 → 取り消しを続行（タイトルは保存しない）
           await clickCompletion(c) // 未完了に戻す（ドラフトなし）
           await c.waitFor(`document.querySelector('[data-testid=project-status]')?.textContent === '未完了'`, 5000, '取り消し')
-          await c.click(`document.querySelector('[data-testid=new-task-unset-button]')`)
-          await c.waitFor(`document.activeElement === document.querySelector('[data-testid=new-task-unset] input')`, 3000, 'NEW TASK の入力欄')
+          const rNewTask = `new-task-${await firstMilestoneId(c, ids.r)}`
+          await c.click(`document.querySelector('[data-testid="${rNewTask}-button"]')`)
+          await c.waitFor(`document.activeElement === document.querySelector('[data-testid="${rNewTask}"] input')`, 3000, 'NEW TASK の入力欄')
           await c.insertText('Rのタスク')
           await c.enter()
           await c.waitFor(`document.querySelectorAll('[data-testid=task-list] [role=option]').length === 1`, 5000, '追加')
-          await closeInlineCreate(c, 'new-task-unset')
+          await closeInlineCreate(c, rNewTask)
           ids.rTask = (await api(c, 'window.gtd.tasks.list()')).find((t) => t.title === 'Rのタスク').id
           await c.click(`document.querySelector('[data-testid=task-list] [role=option]')`)
           await c.waitFor(`document.querySelector('[data-testid=task-editor]')`, 3000, '詳細')

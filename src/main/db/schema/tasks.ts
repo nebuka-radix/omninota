@@ -8,8 +8,13 @@ import { projects } from './projects'
 //   固定長・UTC固定なので、文字列の大小比較が時刻順と一致する。
 // - completed_at: 完了日時（UTCのISO 8601文字列）。未完了ならNULL。完了状態はこの列だけから導出する（フェーズ4）。
 // - project_id: 所属するプロジェクト（0件または1件）。NULLは未所属（フェーズ5.2）。
-//   プロジェクトの削除は初期版の対象外のため、ON DELETE は指定しない（既定の NO ACTION）。
-// - milestone_id: 所属するマイルストン（任意。フェーズ5.4）。NULLはマイルストン未設定。
+//   ON DELETE は指定しない（既定の NO ACTION）。プロジェクトの削除（フェーズ5.6）では、Serviceが先に所属を外してから削除する
+//   （外部キーの連鎖でタスクを消さない）。
+// - milestone_id: 所属するマイルストン（フェーズ5.4）。フェーズ5.6から、表示中のタスクは
+//   「Inbox: project_id・milestone_id ともにNULL」か「プロジェクト所属: 両方あり」のどちらか（プロジェクトだけの所属は廃止）。
+// - hidden_at: 削除由来で画面に表示しなくなった日時（フェーズ5.6）。NULLなら表示対象。
+//   マイルストンの削除: project_id は残し milestone_id = NULL。プロジェクトの削除: 両方NULL。
+//   ID がNULLなだけでは通常のInboxタスクと区別できないため、この列で区別する。非表示のタスクは一覧・件数・更新APIの対象外。
 //   DBの外部キーはマイルストンの存在だけを保証する。「project_id があること」「同じプロジェクトのマイルストンであること」は
 //   Service（TaskService.setAssignment / create）がトランザクション内で保証する（既存テーブルにCHECK・複合外部キーを足すと
 //   SQLiteではテーブルの再作成が必要になるため）。
@@ -22,7 +27,8 @@ export const tasks = sqliteTable(
     updatedAt: text('updated_at').notNull(),
     completedAt: text('completed_at'),
     projectId: text('project_id').references(() => projects.id),
-    milestoneId: text('milestone_id').references(() => milestones.id)
+    milestoneId: text('milestone_id').references(() => milestones.id),
+    hiddenAt: text('hidden_at')
   },
   (table) => [
     index('tasks_created_at_id_idx').on(table.createdAt, table.id),

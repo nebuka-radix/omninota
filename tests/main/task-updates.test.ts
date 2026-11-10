@@ -107,7 +107,7 @@ describe('タスクの更新（Service・一時DB）', () => {
     closeDatabase(db)
     db = openDatabase(dbFile)
     runMigrations(db, MIGRATIONS_DIR)
-    expect(createTaskRepository(db).findById(ID)).toEqual({ ...done, title: '編集後' })
+    expect(createTaskRepository(db).findById(ID)).toEqual({ ...done, title: '編集後', hiddenAt: null })
   })
 })
 

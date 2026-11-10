@@ -32,18 +32,39 @@ export function taskServiceDeps(db: AppDatabase) {
 
 // MilestoneServiceの依存（フェーズ5.4）
 export function milestoneServiceDeps(db: AppDatabase) {
+  const tasks = createTaskRepository(db)
   return {
     repository: createMilestoneRepository(db),
     findProject: createProjectRepository(db).findById,
+    countTasks: tasks.countByMilestone,
+    hideTasks: tasks.hideByMilestone,
     transaction: createTransactionRunner(db)
   }
 }
 
 // ProjectServiceの依存（未完了タスクの件数・トランザクション）を、同じ一時DBの接続で用意する（フェーズ5.3）
+// フェーズ5.6: 作成時の初期マイルストン・削除時の件数と所属解除も、同じ接続のRepositoryで用意する
 export function projectServiceDeps(db: AppDatabase) {
+  const tasks = createTaskRepository(db)
+  const milestones = createMilestoneRepository(db)
   return {
     repository: createProjectRepository(db),
-    countOpenTasks: createTaskRepository(db).countOpenByProject,
+    countOpenTasks: tasks.countOpenByProject,
+    insertMilestone: milestones.insert,
+    countMilestones: milestones.countByProject,
+    detachMilestones: milestones.detachByProject,
+    countTasks: tasks.countByProject,
+    detachAndHideTasks: tasks.detachAndHideByProject,
     transaction: createTransactionRunner(db)
   }
+}
+
+// プロジェクトの最初のマイルストン（作成時に自動で作られる「新しいマイルストン」。フェーズ5.6）を所属先として返す。
+// フェーズ5.6からプロジェクトだけへの所属は廃止したため、プロジェクトにタスクを置くテストはこれを使う
+export function inProject(db: AppDatabase, projectId: string): { projectId: string; milestoneId: string } {
+  const milestone = createMilestoneRepository(db)
+    .listAll()
+    .find((row) => row.projectId === projectId)
+  if (!milestone) throw new Error(`プロジェクト ${projectId} にマイルストンがありません`)
+  return { projectId, milestoneId: milestone.id }
 }

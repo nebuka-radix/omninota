@@ -66,8 +66,13 @@ export function TaskEditor({ task }: { task: TaskDto }) {
   }
 
   // DraftGuardから最新の状態を参照できるようにする
-  const latest = useRef({ dirty, save, discard: () => setDraft(savedTitle) })
-  latest.current = { dirty, save, discard: () => setDraft(savedTitle) }
+  // 破棄は再描画を待たずに「未保存なし」にする（破棄の直後の確認・画面移動で誤認しない。フェーズ5.6）
+  const discardDraft = () => {
+    latest.current.dirty = false
+    setDraft(savedTitle)
+  }
+  const latest = useRef({ dirty, save, discard: discardDraft })
+  latest.current = { dirty, save, discard: discardDraft }
   useEffect(
     () =>
       register({

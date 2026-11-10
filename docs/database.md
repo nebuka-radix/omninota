@@ -64,10 +64,13 @@ WAL使用中は、稼働中のDBファイルを単純コピーしてもバック
 | updated_at | TEXT NOT NULL | 同上。作成時は created_at と同じ値 |
 | completed_at | TEXT（NULL可） | 完了日時（UTCのISO 8601）。未完了ならNULL（フェーズ4・0002_add_task_completed_at） |
 | project_id | TEXT（NULL可）REFERENCES projects(id) | 所属するプロジェクト。NULLは未所属（Inbox）。0件または1件（フェーズ5.2・0004_add_task_project_id） |
+| milestone_id | TEXT（NULL可）REFERENCES milestones(id) | 所属するマイルストン（フェーズ5.4・0005_add_milestones） |
+| hidden_at | TEXT（NULL可） | 削除由来で画面に表示しなくなった日時（UTCのISO 8601）。NULLなら表示対象（フェーズ5.6・0006_task_deletion_and_hidden） |
 
 - 索引: `tasks_created_at_id_idx (created_at, id)`、`tasks_project_id_idx (project_id)`（フェーズ5.2）
-- 外部キー: `project_id → projects.id`。ON DELETE は指定しない（既定の NO ACTION。プロジェクトの削除は初期版の対象外）。
-  接続時に `foreign_keys = ON` を設定しているため、存在しないプロジェクトIDは保存できない。
+- 外部キー: `project_id → projects.id`、`milestone_id → milestones.id`。ON DELETE は指定しない（既定の NO ACTION）。
+  接続時に `foreign_keys = ON` を設定しているため、存在しないプロジェクトID・マイルストンIDは保存できない。
+  削除（フェーズ5.6）は、Serviceが先に参照を外してから親を削除する（外部キーの連鎖で残すべき行を消さない）。
 - 一覧の並び順: `created_at DESC, id DESC`（同じ作成日時でも常に同じ順序）
 - 日時は固定長・UTC固定のため、文字列の大小比較が時刻順と一致する。
 - 完了状態は completed_at だけから導出する（isCompleted のような列は持たない）。
@@ -82,6 +85,11 @@ WAL使用中は、稼働中のDBファイルを単純コピーしてもバック
 | 既に目的の状態・同じタイトル | 変えない | 変えない | 変えない |
 | 所属の変更・解除（保存済みと異なる場合のみ。フェーズ5.2） | 変えない | 現在日時 | 変えない |
 | 同じ所属への再要求 | 変えない | 変えない | 変えない |
+| マイルストンの削除による所属解除・非表示化（フェーズ5.6） | 変えない | 操作日時（hidden_at と同じ） | 変えない |
+| プロジェクトの削除による所属解除・非表示化（フェーズ5.6） | 変えない | 操作日時 | 変えない |
+
+- 所属が変わる操作は updated_at を更新する（setAssignment と同じ規則）。削除による所属解除も同じ扱いにした。
+  hidden_at は表示中のタスクだけに設定し、既に非表示のタスク（プロジェクトの削除で再び所属を外す場合）は最初の日時を保つ。
 
 - 既存タスク（フェーズ3以前）は、マイグレーション後に未完了（NULL）として扱う。
 - 既存タスク（フェーズ5.1以前）は、0004の適用後に未所属（project_id = NULL）として扱う。
@@ -227,6 +235,58 @@ WAL使用中は、稼働中のDBファイルを単純コピーしてもバック
 将来のスキーマ更新前バックアップは、`src/main/db/migrate.ts` の `runMigrations()` 先頭
 （未適用のマイグレーションがある場合）に追加する。
 
+### 0006_task_deletion_and_hidden（フェーズ5.6）
+
+**この移行は既存タスクを物理削除する。通常利用DB・開発DBで初めてフェーズ5.6のアプリを起動する前に、アプリを終了した状態で
+下記「手動バックアップ」の手順（`zsh scripts/backup-user-db.zsh` / `--dev`）で必ずバックアップを取ること。**
+
+1. 一度限りの物理削除: 移行時点の `project_id IS NOT NULL AND milestone_id IS NULL` のタスク
+   （プロジェクトだけに所属し、マイルストンが未設定のタスク）を、完了・未完了を問わず削除する。
+   - 削除しない: Inbox（project_id・milestone_id ともにNULL）、マイルストンに所属するタスク。
+   - このマイグレーションは1回だけ適用される（`__drizzle_migrations` に記録）。起動のたびにNULL所属のタスクを削除する処理はない。
+     移行後にマイルストン・プロジェクトの削除で非表示になったタスクは、再起動しても削除されない。
+2. `tasks.hidden_at`（TEXT、NULL可）を追加する。既存タスクはすべてNULL（表示対象）。
+3. `milestones.project_id` をNULL可にする（SQLiteでは表の作り直しが必要）。
+   - マイグレーションは1つのトランザクションで実行され、その中では `PRAGMA foreign_keys` を切り替えられない
+     （drizzle-kit が生成する `PRAGMA foreign_keys=OFF` は効かず、`DROP TABLE milestones` が外部キー違反で失敗する）。
+   - そのため生成SQLを手で書き換え、外部キーを有効にしたまま作り直す: `tasks.milestone_id` を一時表に退避してNULLにし、
+     milestones を作り直し（索引 `milestones_project_id_idx` も作り直す）、退避した値を戻して一時表を削除する。
+     tasks の updated_at などは変えない（結合テストで全列の保持を確認）。
+   - スキーマ定義から `npm run db:generate -- --name task_deletion_and_hidden` で生成し、スナップショット（`meta/0006_snapshot.json`）は
+     生成結果のまま。SQLの手順だけを置き換えた（得られるスキーマは生成結果と同じ）。過去のマイグレーション（0000〜0005）は変更していない。
+- 確認: `tests/main/deletion.test.ts`（0005 → 0006: 対象だけの削除・完了済みも対象・Inbox／所属済みの全列保持・外部キーと索引・
+  foreign_key_check・一時表が残らない・再起動で非表示のタスクを削除しない）、UIテスト「移行（5.5 → 5.6）」。
+- **既存のDB（通常利用 GTD・開発 GTD-dev）は、次にアプリを通常起動した時に0006を含む未適用のマイグレーションが適用される。**
+  フェーズ5.6の作業では、両DBを起動・更新していない。
+
+#### 表示データと、削除由来で保持する非表示データ
+
+| 状態 | project_id | milestone_id | hidden_at | 画面 |
+|---|---|---|---|---|
+| Inbox | NULL | NULL | NULL | Inbox に表示 |
+| プロジェクトのタスク | あり | あり（そのプロジェクトのマイルストン） | NULL | プロジェクトのカードに表示 |
+| マイルストンの削除で非表示 | あり（維持） | NULL | 削除日時 | 表示しない |
+| プロジェクトの削除で非表示 | NULL | NULL | 削除日時（既にあれば維持） | 表示しない（Inbox にも出さない） |
+| マイルストン（表示中） | あり（milestones.project_id） | — | — | カード・選択肢に表示 |
+| プロジェクトの削除で非表示のマイルストン | NULL | — | — | 表示しない（名前変更・削除・紐付けの対象外） |
+
+- IDのNULLだけでは通常のInboxタスクとプロジェクト削除後のタスクを区別できないため、tasks は hidden_at で区別する。
+  マイルストンは project_id = NULL を非表示とする（通常の操作では NULL にならない）。
+- 「マイルストンだけの所属」（milestone_id あり・project_id NULL）はどの状態にも現れない。
+- 一覧（tasks.list・milestones.list）・件数（プロジェクトの完了判定の未完了件数）・更新（タイトル・完了状態・所属）は、
+  表示中の行だけを対象にする。更新系のSQLは `hidden_at IS NULL`（マイルストンは `project_id IS NOT NULL`）を条件に含め、
+  遅れて届いた更新でも非表示の行を再表示・再利用しない（NOT_FOUND）。
+- 削除の処理で対象を数える・所属を外す内部のクエリ（`countByProject`・`detachAndHideByProject`）は、既に非表示の所属タスクも含める。
+- 非表示データを画面から復元する操作は初期版にはない。
+
+| 規則（フェーズ5.6） | 保証する場所 |
+|---|---|
+| 所属は Inbox（両方NULL）か、プロジェクトとそのマイルストンの両方（プロジェクトだけは不可） | 入力検証（Zod）＋ Service |
+| マイルストンが0件のプロジェクトにはタスクを追加・紐付けできない | Service（マイルストンの指定が必須のため） |
+| プロジェクトの作成と初期マイルストン「新しいマイルストン」の作成は両方成功するか両方失敗する | Service（1つのトランザクション） |
+| 削除時の所属解除・非表示化・削除は全部成功するか何も変えない | Service（1つのトランザクション・BEGIN IMMEDIATE） |
+| 確認後に配下の件数が変わったら削除しない | Service（確認時の件数と比べて CONFLICT） |
+
 ### 0005_add_milestones（フェーズ5.4）
 
 - 生成SQL: `CREATE TABLE milestones (...)`（project_id は projects.id への外部キー、NOT NULL）、索引 `milestones_project_id_idx`、
@@ -237,7 +297,7 @@ WAL使用中は、稼働中のDBファイルを単純コピーしてもバック
 | 列（milestones） | 型 | 内容 |
 |---|---|---|
 | id | TEXT PRIMARY KEY | UUID v4（Main側で生成） |
-| project_id | TEXT NOT NULL REFERENCES projects(id) | 所属プロジェクト（付け替えは未対応） |
+| project_id | TEXT NOT NULL REFERENCES projects(id) | 所属プロジェクト（付け替えは未対応）。フェーズ5.6（0006）でNULL可に変更（NULL = プロジェクトの削除で非表示） |
 | name | TEXT NOT NULL | 前後空白を除去した名前（最大200文字、`MILESTONE_NAME_MAX_LENGTH`）。同名可 |
 | created_at / updated_at | TEXT NOT NULL | UTCのISO 8601。表示順は created_at・id の昇順 |
 
@@ -248,7 +308,7 @@ DBで保証する範囲とServiceで保証する範囲:
 | tasks.project_id は存在するプロジェクト | DB（外部キー）＋ Service（NOT_FOUND を返すため事前に確認） |
 | tasks.milestone_id は存在するマイルストン | DB（外部キー）＋ Service |
 | milestones.project_id は存在するプロジェクト | DB（外部キー・NOT NULL）＋ Service |
-| milestone_id があれば project_id もある（マイルストンだけの所属を禁止） | 入力検証（Zod）＋ Service（DBのCHECK制約はない） |
+| milestone_id があれば project_id もある（マイルストンだけの所属を禁止） | 入力検証（Zod）＋ Service（DBのCHECK制約はない）。5.6からは project_id があれば milestone_id も必要（上記 0006） |
 | milestone_id のマイルストンは、同じタスクの project_id のプロジェクトに属する | Service（トランザクション内で確認。DBの複合外部キーはない） |
 | 完了済みプロジェクトへの追加・移動・マイルストン登録の拒否 | Service（トランザクション内で確認） |
 

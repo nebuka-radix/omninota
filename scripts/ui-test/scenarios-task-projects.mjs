@@ -3,7 +3,7 @@
 import { randomUUID } from 'node:crypto'
 import { join } from 'node:path'
 import { readFileSync } from 'node:fs'
-import { assert, createDatabaseAt, openDatabaseReadOnly, PROJECT_ROOT, requestQuit, sleep } from './lib.mjs'
+import { assert, createDatabaseAt, firstMilestoneId, openDatabaseReadOnly, PROJECT_ROOT, requestQuit, sleep } from './lib.mjs'
 
 const collator = new Intl.Collator('ja', { numeric: true, sensitivity: 'base' })
 
@@ -36,13 +36,16 @@ export function taskProjectScenarios({ withApp, root }) {
     await c.insertText(title)
     await c.enter()
   }
-  // プロジェクト画面の追加（フェーズ5.5: 「マイルストン未設定」カードの NEW TASK）
+  // プロジェクト画面の追加（フェーズ5.5: カードの NEW TASK。5.6から「マイルストン未設定」カードはなく、先頭のカード＝初期マイルストン）
+  const firstCardTestId = (c) =>
+    c.evaluate(`'new-task-' + document.querySelector('[data-testid=milestone-card]').dataset.milestoneId`)
   const addProjectTask = async (c, title) => {
-    if (!(await c.evaluate(`!!document.querySelector('[data-testid=new-task-unset] input')`))) {
-      await c.click(`document.querySelector('[data-testid=new-task-unset-button]')`)
-      await c.waitFor(`document.activeElement === document.querySelector('[data-testid=new-task-unset] input')`, 3000, 'NEW TASK の入力欄')
+    const testId = await firstCardTestId(c)
+    if (!(await c.evaluate(`!!document.querySelector('[data-testid="${testId}"] input')`))) {
+      await c.click(`document.querySelector('[data-testid="${testId}-button"]')`)
+      await c.waitFor(`document.activeElement === document.querySelector('[data-testid="${testId}"] input')`, 3000, 'NEW TASK の入力欄')
     } else {
-      await c.focus('[data-testid=new-task-unset] input')
+      await c.focus(`[data-testid="${testId}"] input`)
     }
     await c.insertText(title)
     await c.enter()
@@ -51,10 +54,11 @@ export function taskProjectScenarios({ withApp, root }) {
     await c.click(`document.querySelector(${JSON.stringify(`[data-testid=task-list] [data-task-id="${taskId}"]`)})`)
     await c.waitFor(`document.querySelector('[data-testid=task-editor]')`, 3000, '詳細の表示')
   }
-  // 詳細パネルの所属の選択（5.4から値は "<プロジェクトID>:<マイルストンID>"。ここではプロジェクトだけ・未所属を選ぶ）
+  // 詳細パネルの所属の選択（5.4から値は "<プロジェクトID>:<マイルストンID>"。ここではそのプロジェクトの最初のマイルストン・未所属を選ぶ。
+  // 5.6からプロジェクトだけの選択肢はない。プロジェクトの最初の選択肢の値を使う（完了済みなど選べない場合も、その値で変更を要求する）
   const chooseProject = (c, projectId) =>
     c.evaluate(
-      `(() => { const s = document.querySelector('[data-testid=task-project-select]'); const set = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value').set; set.call(s, ${JSON.stringify(projectId === '' ? '' : `${projectId}:`)}); s.dispatchEvent(new Event('change', { bubbles: true })); })()`
+      `(() => { const s = document.querySelector('[data-testid=task-project-select]'); const set = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value').set; const value = ${JSON.stringify(projectId)} === '' ? '' : [...s.options].find((o) => o.value.startsWith(${JSON.stringify(`${projectId}:`)}))?.value; set.call(s, value); s.dispatchEvent(new Event('change', { bubbles: true })); })()`
     )
   const selectState = (c) =>
     // value はプロジェクトIDの部分だけを返す（5.2のシナリオの判定を変えないため）
@@ -92,9 +96,9 @@ export function taskProjectScenarios({ withApp, root }) {
           const tasks = await api(c, 'window.gtd.tasks.list()')
           assert(tasks.every((task) => task.projectId === null), '既存タスクは未所属', tasks)
           await c.waitFor(`document.querySelector('[data-testid=project-name]')?.textContent === '移行前のプロジェクト'`, 5000, 'プロジェクト名の表示')
-          // フェーズ5.5: プロジェクト画面はカード表示。追加は「マイルストン未設定」カードの NEW TASK
-          const card = await c.evaluate(`({ label: document.querySelector('[data-testid=milestone-card] [data-testid=group-label]')?.textContent, add: document.querySelector('[data-testid=new-task-unset-button]')?.disabled })`)
-          assert(card.label === 'マイルストン未設定' && card.add === false, 'プロジェクト画面に未設定カードと NEW TASK を表示', card)
+          // フェーズ5.6: 移行したプロジェクトにはマイルストンがない（移行で作らない）。カードはなく、説明と NEW MILESTONE だけ
+          const card = await c.evaluate(`({ cards: document.querySelectorAll('[data-testid=milestone-card]').length, note: !!document.querySelector('[data-testid=no-milestone-note]'), newTask: !!document.querySelector('[data-testid^=new-task-]'), newMilestone: document.querySelector('[data-testid=new-milestone-button]')?.disabled })`)
+          assert(card.cards === 0 && card.note && !card.newTask && card.newMilestone === false, 'マイルストン0件: NEW MILESTONE だけを表示し、タスクは追加できない', card)
           await openInbox(c)
           await c.click(c.byText('button', 'すべて'))
           const shown = (await listIds(c)).sort()
@@ -123,20 +127,21 @@ export function taskProjectScenarios({ withApp, root }) {
           ids.home = (await api(c, `window.gtd.projects.create({ name: '家' })`)).id
           ids.later = (await api(c, `window.gtd.projects.create({ name: 'あとで完了' })`)).id
           ids.inboxTask = (await api(c, `window.gtd.tasks.create({ title: '受信したタスク' })`)).id
-          ids.homeTask = (await api(c, `window.gtd.tasks.create({ title: '家のタスク', projectId: ${JSON.stringify(ids.home)} })`)).id
+          ids.homeTask = (await api(c, `window.gtd.tasks.create({ title: '家のタスク', projectId: ${JSON.stringify(ids.home)}, milestoneId: ${JSON.stringify(await firstMilestoneId(c, ids.home))} })`)).id
           await c.evaluate('location.reload()')
           await c.waitFor(`document.querySelector('nav button[aria-label="Inbox"]')`, 10000, '再読み込み')
           await sleep(500)
 
-          // プロジェクト画面: 作成時の所属、範囲の絞り込み（5.5: 追加は「マイルストン未設定」カードの NEW TASK）
+          // プロジェクト画面: 作成時の所属、範囲の絞り込み（5.6: 追加は初期マイルストン「新しいマイルストン」のカードの NEW TASK）
           await openProject(c, ids.work1)
-          const target = await c.evaluate(`document.querySelector('[data-testid=new-task-unset] [data-testid=new-task-unset-button]')?.closest('[data-testid=milestone-card]')?.getAttribute('aria-label')`)
-          assert(target === 'マイルストン未設定', 'NEW TASK は追加先のカードの中にある', target)
+          const work1Milestone = await firstMilestoneId(c, ids.work1)
+          const target = await c.evaluate(`document.querySelector('[data-testid="new-task-${work1Milestone}-button"]')?.closest('[data-testid=milestone-card]')?.getAttribute('aria-label')`)
+          assert(target === 'マイルストン「新しいマイルストン」', 'NEW TASK は追加先のカードの中にある', target)
           await addProjectTask(c, '仕事1のタスク')
           await c.waitFor(`document.querySelectorAll('[data-testid=task-list] [role=option]').length === 1`, 5000, 'プロジェクトの一覧に追加')
           const all = await tasksById(c)
           ids.work1Task = [...all.values()].find((task) => task.title === '仕事1のタスク').id
-          assert(all.get(ids.work1Task).projectId === ids.work1, 'プロジェクト画面で追加したタスクはそのプロジェクトに所属')
+          assert(all.get(ids.work1Task).projectId === ids.work1 && all.get(ids.work1Task).milestoneId === work1Milestone, 'プロジェクト画面で追加したタスクはそのプロジェクト・カードのマイルストンに所属')
           assert(JSON.stringify(await listIds(c)) === JSON.stringify([ids.work1Task]), 'プロジェクトの一覧はそのプロジェクトのタスクだけ')
           assert((await countText(c)) === '1 件表示 / 全 1 件', '件数はプロジェクト内', await countText(c))
 
@@ -154,7 +159,8 @@ export function taskProjectScenarios({ withApp, root }) {
           await selectRow(c, ids.inboxTask)
           const options = await selectState(c)
           assert(options.value === '' && options.label === '未所属（Inbox）', '未所属の表示', options)
-          const workLabels = options.options.filter((o) => o.rawValue === `${ids.work1}:` || o.rawValue === `${ids.work2}:`).map((o) => o.label)
+          const workLabels = options.options.filter((o) => o.value === ids.work1 || o.value === ids.work2).map((o) => o.label)
+          assert(!options.options.some((o) => o.rawValue.endsWith(':')), 'プロジェクトだけの選択肢はない（5.6）', options.options)
           assert(workLabels.length === 2 && workLabels[0] !== workLabels[1] && workLabels.every((l) => l.includes('ID ')), '同名プロジェクトを判別できる', workLabels)
 
           // タイトルのドラフトを残したまま所属を変更 → ドラフトは上書きされない。一覧から外れても詳細を表示
@@ -181,7 +187,7 @@ export function taskProjectScenarios({ withApp, root }) {
           await setTitleDraft(c, '同時操作のドラフト')
           await c.evaluate(`(() => {
             const s = document.querySelector('[data-testid=task-project-select]')
-            Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value').set.call(s, ${JSON.stringify(`${ids.work2}:`)})
+            Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value').set.call(s, [...s.options].find((o) => o.value.startsWith(${JSON.stringify(`${ids.work2}:`)})).value)
             s.dispatchEvent(new Event('change', { bubbles: true }))
             document.querySelector('[data-testid=task-editor] form').requestSubmit()
           })()`)
@@ -189,7 +195,7 @@ export function taskProjectScenarios({ withApp, root }) {
           await sleep(300)
           const concurrent = await c.evaluate(`({ select: document.querySelector('[data-testid=task-project-select]').value, draft: document.querySelector('[data-testid=task-editor] input:not([type=hidden])').value, helper: document.querySelector('[data-testid=task-editor] .MuiFormHelperText-root')?.textContent })`)
           assert(
-            concurrent.select === `${ids.work2}:` && concurrent.draft === '同時操作のドラフト' && concurrent.helper !== '未保存の変更があります',
+            concurrent.select.startsWith(`${ids.work2}:`) && concurrent.select.length > ids.work2.length + 1 && concurrent.draft === '同時操作のドラフト' && concurrent.helper !== '未保存の変更があります',
             '画面も両方の新しい値（所属を古い値に戻さず、タイトルも保存済み）',
             concurrent
           )
@@ -214,10 +220,11 @@ export function taskProjectScenarios({ withApp, root }) {
           await openProject(c, ids.later)
           await api(c, `window.gtd.projects.setCompleted({ id: ${JSON.stringify(ids.later)}, completed: true })`)
           await addProjectTask(c, '完了済みへの追加')
-          await c.waitFor(`document.querySelector('[data-testid=new-task-unset-error]')`, 5000, '追加の失敗表示')
-          const addError = await c.evaluate(`document.querySelector('[data-testid=new-task-unset-error]').textContent`)
+          const laterTestId = await firstCardTestId(c)
+          await c.waitFor(`document.querySelector('[data-testid="${laterTestId}-error"]')`, 5000, '追加の失敗表示')
+          const addError = await c.evaluate(`document.querySelector('[data-testid="${laterTestId}-error"]').textContent`)
           assert(addError.includes('完了済み'), '完了済みプロジェクトへの追加はMainが拒否', addError)
-          assert((await c.evaluate(`document.querySelector('[data-testid=new-task-unset] input').value`)) === '完了済みへの追加', '入力を残す')
+          assert((await c.evaluate(`document.querySelector('[data-testid="${laterTestId}"] input').value`)) === '完了済みへの追加', '入力を残す')
           const quit = await requestQuit(app)
           assert(quit?.code === 0, '正常終了', quit)
         })
@@ -227,7 +234,7 @@ export function taskProjectScenarios({ withApp, root }) {
       () =>
         withApp({ label: 'switch', userDataDir: scopeDir }, async (app) => {
           const c = app.cdp
-          await api(c, `window.gtd.tasks.create({ title: '仕事1の追加', projectId: ${JSON.stringify(ids.work1)} })`)
+          await api(c, `window.gtd.tasks.create({ title: '仕事1の追加', projectId: ${JSON.stringify(ids.work1)}, milestoneId: ${JSON.stringify(await firstMilestoneId(c, ids.work1))} })`)
           await c.evaluate('location.reload()')
           await c.waitFor(`document.querySelector('nav button[aria-label="Inbox"]')`, 10000, '再読み込み')
           await sleep(500)
@@ -268,7 +275,7 @@ export function taskProjectScenarios({ withApp, root }) {
         withApp({ label: 'completed-project', userDataDir: scopeDir }, async (app) => {
           const c = app.cdp
           await openProject(c, ids.home)
-          const target = await c.evaluate(`({ notice: document.querySelector('[data-testid=project-completed-notice]')?.textContent ?? '', disabled: document.querySelector('[data-testid=new-task-unset-button]').disabled })`)
+          const target = await c.evaluate(`({ notice: document.querySelector('[data-testid=project-completed-notice]')?.textContent ?? '', disabled: document.querySelector('[data-testid=milestone-card] [data-testid^=new-task-][data-testid$=-button]').disabled })`)
           assert(target.disabled && target.notice.includes('完了済みのプロジェクトには、マイルストン・タスクを追加できません'), '追加を無効にして理由を表示', target)
           const sidebar = await c.evaluate(`[...document.querySelectorAll('[data-testid=project-list] [data-project-id]')].find((e) => e.dataset.projectId === ${JSON.stringify(ids.home)}).textContent`)
           assert(sidebar.includes('完了済み'), 'サイドバーで完了済みを区別', sidebar)
@@ -278,7 +285,7 @@ export function taskProjectScenarios({ withApp, root }) {
           assert(!current.options.some((o) => o.value !== ids.home && o.label.includes('完了済み')), '他の完了済みは候補に出さない', current.options)
           await chooseProject(c, '')
           await c.waitFor(`(async () => (await window.gtd.tasks.list()).data.find((t) => t.id === ${JSON.stringify(ids.homeTask)}).projectId === null)()`, 5000, '完了済みから未所属へ移動')
-          const conflict = await apiRaw(c, `window.gtd.tasks.setAssignment({ id: ${JSON.stringify(ids.homeTask)}, projectId: ${JSON.stringify(ids.home)}, milestoneId: null })`)
+          const conflict = await apiRaw(c, `window.gtd.tasks.setAssignment({ id: ${JSON.stringify(ids.homeTask)}, projectId: ${JSON.stringify(ids.home)}, milestoneId: ${JSON.stringify(await firstMilestoneId(c, ids.home))} })`)
           assert(!conflict.ok && conflict.error.code === 'CONFLICT', '完了済みへの移動はCONFLICT', conflict)
           const quit = await requestQuit(app)
           assert(quit?.code === 0, '正常終了', quit)
@@ -294,8 +301,13 @@ export function taskProjectScenarios({ withApp, root }) {
         const insertProject = db.prepare('INSERT INTO projects (id, name, created_at, updated_at, completed_at) VALUES (?, ?, ?, ?, NULL)')
         insertProject.run(projectA, 'A', '2026-11-01T00:00:00.000Z', '2026-11-01T00:00:00.000Z')
         insertProject.run(projectB, 'B', '2026-11-01T00:00:01.000Z', '2026-11-01T00:00:01.000Z')
+        // フェーズ5.6: プロジェクトのタスクは必ずマイルストンに所属する（各プロジェクトに1件）
+        const milestoneOf = { [projectA]: randomUUID(), [projectB]: randomUUID() }
+        const insertMilestone = db.prepare('INSERT INTO milestones (id, project_id, name, created_at, updated_at) VALUES (?, ?, ?, ?, ?)')
+        insertMilestone.run(milestoneOf[projectA], projectA, 'MA', '2026-11-01T00:00:02.000Z', '2026-11-01T00:00:02.000Z')
+        insertMilestone.run(milestoneOf[projectB], projectB, 'MB', '2026-11-01T00:00:03.000Z', '2026-11-01T00:00:03.000Z')
         const rows = []
-        const insertTask = db.prepare('INSERT INTO tasks (id, title, created_at, updated_at, completed_at, project_id) VALUES (?, ?, ?, ?, ?, ?)')
+        const insertTask = db.prepare('INSERT INTO tasks (id, title, created_at, updated_at, completed_at, project_id, milestone_id) VALUES (?, ?, ?, ?, ?, ?, ?)')
         db.transaction(() => {
           for (let i = 0; i < 5000; i++) {
             const projectId = i % 3 === 0 ? null : i % 3 === 1 ? projectA : projectB
@@ -303,7 +315,7 @@ export function taskProjectScenarios({ withApp, root }) {
             const completedAt = i % 4 === 0 ? at : null
             const title = `${i % 2 === 0 ? '報告' : '連絡'} ${i}`
             const id = randomUUID()
-            insertTask.run(id, title, at, at, completedAt, projectId)
+            insertTask.run(id, title, at, at, completedAt, projectId, projectId === null ? null : milestoneOf[projectId])
             rows.push({ id, title, createdAt: at, completedAt, projectId })
           }
         })()

@@ -16,15 +16,16 @@ const projectIdSchema = z.uuid({ error: 'プロジェクトIDが正しくあり�
 
 const milestoneIdSchema = z.uuid({ error: 'マイルストンIDが正しくありません。' }).nullable()
 
-// マイルストンだけを指定した形（プロジェクトなし）は入力の段階で拒否する（フェーズ5.4）
-const MILESTONE_WITHOUT_PROJECT = 'マイルストンを指定する場合は、プロジェクトも指定してください。'
-const hasProjectForMilestone = (input: { projectId?: string | null | undefined; milestoneId?: string | null | undefined }) =>
-  input.milestoneId === null || input.milestoneId === undefined || (input.projectId !== null && input.projectId !== undefined)
+// 所属は「Inbox（両方なし）」か「プロジェクトとマイルストンの両方」だけを受け付ける（フェーズ5.6）。
+// マイルストンだけ（5.4から拒否）と、プロジェクトだけ（5.6で廃止）は入力の段階で拒否する。組み合わせの整合性はServiceで確認する
+const ASSIGNMENT_PAIR_REQUIRED = 'プロジェクトに所属させる場合は、そのプロジェクトのマイルストンも指定してください。'
+const isPairedAssignment = (input: { projectId?: string | null | undefined; milestoneId?: string | null | undefined }) =>
+  (input.projectId === null || input.projectId === undefined) === (input.milestoneId === null || input.milestoneId === undefined)
 
 // projectId・milestoneId は省略可（フェーズ5.1までの呼び出しとの互換。省略時は未所属）
 export const createTaskInputSchema = z
   .strictObject({ title: titleSchema, projectId: projectIdSchema.optional(), milestoneId: milestoneIdSchema.optional() })
-  .refine(hasProjectForMilestone, { error: MILESTONE_WITHOUT_PROJECT })
+  .refine(isPairedAssignment, { error: ASSIGNMENT_PAIR_REQUIRED })
 
 export const updateTaskTitleInputSchema = z.strictObject({ id: taskIdSchema, title: titleSchema })
 
@@ -36,10 +37,14 @@ export const setTaskCompletedInputSchema = z.strictObject({
 // 所属の変更（フェーズ5.4）。projectId・milestoneId はどちらも必須（解除は null で明示する）
 export const setTaskAssignmentInputSchema = z
   .strictObject({ id: taskIdSchema, projectId: projectIdSchema, milestoneId: milestoneIdSchema })
-  .refine(hasProjectForMilestone, { error: MILESTONE_WITHOUT_PROJECT })
+  .refine(isPairedAssignment, { error: ASSIGNMENT_PAIR_REQUIRED })
+
+// 削除（フェーズ5.6）
+export const deleteTaskInputSchema = z.strictObject({ id: taskIdSchema })
 
 export const tasksCreateArgsSchema = z.tuple([createTaskInputSchema])
 export const tasksListArgsSchema = z.tuple([])
 export const tasksUpdateTitleArgsSchema = z.tuple([updateTaskTitleInputSchema])
 export const tasksSetCompletedArgsSchema = z.tuple([setTaskCompletedInputSchema])
 export const tasksSetAssignmentArgsSchema = z.tuple([setTaskAssignmentInputSchema])
+export const tasksDeleteArgsSchema = z.tuple([deleteTaskInputSchema])

@@ -1,8 +1,31 @@
 // IPC契約: 型とチャンネル名の定数だけを置く。実行時依存を持たない。
 // Main / Preload / Rendererのどこからimportしてもよい。
-import type { CreateProjectInput, ProjectDto, RenameProjectInput, SetProjectCompletedInput } from './projects'
-import type { CreateMilestoneInput, MilestoneDto, RenameMilestoneInput } from './milestones'
-import type { CreateTaskInput, SetTaskAssignmentInput, SetTaskCompletedInput, TaskDto, UpdateTaskTitleInput } from './tasks'
+import type {
+  CreateProjectInput,
+  DeleteProjectInput,
+  DeleteProjectResult,
+  ProjectDeletionSummary,
+  ProjectDto,
+  RenameProjectInput,
+  SetProjectCompletedInput
+} from './projects'
+import type {
+  CreateMilestoneInput,
+  DeleteMilestoneInput,
+  DeleteMilestoneResult,
+  MilestoneDeletionSummary,
+  MilestoneDto,
+  RenameMilestoneInput
+} from './milestones'
+import type {
+  CreateTaskInput,
+  DeleteTaskInput,
+  DeleteTaskResult,
+  SetTaskAssignmentInput,
+  SetTaskCompletedInput,
+  TaskDto,
+  UpdateTaskTitleInput
+} from './tasks'
 import type { WorkspaceSettings } from './workspace'
 
 export const IPC_CHANNELS = {
@@ -12,13 +35,18 @@ export const IPC_CHANNELS = {
   tasksUpdateTitle: 'tasks:update-title',
   tasksSetCompleted: 'tasks:set-completed',
   tasksSetAssignment: 'tasks:set-assignment',
+  tasksDelete: 'tasks:delete',
   projectsList: 'projects:list',
   projectsCreate: 'projects:create',
   projectsRename: 'projects:rename',
   projectsSetCompleted: 'projects:set-completed',
+  projectsGetDeletionSummary: 'projects:get-deletion-summary',
+  projectsDelete: 'projects:delete',
   milestonesList: 'milestones:list',
   milestonesCreate: 'milestones:create',
   milestonesRename: 'milestones:rename',
+  milestonesGetDeletionSummary: 'milestones:get-deletion-summary',
+  milestonesDelete: 'milestones:delete',
   workspaceGet: 'workspace:get',
   workspaceSave: 'workspace:save',
   // Main → Renderer: 終了・ウィンドウを閉じる前に、確定済みのWorkspace状態の保存完了を問い合わせる
@@ -62,7 +90,11 @@ export type IpcErrorCode = 'FORBIDDEN' | 'INVALID_INPUT' | 'NOT_FOUND' | 'CONFLI
 
 // 業務エラーの型付きの補足情報（フェーズ5.3）。画面はメッセージ文字列を解析せず、この値を使う。
 // - project-has-open-tasks: プロジェクトに未完了のタスクがあるため完了できない（CONFLICT）。件数はDBの所属タスク全体から数える
-export type IpcErrorDetails = { kind: 'project-has-open-tasks'; openTaskCount: number }
+// - deletion-scope-changed: 確認した後に削除の対象（配下の件数）が変わったため削除しなかった（CONFLICT。フェーズ5.6）。
+//   画面は確認内容を取り直して再確認する（無断で削除範囲を広げない）
+export type IpcErrorDetails =
+  | { kind: 'project-has-open-tasks'; openTaskCount: number }
+  | { kind: 'deletion-scope-changed' }
 
 export type IpcError = {
   code: IpcErrorCode
@@ -104,6 +136,8 @@ export type GtdApi = {
     setCompleted: (input: SetTaskCompletedInput) => Promise<IpcResult<TaskDto>>
     // 所属（プロジェクト・マイルストン）の変更・解除を1回で保存する（フェーズ5.4。5.2の setProject を置き換え）
     setAssignment: (input: SetTaskAssignmentInput) => Promise<IpcResult<TaskDto>>
+    // 表示中のタスクの物理削除（フェーズ5.6）。非表示・存在しないタスクは NOT_FOUND
+    delete: (input: DeleteTaskInput) => Promise<IpcResult<DeleteTaskResult>>
   }
   // 用途別のAPI（一覧・作成・名前変更はフェーズ5.1、完了・取り消しは5.3）
   projects: {
@@ -112,12 +146,19 @@ export type GtdApi = {
     rename: (input: RenameProjectInput) => Promise<IpcResult<ProjectDto>>
     // 完了・完了の取り消し（フェーズ5.3）。未完了のタスクがあれば CONFLICT（details: project-has-open-tasks）
     setCompleted: (input: SetProjectCompletedInput) => Promise<IpcResult<ProjectDto>>
+    // 削除（フェーズ5.6）。確認内容（件数）を取得してから、その件数を添えて削除する。
+    // 配下のマイルストン・タスクは削除せず、所属を外して非表示にする（Inboxにも表示しない）
+    getDeletionSummary: (input: { id: string }) => Promise<IpcResult<ProjectDeletionSummary>>
+    delete: (input: DeleteProjectInput) => Promise<IpcResult<DeleteProjectResult>>
   }
-  // マイルストン（フェーズ5.4）。一覧は全プロジェクト分（少量）。完了・削除・並べ替えはない
+  // マイルストン（フェーズ5.4）。一覧は全プロジェクト分（少量）。完了・並べ替えはない
   milestones: {
     list: () => Promise<IpcResult<MilestoneDto[]>>
     create: (input: CreateMilestoneInput) => Promise<IpcResult<MilestoneDto>>
     rename: (input: RenameMilestoneInput) => Promise<IpcResult<MilestoneDto>>
+    // 削除（フェーズ5.6）。所属タスクは削除せず、所属を外して非表示にする
+    getDeletionSummary: (input: { id: string }) => Promise<IpcResult<MilestoneDeletionSummary>>
+    delete: (input: DeleteMilestoneInput) => Promise<IpcResult<DeleteMilestoneResult>>
   }
   // Workspace設定専用。任意の設定キーは扱わない。
   workspace: {

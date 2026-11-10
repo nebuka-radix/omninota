@@ -105,9 +105,20 @@ describe('詳細パネルの所属の選択肢（5.4でプロジェクト・マ�
   ]
   const none = { projectId: null, milestoneId: null }
 
-  it('未所属と未完了プロジェクト（マイルストン未設定）を選べる。完了済みは候補に出さない', () => {
-    const built = buildAssignmentOptions([work1, home, done], [], none)
-    expect(values(built)).toEqual(['', `${home.id}:`, `${work1.id}:`])
+  const milestoneOf = (projectId: string, id: string) => ({
+    id,
+    projectId,
+    name: 'M',
+    createdAt: '2026-11-06T00:00:00.000Z',
+    updatedAt: '2026-11-06T00:00:00.000Z'
+  })
+  const mWork = milestoneOf(work1.id, 'ffffffff-0000-4000-8000-000000000011')
+  const mHome = milestoneOf(home.id, 'ffffffff-0000-4000-8000-000000000012')
+  const mDone = milestoneOf(done.id, 'ffffffff-0000-4000-8000-000000000013')
+
+  it('未所属と未完了プロジェクトのマイルストンを選べる（プロジェクトだけは選べない）。完了済みは候補に出さない', () => {
+    const built = buildAssignmentOptions([work1, home, done], [mWork, mHome, mDone], none)
+    expect(values(built)).toEqual(['', `${home.id}:${mHome.id}`, `${work1.id}:${mWork.id}`])
     expect(built.unassigned).toEqual({ value: '', label: '未所属（Inbox）', disabled: false })
     expect(built.groups.flatMap((group) => group.options).every((option) => !option.disabled)).toBe(true)
   })
@@ -122,9 +133,9 @@ describe('詳細パネルの所属の選択肢（5.4でプロジェクト・マ�
   })
 
   it('現在の所属が完了済みなら、その名前を「完了済み」として表示する（選択不可。空欄・未所属に見せない）', () => {
-    const built = buildAssignmentOptions([work1, done], [], { projectId: done.id, milestoneId: null })
-    const option = built.groups.flatMap((group) => group.options).find((item) => item.value === `${done.id}:`)
-    expect(option).toEqual({ value: `${done.id}:`, label: '完了P（完了済み） — マイルストン未設定', disabled: true })
+    const built = buildAssignmentOptions([work1, done], [mWork, mDone], { projectId: done.id, milestoneId: mDone.id })
+    const option = built.groups.flatMap((group) => group.options).find((item) => item.value === `${done.id}:${mDone.id}`)
+    expect(option).toEqual({ value: `${done.id}:${mDone.id}`, label: '完了P（完了済み） › M', disabled: true })
     expect(built.unknown).toBeNull()
   })
 
@@ -137,7 +148,7 @@ describe('詳細パネルの所属の選択肢（5.4でプロジェクト・マ�
     })
   })
 
-  it('選択値の変換（空文字 = 未所属、"<P>:" = プロジェクトだけ、"<P>:<M>" = マイルストン）', () => {
+  it('選択値の変換（空文字 = 未所属、"<P>:<M>" = マイルストン。"<P>:" は5.6で選択肢から外したが、変換の規則は残す）', () => {
     expect(parseAssignmentValue('')).toEqual(none)
     expect(parseAssignmentValue(`${work1.id}:`)).toEqual({ projectId: work1.id, milestoneId: null })
     expect(parseAssignmentValue(`${work1.id}:m1`)).toEqual({ projectId: work1.id, milestoneId: 'm1' })

@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent } from 'react'
 import { Box, Button, ButtonBase, Checkbox, Typography } from '@mui/material'
 import { useVirtualizer } from '@tanstack/react-virtual'
-import { ArrowDown, ArrowUp, Link2 } from 'lucide-react'
+import { ArrowDown, ArrowUp, Link2, MoreHorizontal } from 'lucide-react'
 import type { SortingState } from '@tanstack/react-table'
 import { isTaskCompleted, type TaskDto } from '../../../../shared/contracts/tasks'
 import { vscodeColors } from '../../theme'
@@ -11,8 +11,14 @@ import type { TaskSortColumn } from './task-table'
 export const TASK_ROW_HEIGHT = 34
 const DATE_COLUMN_WIDTH = 132
 const ASSIGN_COLUMN_WIDTH = 88
-const gridColumns = (withAssign: boolean, card: boolean) =>
-  card ? '32px minmax(0, 1fr)' : `40px minmax(0, 1fr) ${withAssign ? `${ASSIGN_COLUMN_WIDTH}px ` : ''}${DATE_COLUMN_WIDTH}px`
+// 行のメニュー（「…」）の列（フェーズ5.6）
+const MENU_COLUMN_WIDTH = 28
+const gridColumns = (withAssign: boolean, card: boolean, withMenu: boolean) => {
+  const menu = withMenu ? ` ${MENU_COLUMN_WIDTH}px` : ''
+  return card
+    ? `32px minmax(0, 1fr)${menu}`
+    : `40px minmax(0, 1fr) ${withAssign ? `${ASSIGN_COLUMN_WIDTH}px ` : ''}${DATE_COLUMN_WIDTH}px${menu}`
+}
 const PAGE_STEP = 10
 
 const dateTimeFormat = new Intl.DateTimeFormat('ja-JP', {
@@ -75,9 +81,11 @@ export const TASK_LIST_HELP_ID = 'task-list-help'
 // - Enter: 現在行を選択して詳細パネルに表示
 // - Space: 現在行の完了／未完了を切り替える（行の選択は変えない）
 // - M: 現在行の「紐付け」メニューを開く（onRequestAssign がある場合。フェーズ5.4）
+// - Delete / Backspace: 現在行の削除（確認ダイアログを開く。onRequestDelete がある場合。フェーズ5.6）
+// - Shift+F10 / ContextMenu キー: 現在行のメニュー（削除など）を開く。マウスでは行の右クリックか、行の右端の「…」（フェーズ5.6）
 // - 行のチェックボックスはマウス用。キーボード・読み上げでは上記のSpaceで同じ操作を行う
 //   （option内に操作要素を置けないため。Tab移動の対象も増やさない）
-// 「紐付け」ボタンは listbox の外側の重ね合わせ層に描画し、option の中に操作要素を置かない。
+// 「紐付け」ボタンと行のメニューの「…」ボタンは listbox の外側の重ね合わせ層に描画し、option の中に操作要素を置かない。
 // フェーズ5.5: variant="card" はマイルストンのカード内の一覧（列見出し・作成日時の列なし。カードごとに1つの仮想リスト）。
 // - ← → : 隣のカードの一覧へフォーカスを移す（onNavigateCard）
 // - 5.4 の「見出し行とタスク行を1つの仮想リストに並べる」方式は、カード表示への置き換えに伴い廃止した。
@@ -89,6 +97,8 @@ export function TaskList({
   emptyLabel,
   onNavigateCard,
   onRequestAssign,
+  onRequestRowMenu,
+  onRequestDelete,
   totalCount,
   selectedTaskId,
   pendingTaskIds,
@@ -109,6 +119,10 @@ export function TaskList({
   onNavigateCard?: (direction: -1 | 1) => void
   // 行の「紐付け」（Inbox）。anchor はメニューを表示する位置の要素
   onRequestAssign?: (task: TaskDto, anchor: HTMLElement) => void
+  // 行のメニュー（削除など。フェーズ5.6）。anchor はメニューを表示する位置の要素
+  onRequestRowMenu?: (task: TaskDto, anchor: HTMLElement) => void
+  // 行の削除（確認ダイアログを開く。フェーズ5.6）
+  onRequestDelete?: (task: TaskDto) => void
   totalCount: number
   selectedTaskId: string | null
   pendingTaskIds: ReadonlySet<string>
@@ -125,7 +139,8 @@ export function TaskList({
   const [listFocused, setListFocused] = useState(false)
   const card = variant === 'card'
   const withAssign = onRequestAssign !== undefined && !card
-  const GRID_COLUMNS = gridColumns(withAssign, card)
+  const withMenu = onRequestRowMenu !== undefined
+  const GRID_COLUMNS = gridColumns(withAssign, card, withMenu)
   // キーボード移動の対象となるタスクの並び（行の並びと同じ）
   const orderedTasks = tasks
 
@@ -239,6 +254,32 @@ export function TaskList({
         } else moveTo(current)
         break
       }
+      case 'Delete':
+      case 'Backspace': {
+        // 現在行の削除（確認ダイアログを開く。現在行がなければ現在行を決めるだけ）
+        if (!onRequestDelete || event.metaKey || event.ctrlKey || event.altKey) {
+          handled = false
+          break
+        }
+        const target = activeIndex >= 0 ? orderedTasks[activeIndex] : undefined
+        if (target) onRequestDelete(target)
+        else moveTo(current)
+        break
+      }
+      case 'ContextMenu':
+      case 'F10': {
+        // 現在行のメニュー（Shift+F10 か ContextMenu キー）
+        if (!onRequestRowMenu || (event.key === 'F10' && !event.shiftKey)) {
+          handled = false
+          break
+        }
+        const target = activeIndex >= 0 ? orderedTasks[activeIndex] : undefined
+        if (target) {
+          const anchor = document.getElementById(taskOptionId(target.id)) ?? listRef.current
+          if (anchor) onRequestRowMenu(target, anchor)
+        } else moveTo(current)
+        break
+      }
       default:
         handled = false
     }
@@ -291,6 +332,7 @@ export function TaskList({
         <SortHeader column="title" label="タイトル" sorting={sorting} onSort={onSort} />
         {withAssign && <span aria-hidden />}
         <SortHeader column="createdAt" label="作成日時" sorting={sorting} onSort={onSort} align="right" />
+        {withMenu && <span aria-hidden />}
       </Box>
       )}
       <Box ref={scrollRef} data-testid="task-list-scroll" sx={{ flex: 1, minHeight: 0, overflowY: 'auto', overflowX: 'hidden' }}>
@@ -336,6 +378,16 @@ export function TaskList({
                     setActiveTaskId(task.id)
                     onSelect(task.id)
                   }}
+                  onContextMenu={
+                    onRequestRowMenu
+                      ? (event) => {
+                          // 右クリック: 行のメニュー（選択・詳細パネルは変えない）
+                          event.preventDefault()
+                          setActiveTaskId(task.id)
+                          onRequestRowMenu(task, event.currentTarget)
+                        }
+                      : undefined
+                  }
                   sx={{
                     ...rowBox(item.start),
                     display: 'grid',
@@ -384,11 +436,12 @@ export function TaskList({
                       {formatTaskDateTime(task.createdAt)}
                     </Typography>
                   )}
+                  {withMenu && <span aria-hidden />}
                 </Box>
               )
             })}
           </Box>
-          {/* listbox の外側の重ね合わせ層: 「紐付け」ボタン（option の中に操作要素を置かない）と、空のカードの表示 */}
+          {/* listbox の外側の重ね合わせ層: 「紐付け」「…」ボタン（option の中に操作要素を置かない）と、空のカードの表示 */}
           <Box sx={{ position: 'absolute', inset: 0, pointerEvents: 'none' }} data-testid="task-list-overlay">
             {tasks.length === 0 && emptyLabel && (
               <Typography variant="caption" color="text.secondary" component="p" sx={{ px: 2, py: 1.5, m: 0 }} aria-hidden>
@@ -408,7 +461,7 @@ export function TaskList({
                       ...rowBox(item.start),
                       width: ASSIGN_COLUMN_WIDTH,
                       left: 'auto',
-                      right: DATE_COLUMN_WIDTH,
+                      right: DATE_COLUMN_WIDTH + (withMenu ? MENU_COLUMN_WIDTH : 0),
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
@@ -429,6 +482,48 @@ export function TaskList({
                     >
                       紐付け
                     </Button>
+                  </Box>
+                )
+              })}
+            {withMenu &&
+              onRequestRowMenu &&
+              virtualItems.map((item) => {
+                const task = tasks[item.index]
+                if (!task) return null
+                return (
+                  <Box
+                    key={`menu-${task.id}`}
+                    sx={{
+                      ...rowBox(item.start),
+                      width: MENU_COLUMN_WIDTH,
+                      left: 'auto',
+                      right: 0,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      pointerEvents: 'auto'
+                    }}
+                  >
+                    {/* マウス用の入口（Tab移動の対象は増やさない。キーボードは一覧で Shift+F10 / ContextMenu、削除は Delete） */}
+                    <ButtonBase
+                      tabIndex={-1}
+                      aria-label={`「${task.title}」のメニュー`}
+                      aria-haspopup="menu"
+                      data-row-menu-task-id={task.id}
+                      onClick={(event) => {
+                        event.stopPropagation()
+                        onRequestRowMenu(task, event.currentTarget)
+                      }}
+                      sx={{
+                        width: 22,
+                        height: 22,
+                        borderRadius: 1,
+                        color: 'text.secondary',
+                        '&:hover': { bgcolor: vscodeColors.listHover, color: 'text.primary' }
+                      }}
+                    >
+                      <MoreHorizontal size={14} aria-hidden />
+                    </ButtonBase>
                   </Box>
                 )
               })}

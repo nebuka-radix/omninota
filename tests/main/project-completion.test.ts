@@ -8,7 +8,7 @@ import { createTaskRepository } from '../../src/main/repositories/task-repositor
 import { createProjectService, type ProjectService } from '../../src/main/services/project-service'
 import { createTaskService, type TaskService } from '../../src/main/services/task-service'
 import { projectsSetCompletedArgsSchema } from '../../src/shared/validation/projects'
-import { createTempDir, MIGRATIONS_DIR, projectServiceDeps, taskServiceDeps } from '../helpers/temp-database'
+import { createTempDir, inProject, MIGRATIONS_DIR, projectServiceDeps, taskServiceDeps } from '../helpers/temp-database'
 
 const MISSING_ID = '00000000-0000-4000-8000-00000000ffff'
 
@@ -77,8 +77,8 @@ describe('プロジェクトの完了ルール（Service・一時DB）', () => {
 
   it('全タスクが完了済みなら完了できる。子タスクの状態・日時・所属は変えない', () => {
     const project = projects.create({ name: 'P' })
-    const t1 = tasks.create({ title: 't1', projectId: project.id })
-    const t2 = tasks.create({ title: 't2', projectId: project.id })
+    const t1 = tasks.create({ title: 't1', ...inProject(db, project.id) })
+    const t2 = tasks.create({ title: 't2', ...inProject(db, project.id) })
     tasks.setCompleted({ id: t1.id, completed: true })
     tasks.setCompleted({ id: t2.id, completed: true })
     const before = taskRows()
@@ -90,9 +90,9 @@ describe('プロジェクトの完了ルール（Service・一時DB）', () => {
 
   it('未完了タスクがあれば CONFLICT（型付きの件数つき）。プロジェクト・タスクは変えない', () => {
     const project = projects.create({ name: 'P' })
-    tasks.create({ title: 'open1', projectId: project.id })
-    tasks.create({ title: 'open2', projectId: project.id })
-    const done = tasks.create({ title: 'done', projectId: project.id })
+    tasks.create({ title: 'open1', ...inProject(db, project.id) })
+    tasks.create({ title: 'open2', ...inProject(db, project.id) })
+    const done = tasks.create({ title: 'done', ...inProject(db, project.id) })
     tasks.setCompleted({ id: done.id, completed: true })
     const before = taskRows()
     expect(() => projects.setCompleted({ id: project.id, completed: true })).toThrow(
@@ -110,8 +110,8 @@ describe('プロジェクトの完了ルール（Service・一時DB）', () => {
     const p = projects.create({ name: 'P' })
     const other = projects.create({ name: 'Q' })
     tasks.create({ title: 'inbox-open' })
-    tasks.create({ title: 'other-open', projectId: other.id })
-    const mine = tasks.create({ title: 'mine-open', projectId: p.id })
+    tasks.create({ title: 'other-open', ...inProject(db, other.id) })
+    const mine = tasks.create({ title: 'mine-open', ...inProject(db, p.id) })
     expect(() => projects.setCompleted({ id: p.id, completed: true })).toThrow(
       expect.objectContaining({ details: { kind: 'project-has-open-tasks', openTaskCount: 1 } })
     )
@@ -121,14 +121,14 @@ describe('プロジェクトの完了ルール（Service・一時DB）', () => {
 
   it('外へ移したタスクは数えない（移動後に完了できる）', () => {
     const p = projects.create({ name: 'P' })
-    const t = tasks.create({ title: 'open', projectId: p.id })
+    const t = tasks.create({ title: 'open', ...inProject(db, p.id) })
     tasks.setAssignment({ id: t.id, projectId: null, milestoneId: null })
     expect(projects.setCompleted({ id: p.id, completed: true }).completedAt).not.toBeNull()
   })
 
   it('全タスクを完了しても、プロジェクトは自動では完了しない', () => {
     const p = projects.create({ name: 'P' })
-    const t = tasks.create({ title: 't', projectId: p.id })
+    const t = tasks.create({ title: 't', ...inProject(db, p.id) })
     tasks.setCompleted({ id: t.id, completed: true })
     expect(row(p.id)?.completedAt).toBeNull()
   })
@@ -157,15 +157,15 @@ describe('プロジェクトの完了ルール（Service・一時DB）', () => {
   it('完了済みプロジェクトの操作ルール: 追加・移動・未完了へ戻すのは拒否、外への移動・タイトル編集・名前編集・取り消しは許可', () => {
     const p = projects.create({ name: 'P' })
     const q = projects.create({ name: 'Q' })
-    const t1 = tasks.create({ title: 't1', projectId: p.id })
-    const t2 = tasks.create({ title: 't2', projectId: p.id })
+    const t1 = tasks.create({ title: 't1', ...inProject(db, p.id) })
+    const t2 = tasks.create({ title: 't2', ...inProject(db, p.id) })
     const inbox = tasks.create({ title: 'inbox' })
     tasks.setCompleted({ id: t1.id, completed: true })
     tasks.setCompleted({ id: t2.id, completed: true })
     projects.setCompleted({ id: p.id, completed: true })
 
-    expect(() => tasks.create({ title: 'new', projectId: p.id })).toThrow(expect.objectContaining({ code: 'CONFLICT' }))
-    expect(() => tasks.setAssignment({ id: inbox.id, projectId: p.id, milestoneId: null })).toThrow(expect.objectContaining({ code: 'CONFLICT' }))
+    expect(() => tasks.create({ title: 'new', ...inProject(db, p.id) })).toThrow(expect.objectContaining({ code: 'CONFLICT' }))
+    expect(() => tasks.setAssignment({ id: inbox.id, ...inProject(db, p.id) })).toThrow(expect.objectContaining({ code: 'CONFLICT' }))
     const beforeReopen = createTaskRepository(db).findById(t1.id)
     expect(() => tasks.setCompleted({ id: t1.id, completed: false })).toThrow(
       expect.objectContaining({
@@ -175,11 +175,11 @@ describe('プロジェクトの完了ルール（Service・一時DB）', () => {
     )
     expect(createTaskRepository(db).findById(t1.id)).toEqual(beforeReopen)
     // 既に完了のタスクへ completed: true の再要求は変更なしの成功
-    expect(tasks.setCompleted({ id: t1.id, completed: true })).toEqual(beforeReopen)
+    expect({ ...tasks.setCompleted({ id: t1.id, completed: true }), hiddenAt: null }).toEqual(beforeReopen)
 
     expect(tasks.updateTitle({ id: t1.id, title: 't1（編集）' }).title).toBe('t1（編集）')
     expect(projects.rename({ id: p.id, name: 'P（編集）' })).toMatchObject({ name: 'P（編集）', completedAt: expect.any(String) })
-    expect(tasks.setAssignment({ id: t2.id, projectId: q.id, milestoneId: null }).projectId).toBe(q.id)
+    expect(tasks.setAssignment({ id: t2.id, ...inProject(db, q.id) }).projectId).toBe(q.id)
 
     // 外へ移したタスクは未完了に戻せる。プロジェクトを未完了に戻せば、所属タスクも未完了に戻せる
     expect(tasks.setCompleted({ id: t2.id, completed: false }).completedAt).toBeNull()
@@ -227,7 +227,7 @@ describe('プロジェクトの完了ルール（Service・一時DB）', () => {
       run: ([input]) => projects.setCompleted(input)
     })
     const p = projects.create({ name: 'P' })
-    tasks.create({ title: 'open', projectId: p.id })
+    tasks.create({ title: 'open', ...inProject(db, p.id) })
     expect(await handler(event, { id: p.id, completed: true })).toEqual({
       ok: false,
       error: {

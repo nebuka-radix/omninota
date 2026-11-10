@@ -4,8 +4,8 @@
 // Mainの入力検証とRendererの入力欄で共通に使う。
 export const TASK_TITLE_MAX_LENGTH = 200
 
-// projectId: 作成するタスクの所属先（フェーズ5.2）。省略・nullなら未所属（Inbox）。
-// milestoneId: 所属するマイルストン（フェーズ5.4。任意）。指定する場合は projectId も必要で、そのプロジェクトのマイルストンであること。
+// 所属の指定（フェーズ5.6から）: Inbox（projectId・milestoneId ともに省略／null）か、
+// プロジェクトとそのプロジェクトのマイルストンの両方を指定する。プロジェクトだけ・マイルストンだけの指定は拒否する。
 export type CreateTaskInput = {
   title: string
   projectId?: string | null
@@ -25,9 +25,9 @@ export type SetTaskCompletedInput = {
 }
 
 // 所属（プロジェクト・マイルストン）の変更・解除を1回で保存する（フェーズ5.4。5.2の setProject を置き換え）。
-// - 未所属: projectId = null, milestoneId = null
-// - プロジェクトだけ: projectId あり, milestoneId = null（マイルストン未設定）
+// - 未所属（Inbox）: projectId = null, milestoneId = null
 // - マイルストン: 両方あり（そのプロジェクトのマイルストン）
+// - プロジェクトだけ（milestoneId = null）はフェーズ5.6で廃止（INVALID_INPUT）
 // 目的の状態を指定する（同じなら変更しない）。
 export type SetTaskAssignmentInput = {
   id: string
@@ -35,7 +35,17 @@ export type SetTaskAssignmentInput = {
   milestoneId: string | null
 }
 
+// タスクの削除（フェーズ5.6）。表示中のタスクを物理削除する
+export type DeleteTaskInput = {
+  id: string
+}
+
+export type DeleteTaskResult = {
+  id: string
+}
+
 // 日時はUTCのISO 8601文字列（例: 2026-11-09T10:00:00.000Z）
+// 一覧・更新の対象は表示中のタスクだけ（削除由来の非表示タスクはAPIから返さない。フェーズ5.6）
 // completedAt: 未完了ならnull。完了状態はcompletedAtだけから導出する。
 export type TaskDto = {
   id: string
@@ -45,7 +55,7 @@ export type TaskDto = {
   completedAt: string | null
   // 所属するプロジェクトのID。nullは未所属（フェーズ5.2）
   projectId: string | null
-  // 所属するマイルストンのID。nullはマイルストン未設定（フェーズ5.4）。projectId が null なら常に null
+  // 所属するマイルストンのID（フェーズ5.4）。表示中のタスクでは、projectId があれば必ずあり、projectId が null なら null
   milestoneId: string | null
 }
 

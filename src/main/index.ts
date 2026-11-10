@@ -301,11 +301,18 @@ if (!app.requestSingleInstanceLock()) {
       milestoneService: createMilestoneService({
         repository: milestoneRepository,
         findProject: projectRepository.findById,
+        countTasks: taskRepository.countByMilestone,
+        hideTasks: taskRepository.hideByMilestone,
         transaction
       }),
       projectService: createProjectService({
         repository: projectRepository,
         countOpenTasks: taskRepository.countOpenByProject,
+        insertMilestone: milestoneRepository.insert,
+        countMilestones: milestoneRepository.countByProject,
+        detachMilestones: milestoneRepository.detachByProject,
+        countTasks: taskRepository.countByProject,
+        detachAndHideTasks: taskRepository.detachAndHideByProject,
         transaction
       }),
       workspaceSettingsService: createWorkspaceSettingsService({

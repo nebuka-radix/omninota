@@ -11,7 +11,7 @@ import { useCreateTaskMutation } from './task-queries'
 // - 未送信の入力は未保存確認（DraftGuard）の対象にしない（既存方針）
 const TARGET_ID = 'task-quick-add-target'
 
-// - milestoneId: 追加先のマイルストン（フェーズ5.4。プロジェクト画面で選んだグループ）。nullはマイルストン未設定
+// - milestoneId: 追加先のマイルストン（フェーズ5.4）。フェーズ5.5からInboxだけで使う（projectId = null のため常に null）
 export function TaskQuickAdd({
   projectId,
   milestoneId = null,

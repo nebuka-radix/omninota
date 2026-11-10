@@ -73,7 +73,7 @@ describe('DB・マイグレーション・Repository（ホストNode.js）', () 
 
     const reopened = open()
     runMigrations(reopened, MIGRATIONS_DIR)
-    expect(createTaskRepository(reopened).listAll()).toEqual([created])
+    expect(createTaskRepository(reopened).listAll()).toEqual([{ ...created, hiddenAt: null }])
   })
 
   it('一覧は作成日時の新しい順で、同じ日時ならidの降順で安定する', () => {

@@ -15,3 +15,9 @@ export const milestonesCreateArgsSchema = z.tuple([
 export const milestonesRenameArgsSchema = z.tuple([
   z.strictObject({ id: z.uuid({ error: 'マイルストンIDが正しくありません。' }), name: nameSchema })
 ])
+
+// 削除（フェーズ5.6）。確認した時の件数（0以上の整数）を添える
+const milestoneIdSchema = z.uuid({ error: 'マイルストンIDが正しくありません。' })
+const countSchema = z.number({ error: '件数は数値で指定してください。' }).int().min(0).max(Number.MAX_SAFE_INTEGER)
+export const milestonesGetDeletionSummaryArgsSchema = z.tuple([z.strictObject({ id: milestoneIdSchema })])
+export const milestonesDeleteArgsSchema = z.tuple([z.strictObject({ id: milestoneIdSchema, expectedTaskCount: countSchema })])

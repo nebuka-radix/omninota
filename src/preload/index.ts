@@ -13,18 +13,23 @@ const api: GtdApi = {
     list: () => ipcRenderer.invoke(IPC_CHANNELS.tasksList),
     updateTitle: (input) => ipcRenderer.invoke(IPC_CHANNELS.tasksUpdateTitle, input),
     setCompleted: (input) => ipcRenderer.invoke(IPC_CHANNELS.tasksSetCompleted, input),
-    setAssignment: (input) => ipcRenderer.invoke(IPC_CHANNELS.tasksSetAssignment, input)
+    setAssignment: (input) => ipcRenderer.invoke(IPC_CHANNELS.tasksSetAssignment, input),
+    delete: (input) => ipcRenderer.invoke(IPC_CHANNELS.tasksDelete, input)
   },
   projects: {
     list: () => ipcRenderer.invoke(IPC_CHANNELS.projectsList),
     create: (input) => ipcRenderer.invoke(IPC_CHANNELS.projectsCreate, input),
     rename: (input) => ipcRenderer.invoke(IPC_CHANNELS.projectsRename, input),
-    setCompleted: (input) => ipcRenderer.invoke(IPC_CHANNELS.projectsSetCompleted, input)
+    setCompleted: (input) => ipcRenderer.invoke(IPC_CHANNELS.projectsSetCompleted, input),
+    getDeletionSummary: (input) => ipcRenderer.invoke(IPC_CHANNELS.projectsGetDeletionSummary, input),
+    delete: (input) => ipcRenderer.invoke(IPC_CHANNELS.projectsDelete, input)
   },
   milestones: {
     list: () => ipcRenderer.invoke(IPC_CHANNELS.milestonesList),
     create: (input) => ipcRenderer.invoke(IPC_CHANNELS.milestonesCreate, input),
-    rename: (input) => ipcRenderer.invoke(IPC_CHANNELS.milestonesRename, input)
+    rename: (input) => ipcRenderer.invoke(IPC_CHANNELS.milestonesRename, input),
+    getDeletionSummary: (input) => ipcRenderer.invoke(IPC_CHANNELS.milestonesGetDeletionSummary, input),
+    delete: (input) => ipcRenderer.invoke(IPC_CHANNELS.milestonesDelete, input)
   },
   workspace: {
     get: () => ipcRenderer.invoke(IPC_CHANNELS.workspaceGet),

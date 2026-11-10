@@ -16,7 +16,6 @@ import { milestonesCreateArgsSchema, milestonesRenameArgsSchema } from '../../sr
 import { tasksCreateArgsSchema, tasksSetAssignmentArgsSchema } from '../../src/shared/validation/tasks'
 import {
   createTempDir,
-  MIGRATION_COUNT,
   MIGRATIONS_DIR,
   milestoneServiceDeps,
   projectServiceDeps,
@@ -47,13 +46,16 @@ describe('マイルストン・所属の入力検証', () => {
     expect(milestonesCreateArgsSchema.safeParse([{ projectId: ANY_ID, name: 'a', createdAt: 'x' }]).success).toBe(false)
   })
 
-  it('マイルストンだけ（プロジェクトなし）の指定は入力の段階で拒否する', () => {
+  it('マイルストンだけ・プロジェクトだけ（フェーズ5.6）の指定は入力の段階で拒否する', () => {
     expect(tasksSetAssignmentArgsSchema.safeParse([{ id: ANY_ID, projectId: null, milestoneId: ANY_ID }]).success).toBe(false)
     expect(tasksCreateArgsSchema.safeParse([{ title: 'a', milestoneId: ANY_ID }]).success).toBe(false)
     expect(tasksCreateArgsSchema.safeParse([{ title: 'a', projectId: null, milestoneId: ANY_ID }]).success).toBe(false)
     expect(tasksSetAssignmentArgsSchema.safeParse([{ id: ANY_ID, projectId: ANY_ID }]).success).toBe(false) // 省略は不可
-    expect(tasksSetAssignmentArgsSchema.safeParse([{ id: ANY_ID, projectId: ANY_ID, milestoneId: null }]).success).toBe(true)
-    expect(tasksCreateArgsSchema.safeParse([{ title: 'a' }]).success).toBe(true) // 従来の呼び出し
+    expect(tasksSetAssignmentArgsSchema.safeParse([{ id: ANY_ID, projectId: ANY_ID, milestoneId: null }]).success).toBe(false)
+    expect(tasksCreateArgsSchema.safeParse([{ title: 'a', projectId: ANY_ID }]).success).toBe(false)
+    expect(tasksSetAssignmentArgsSchema.safeParse([{ id: ANY_ID, projectId: ANY_ID, milestoneId: ANY_ID }]).success).toBe(true)
+    expect(tasksSetAssignmentArgsSchema.safeParse([{ id: ANY_ID, projectId: null, milestoneId: null }]).success).toBe(true)
+    expect(tasksCreateArgsSchema.safeParse([{ title: 'a' }]).success).toBe(true) // 従来の呼び出し（Inbox）
   })
 })
 
@@ -85,14 +87,17 @@ describe('マイルストンと所属（Service・一時DB）', () => {
   })
 
   const row = (id: string) => createTaskRepository(db).findById(id)
+  // プロジェクト作成時の初期マイルストン（フェーズ5.6）
+  const initialOf = (projectId: string) => milestones.list().find((m) => m.projectId === projectId)!
 
   it('マイルストンの登録・一覧（作成日時・IDの昇順）・同名の許可', () => {
     const p = projects.create({ name: 'P' })
+    const initial = initialOf(p.id)
     const m1 = milestones.create({ projectId: p.id, name: 'M' })
     const m2 = milestones.create({ projectId: p.id, name: 'M' })
     expect(m1).toMatchObject({ projectId: p.id, name: 'M' })
     expect(m1.createdAt).toBe(m1.updatedAt)
-    expect(milestones.list().map((m) => m.id)).toEqual([m1.id, m2.id])
+    expect(milestones.list().map((m) => m.id)).toEqual([initial.id, m1.id, m2.id])
   })
 
   it('同じ作成日時ならIDの昇順', () => {
@@ -107,7 +112,11 @@ describe('マイルストンと所属（Service・一時DB）', () => {
     })
     fixed.create({ projectId: p.id, name: 'b' })
     fixed.create({ projectId: p.id, name: 'a' })
-    expect(milestones.list().map((m) => m.id)).toEqual(['00000000-0000-4000-8000-0000000000aa', '00000000-0000-4000-8000-0000000000bb'])
+    expect(milestones.list().map((m) => m.id)).toEqual([
+      initialOf(p.id).id,
+      '00000000-0000-4000-8000-0000000000aa',
+      '00000000-0000-4000-8000-0000000000bb'
+    ])
   })
 
   it('名前変更: updatedAtだけ更新、同じ名前なら更新しない、存在しないIDは NOT_FOUND', () => {
@@ -131,12 +140,14 @@ describe('マイルストンと所属（Service・一時DB）', () => {
     expect(milestones.rename({ id: m.id, name: '完了後の改名' }).name).toBe('完了後の改名')
   })
 
-  it('作成: プロジェクトだけ・マイルストンつきで作成できる。他プロジェクトのマイルストン・存在しないマイルストンは拒否', () => {
+  it('作成: マイルストンつきで作成できる。プロジェクトだけ・他プロジェクトのマイルストン・存在しないマイルストンは拒否（フェーズ5.6）', () => {
     const p = projects.create({ name: 'P' })
     const q = projects.create({ name: 'Q' })
     const mp = milestones.create({ projectId: p.id, name: 'MP' })
     const mq = milestones.create({ projectId: q.id, name: 'MQ' })
-    expect(tasks.create({ title: 'a', projectId: p.id })).toMatchObject({ projectId: p.id, milestoneId: null })
+    expect(() => tasks.create({ title: 'a', projectId: p.id })).toThrow(
+      expect.objectContaining({ code: 'CONFLICT', message: 'プロジェクトに所属させる場合は、そのプロジェクトのマイルストンも指定してください。' })
+    )
     expect(tasks.create({ title: 'b', projectId: p.id, milestoneId: mp.id })).toMatchObject({ projectId: p.id, milestoneId: mp.id })
     const before = tasks.list().length
     expect(() => tasks.create({ title: 'c', projectId: p.id, milestoneId: mq.id })).toThrow(
@@ -146,21 +157,21 @@ describe('マイルストンと所属（Service・一時DB）', () => {
     expect(tasks.list()).toHaveLength(before)
   })
 
-  it('所属変更: プロジェクトだけ → マイルストン → 別プロジェクト（旧マイルストンを残さない）→ 未所属。ID・作成日時・完了日時は変えない', () => {
+  it('所属変更: Inbox → マイルストン → 同じプロジェクトの別マイルストン → 別プロジェクト（旧マイルストンを残さない）→ Inbox。ID・作成日時・完了日時は変えない', () => {
     const p = projects.create({ name: 'P' })
     const q = projects.create({ name: 'Q' })
     const m = milestones.create({ projectId: p.id, name: 'M' })
     const created = tasks.create({ title: 't' })
     const done = tasks.setCompleted({ id: created.id, completed: true })
 
-    const toP = tasks.setAssignment({ id: created.id, projectId: p.id, milestoneId: null })
-    expect(toP).toMatchObject({ id: created.id, projectId: p.id, milestoneId: null, createdAt: created.createdAt, completedAt: done.completedAt })
+    const toP = tasks.setAssignment({ id: created.id, projectId: p.id, milestoneId: initialOf(p.id).id })
+    expect(toP).toMatchObject({ id: created.id, projectId: p.id, milestoneId: initialOf(p.id).id, createdAt: created.createdAt, completedAt: done.completedAt })
     expect(toP.updatedAt > done.updatedAt).toBe(true)
     const toM = tasks.setAssignment({ id: created.id, projectId: p.id, milestoneId: m.id })
     expect(toM).toMatchObject({ projectId: p.id, milestoneId: m.id })
     expect(toM.updatedAt > toP.updatedAt).toBe(true)
-    const toQ = tasks.setAssignment({ id: created.id, projectId: q.id, milestoneId: null })
-    expect(toQ).toMatchObject({ projectId: q.id, milestoneId: null })
+    const toQ = tasks.setAssignment({ id: created.id, projectId: q.id, milestoneId: initialOf(q.id).id })
+    expect(toQ).toMatchObject({ projectId: q.id, milestoneId: initialOf(q.id).id })
     const inbox = tasks.setAssignment({ id: created.id, projectId: null, milestoneId: null })
     expect(inbox).toMatchObject({ projectId: null, milestoneId: null, title: 't', createdAt: created.createdAt, completedAt: done.completedAt })
   })
@@ -170,8 +181,9 @@ describe('マイルストンと所属（Service・一時DB）', () => {
     const m = milestones.create({ projectId: p.id, name: 'M' })
     const t = tasks.create({ title: 't', projectId: p.id, milestoneId: m.id })
     expect(tasks.setAssignment({ id: t.id, projectId: p.id, milestoneId: m.id })).toEqual(t)
-    // マイルストンだけ外すのは変更（updatedAt更新）
-    expect(tasks.setAssignment({ id: t.id, projectId: p.id, milestoneId: null }).updatedAt > t.updatedAt).toBe(true)
+    // マイルストンだけ外す（プロジェクトだけの所属にする）ことはできない（フェーズ5.6）。何も変えない
+    expect(() => tasks.setAssignment({ id: t.id, projectId: p.id, milestoneId: null })).toThrow(expect.objectContaining({ code: 'CONFLICT' }))
+    expect(row(t.id)).toMatchObject({ projectId: p.id, milestoneId: m.id, updatedAt: t.updatedAt })
   })
 
   it('所属変更の拒否: 存在しない・他プロジェクトのマイルストン・完了済みプロジェクト。拒否時は何も変えない', () => {
@@ -180,13 +192,12 @@ describe('マイルストンと所属（Service・一時DB）', () => {
     const mq = milestones.create({ projectId: q.id, name: 'MQ' })
     const t = tasks.create({ title: 't' })
     expect(() => tasks.setAssignment({ id: MISSING_ID, projectId: null, milestoneId: null })).toThrow(/対象のタスクが見つかりません/)
-    expect(() => tasks.setAssignment({ id: t.id, projectId: MISSING_ID, milestoneId: null })).toThrow(/指定したプロジェクトが見つかりません/)
+    expect(() => tasks.setAssignment({ id: t.id, projectId: MISSING_ID, milestoneId: mq.id })).toThrow(/指定したプロジェクトが見つかりません/)
     expect(() => tasks.setAssignment({ id: t.id, projectId: p.id, milestoneId: MISSING_ID })).toThrow(/指定したマイルストンが見つかりません/)
     expect(() => tasks.setAssignment({ id: t.id, projectId: p.id, milestoneId: mq.id })).toThrow(expect.objectContaining({ code: 'CONFLICT' }))
     expect(() => tasks.setAssignment({ id: t.id, projectId: null, milestoneId: mq.id })).toThrow(expect.objectContaining({ code: 'CONFLICT' }))
     const mp = milestones.create({ projectId: p.id, name: 'MP' })
     projects.setCompleted({ id: p.id, completed: true })
-    expect(() => tasks.setAssignment({ id: t.id, projectId: p.id, milestoneId: null })).toThrow(expect.objectContaining({ code: 'CONFLICT' }))
     expect(() => tasks.setAssignment({ id: t.id, projectId: p.id, milestoneId: mp.id })).toThrow(expect.objectContaining({ code: 'CONFLICT' }))
     expect(row(t.id)).toMatchObject({ projectId: null, milestoneId: null, updatedAt: t.updatedAt })
   })
@@ -204,7 +215,7 @@ describe('マイルストンと所属（Service・一時DB）', () => {
     const t = row(created.id)!
     expect(tasks.setAssignment({ id: t.id, projectId: p.id, milestoneId: m1.id })).toMatchObject({ updatedAt: t.updatedAt })
     expect(() => tasks.setAssignment({ id: t.id, projectId: p.id, milestoneId: m2.id })).toThrow(expect.objectContaining({ code: 'CONFLICT' }))
-    expect(tasks.setAssignment({ id: t.id, projectId: q.id, milestoneId: null })).toMatchObject({ projectId: q.id, milestoneId: null })
+    expect(tasks.setAssignment({ id: t.id, projectId: q.id, milestoneId: initialOf(q.id).id })).toMatchObject({ projectId: q.id, milestoneId: initialOf(q.id).id })
     expect(tasks.setAssignment({ id: other.id, projectId: null, milestoneId: null })).toMatchObject({ projectId: null, milestoneId: null })
   })
 
@@ -219,7 +230,7 @@ describe('マイルストンと所属（Service・一時DB）', () => {
 
   it('外部キー: 存在しないマイルストンIDはDBでも保存できない', () => {
     const p = projects.create({ name: 'P' })
-    const t = tasks.create({ title: 't', projectId: p.id })
+    const t = tasks.create({ title: 't', projectId: p.id, milestoneId: initialOf(p.id).id })
     expect(() => createTaskRepository(db).updateAssignment(t.id, p.id, MISSING_ID, '2026-11-10T10:00:00.000Z')).toThrow(/FOREIGN KEY/)
     expect(() =>
       createMilestoneRepository(db).insert({ id: ANY_ID, projectId: MISSING_ID, name: 'x', createdAt: 'a', updatedAt: 'a' })
@@ -230,10 +241,11 @@ describe('マイルストンと所属（Service・一時DB）', () => {
     const p = projects.create({ name: 'P' })
     const m = milestones.create({ projectId: p.id, name: 'M' })
     const t = tasks.create({ title: 't', projectId: p.id, milestoneId: m.id })
+    const initial = initialOf(p.id)
     closeDatabase(db)
     db = openDatabase(dbFile)
     runMigrations(db, MIGRATIONS_DIR)
-    expect(createMilestoneRepository(db).listAll()).toEqual([m])
+    expect(createMilestoneRepository(db).listAll().filter((r) => r.projectId === p.id)).toEqual([initial, m])
     expect(createTaskRepository(db).findById(t.id)).toMatchObject({ projectId: p.id, milestoneId: m.id })
   })
 
@@ -260,6 +272,7 @@ describe('マイルストンと所属（Service・一時DB）', () => {
   })
 })
 
+// 0005 まで適用した時点の確認（0006 ではプロジェクトだけに所属するタスクを削除するため、ここでは 0005 で止める。0006 は deletion.test.ts）
 describe('移行（0004 → 0005）', () => {
   let temp: ReturnType<typeof createTempDir>
   beforeEach(() => {
@@ -289,8 +302,13 @@ describe('移行（0004 → 0005）', () => {
     const beforeProjects = old.$client.prepare('SELECT * FROM projects').all()
     closeDatabase(old)
 
+    const upTo0005 = join(temp.dir, 'migrations-phase54')
+    mkdirSync(join(upTo0005, 'meta'), { recursive: true })
+    const entries54 = journal.entries.slice(0, 6)
+    writeFileSync(join(upTo0005, 'meta', '_journal.json'), JSON.stringify({ ...journal, entries: entries54 }))
+    for (const entry of entries54) copyFileSync(join(MIGRATIONS_DIR, `${entry.tag}.sql`), join(upTo0005, `${entry.tag}.sql`))
     const upgraded = openDatabase(dbFile)
-    expect(runMigrations(upgraded, MIGRATIONS_DIR)).toEqual({ appliedBefore: 5, appliedAfter: MIGRATION_COUNT })
+    expect(runMigrations(upgraded, upTo0005)).toEqual({ appliedBefore: 5, appliedAfter: 6 })
     expect(upgraded.$client.prepare('SELECT * FROM tasks ORDER BY id').all()).toEqual(beforeTasks.map((t) => ({ ...t, milestone_id: null })))
     expect(upgraded.$client.prepare('SELECT * FROM projects').all()).toEqual(beforeProjects)
     expect(createSettingsRepository(upgraded).get('workspace')?.value).toBe(workspace)
@@ -302,7 +320,7 @@ describe('移行（0004 → 0005）', () => {
     closeDatabase(upgraded)
 
     const restarted = openDatabase(dbFile)
-    expect(runMigrations(restarted, MIGRATIONS_DIR)).toEqual({ appliedBefore: MIGRATION_COUNT, appliedAfter: MIGRATION_COUNT })
+    expect(runMigrations(restarted, upTo0005)).toEqual({ appliedBefore: 6, appliedAfter: 6 })
     closeDatabase(restarted)
   })
 })

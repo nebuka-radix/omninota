@@ -41,13 +41,18 @@ type IpcErrorDetails = { kind: 'project-has-open-tasks'; openTaskCount: number }
 | `tasks.updateTitle(input)` | `tasks:update-title` | `{ id, title }` | `TaskDto`（保存後） |
 | `tasks.setCompleted(input)` | `tasks:set-completed` | `{ id, completed }` | `TaskDto`（保存後） |
 | `tasks.setAssignment(input)` | `tasks:set-assignment` | `{ id, projectId: string \| null, milestoneId: string \| null }` | `TaskDto`（保存後。フェーズ5.4。5.2の `tasks.setProject` を置き換え） |
+| `tasks.delete(input)` | `tasks:delete` | `{ id }` | `{ id }`（物理削除。フェーズ5.6） |
 | `projects.list()` | `projects:list` | なし | `ProjectDto[]` |
 | `projects.create(input)` | `projects:create` | `{ name }` | `ProjectDto` |
 | `projects.rename(input)` | `projects:rename` | `{ id, name }` | `ProjectDto`（保存後） |
 | `projects.setCompleted(input)` | `projects:set-completed` | `{ id, completed }` | `ProjectDto`（保存後。フェーズ5.3） |
+| `projects.getDeletionSummary(input)` | `projects:get-deletion-summary` | `{ id }` | `ProjectDeletionSummary`（フェーズ5.6） |
+| `projects.delete(input)` | `projects:delete` | `{ id, expectedMilestoneCount, expectedTaskCount }` | `{ id, milestoneCount, taskCount }`（フェーズ5.6） |
 | `milestones.list()` | `milestones:list` | なし | `MilestoneDto[]`（全プロジェクト分。作成日時・IDの昇順。フェーズ5.4） |
 | `milestones.create(input)` | `milestones:create` | `{ projectId, name }` | `MilestoneDto` |
 | `milestones.rename(input)` | `milestones:rename` | `{ id, name }` | `MilestoneDto`（保存後） |
+| `milestones.getDeletionSummary(input)` | `milestones:get-deletion-summary` | `{ id }` | `MilestoneDeletionSummary`（フェーズ5.6） |
+| `milestones.delete(input)` | `milestones:delete` | `{ id, expectedTaskCount }` | `{ id, hiddenTaskCount }`（フェーズ5.6） |
 | `workspace.get()` | `workspace:get` | なし | `WorkspaceSettings` |
 | `workspace.save(settings)` | `workspace:save` | `WorkspaceSettings` | `WorkspaceSettings` |
 | `workspace.onFlushRequest(listener)` | `workspace:flush-request`（Main → Renderer） | `{ requestId, draftAction }` | 購読解除関数 |
@@ -83,7 +88,55 @@ type IpcErrorDetails = { kind: 'project-has-open-tasks'; openTaskCount: number }
   確認順は「タスクの存在 → 同じ状態なら変更なしの成功 → 所属プロジェクトの完了状態 → 更新」で、1つのトランザクションで行う。
   完了にする要求（`completed: true`）は、所属によらず許可する。
 
+### 削除と所属ルールの変更（フェーズ5.6）
+
+所属ルール（tasks.create・tasks.setAssignment）:
+- 受け付ける所属は「Inbox（projectId・milestoneId ともに省略／null）」か「プロジェクトとそのプロジェクトのマイルストンの両方」だけ。
+  プロジェクトだけ（milestoneId が null）・マイルストンだけは INVALID_INPUT（「プロジェクトに所属させる場合は、そのプロジェクトのマイルストンも指定してください。」）。
+  Serviceでも同じ規則を確認する（CONFLICT）。マイルストンが0件のプロジェクトには、結果として追加・紐付けできない。
+- 非表示（削除由来）のマイルストン・存在しないマイルストンは NOT_FOUND（「指定したマイルストンが見つかりません。」）。
+- 完了済みプロジェクトへの追加・移動の拒否（CONFLICT）は従来どおり。
+
+projects.create:
+- プロジェクトと初期マイルストン「新しいマイルストン」（`INITIAL_MILESTONE_NAME`。通常のマイルストンで、名前変更・削除できる）を
+  1つのトランザクションで作成する。どちらかが失敗すれば両方とも作らない。戻り値は従来どおり `ProjectDto`（Rendererはマイルストン一覧も取り直す）。
+
+非表示データ（削除由来）:
+- `tasks.list` は hidden_at がNULLのタスクだけ、`milestones.list` は project_id がNULLでないマイルストンだけを返す。
+- `tasks.updateTitle`・`tasks.setCompleted`・`tasks.setAssignment`・`tasks.delete` は、非表示のタスクを NOT_FOUND にする（再表示・再利用しない。旧所属にも戻らない）。
+  `milestones.rename`・削除も、非表示のマイルストンを NOT_FOUND にする。
+- プロジェクトの完了判定の未完了件数に、非表示のタスクは含めない（マイルストンの削除で非表示になった未完了タスクは完了を妨げない）。
+
+`tasks.delete({ id })`:
+- 表示中のタスクを物理削除する（所属・完了状態は問わない。完了済みプロジェクトのタスクも削除できる）。存在しない・非表示・削除済みは NOT_FOUND。
+- 所属プロジェクトの状態は変えない（未完了タスクが0件になっても自動で完了しない）。
+
+`milestones.getDeletionSummary({ id })` / `milestones.delete({ id, expectedTaskCount })`:
+- 確認内容: `{ id, name, taskCount }`。taskCount はDBで数えた所属タスクの総数（完了済み・画面の検索で隠れているものを含む）。
+- 削除は1つのトランザクションで: 存在（表示中。NOT_FOUND）→ 件数が expectedTaskCount と同じか（違えば何も変えずに
+  CONFLICT `details: { kind: 'deletion-scope-changed' }`）→ 所属タスクの milestone_id を NULL・hidden_at を設定（project_id は維持。
+  タスクは削除しない）→ マイルストンを物理削除。最後の1件でも削除でき、代わりのマイルストンは作らない。完了済みプロジェクトのマイルストンも削除できる。
+
+`projects.getDeletionSummary({ id })` / `projects.delete({ id, expectedMilestoneCount, expectedTaskCount })`:
+- 確認内容: `{ id, name, completedAt, milestoneCount, taskCount, hiddenTaskCount }`。taskCount は既に非表示の所属タスク（マイルストンの削除で
+  非表示になり project_id だけが残っているもの）を含む総数。
+- 削除は1つのトランザクションで: 存在（NOT_FOUND）→ 件数が確認時と同じか（違えば CONFLICT `deletion-scope-changed`）→
+  所属タスク（既に非表示のものを含む）の project_id・milestone_id を NULL・hidden_at を設定（既にあれば維持）→
+  所属マイルストンの project_id を NULL → プロジェクトを物理削除。マイルストン・タスクは削除しない。
+- 未完了・完了済みのどちらでも削除できる（完了の条件とは無関係）。関係のないプロジェクト・Inboxのタスクは変えない。
+
+件数（expected*）: 0以上の整数（Zodで検証。小数・負数・省略は INVALID_INPUT）。updatedAt の扱いは docs/database.md（tasks の表）を参照。
+
+```ts
+type MilestoneDeletionSummary = { id: string; name: string; taskCount: number }
+type ProjectDeletionSummary = { id: string; name: string; completedAt: string | null; milestoneCount: number; taskCount: number; hiddenTaskCount: number }
+// IpcErrorDetails に { kind: 'deletion-scope-changed' } を追加
+```
+
 ### tasks.setAssignment・tasks.create のマイルストン・milestones（フェーズ5.4）
+
+（フェーズ5.6で、プロジェクトだけの所属は廃止した。上記「削除と所属ルールの変更」を参照）
+
 
 - `tasks.setProject`（5.2）は廃止し、プロジェクトとマイルストンを1回で保存する `tasks.setAssignment` に置き換えた
   （プロジェクトとマイルストンを別々のAPIで順番に更新し、途中で不整合な状態を作らないため。呼び出し元は詳細パネル・Inboxの紐付け・テスト）。

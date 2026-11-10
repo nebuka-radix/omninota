@@ -1,6 +1,8 @@
 import { randomUUID } from 'node:crypto'
 import type {
   CreateTaskInput,
+  DeleteTaskInput,
+  DeleteTaskResult,
   SetTaskAssignmentInput,
   SetTaskCompletedInput,
   TaskDto,
@@ -11,6 +13,7 @@ import type { RunInTransaction } from '../db/transaction'
 import type { TaskRepository } from '../repositories/task-repository'
 import {
   milestoneProjectMismatch,
+  milestoneRequired,
   projectCompletedConflict,
   targetMilestoneNotFound,
   targetProjectNotFound,
@@ -19,9 +22,10 @@ import {
 } from './errors'
 
 // inputはIPC層でZod検証済み（前後空白の除去・空文字と長さ・IDの形式）であること。
+// フェーズ5.6: 削除由来で非表示のタスク（hiddenAt あり）は、存在しないものとして扱う（NOT_FOUND。再表示・再利用しない）。
 export type TaskService = {
-  // projectId を指定すると、そのプロジェクトに所属させて作成する（存在し、未完了であること）。省略・nullなら未所属。
-  // milestoneId を指定する場合は、projectId のプロジェクトに属するマイルストンであること（フェーズ5.4）。
+  // 所属は Inbox（projectId・milestoneId ともに省略／null）か、プロジェクトとそのマイルストンの両方（フェーズ5.6）。
+  // プロジェクトは存在し未完了であること。マイルストンはそのプロジェクトの表示中のものであること。
   create(input: CreateTaskInput): TaskDto
   list(): TaskDto[]
   // タイトルが保存済みと同じなら更新しない（updatedAtも変えない）。
@@ -34,6 +38,8 @@ export type TaskService = {
   // 移動先は存在し、未完了であること。マイルストンはそのプロジェクトのものであること。
   // 完了済みプロジェクトから外（未所属・別の未完了プロジェクト）への移動は許可する。
   setAssignment(input: SetTaskAssignmentInput): TaskDto
+  // 表示中のタスクの物理削除（フェーズ5.6）。所属・完了状態によらず削除できる。プロジェクトの状態は変えない（自動で完了しない）
+  delete(input: DeleteTaskInput): DeleteTaskResult
 }
 
 // DBの行型をそのまま画面へ渡さず、契約上のDTOへ詰め替える。
@@ -63,27 +69,28 @@ export function createTaskService(deps: {
   const generateId = deps.generateId ?? (() => randomUUID())
   const { repository, transaction } = deps
 
+  // 表示中のタスクだけを返す（非表示のタスクは「見つからない」）
   const findOrThrow = (id: string): TaskRow => {
     const row = repository.findById(id)
-    if (!row) throw taskNotFound()
+    if (!row || row.hiddenAt !== null) throw taskNotFound()
     return row
   }
 
-  // 追加・移動先として使える所属か。確認順: プロジェクトの存在（NOT_FOUND）→ マイルストンの存在（NOT_FOUND）
+  // 追加・移動先として使える所属か。確認順: 組み合わせの形 → プロジェクトの存在（NOT_FOUND）→ マイルストンの存在（NOT_FOUND）
   // → マイルストンがそのプロジェクトのものか（CONFLICT）→ プロジェクトが未完了か（CONFLICT）。
-  // 「マイルストンだけ（プロジェクトなし）」は入力検証で拒否済みだが、ここでも受け付けない。
+  // 「マイルストンだけ」「プロジェクトだけ（フェーズ5.6で廃止）」は入力検証で拒否済みだが、ここでも受け付けない。
+  // 非表示のマイルストン（project_id がNULL）は存在しないものとして扱う。マイルストンが0件のプロジェクトには所属させられない。
   const assertAssignable = (projectId: string | null, milestoneId: string | null): void => {
     if (projectId === null) {
       if (milestoneId !== null) throw milestoneProjectMismatch()
       return
     }
+    if (milestoneId === null) throw milestoneRequired()
     const project = deps.findProject(projectId)
     if (!project) throw targetProjectNotFound()
-    if (milestoneId !== null) {
-      const milestone = deps.findMilestone(milestoneId)
-      if (!milestone) throw targetMilestoneNotFound()
-      if (milestone.projectId !== projectId) throw milestoneProjectMismatch()
-    }
+    const milestone = deps.findMilestone(milestoneId)
+    if (!milestone || milestone.projectId === null) throw targetMilestoneNotFound()
+    if (milestone.projectId !== projectId) throw milestoneProjectMismatch()
     if (project.completedAt !== null) throw projectCompletedConflict()
   }
 
@@ -101,7 +108,8 @@ export function createTaskService(deps: {
           updatedAt: timestamp,
           completedAt: null,
           projectId,
-          milestoneId
+          milestoneId,
+          hiddenAt: null
         }
         repository.insert(row)
         return toDto(row)
@@ -145,6 +153,13 @@ export function createTaskService(deps: {
         const updated = repository.updateAssignment(input.id, input.projectId, input.milestoneId, now().toISOString())
         if (!updated) throw taskNotFound()
         return toDto(updated)
+      })
+    },
+    delete(input) {
+      return transaction(() => {
+        // 表示中のタスクだけを削除する（非表示・削除済みは NOT_FOUND。二重実行の2回目も NOT_FOUND）
+        if (repository.deleteVisible(input.id) === 0) throw taskNotFound()
+        return { id: input.id }
       })
     }
   }

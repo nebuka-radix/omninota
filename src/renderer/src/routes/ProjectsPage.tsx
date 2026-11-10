@@ -3,6 +3,7 @@ import { Alert, Box, Button, CircularProgress, Typography } from '@mui/material'
 import { useQuery } from '@tanstack/react-query'
 import type { SortingState } from '@tanstack/react-table'
 import { FolderKanban, Plus } from 'lucide-react'
+import { INITIAL_MILESTONE_NAME } from '../../../shared/contracts/milestones'
 import { Page } from '../components/Page'
 import { ProjectNameEditor } from '../features/projects/ProjectNameEditor'
 import { projectListQueryOptions } from '../features/projects/project-queries'
@@ -26,6 +27,7 @@ export function ProjectsIndexPage() {
 
 // /projects/new: 新規プロジェクトの編集画面（フェーズ5.5）。既存プロジェクトの画面と同じ名前の編集部品を使う。
 // 名前を保存するまではDBにプロジェクトを作らない。マイルストン・タスクの追加は、名前を保存するまで無効にする。
+// フェーズ5.6: 名前を保存すると、プロジェクトと「新しいマイルストン」を1つのトランザクションで作る（保存後のカードの位置に予告として示す）。
 export function NewProjectPage() {
   return (
     <Page title="Project" icon={FolderKanban} fill>
@@ -33,13 +35,13 @@ export function NewProjectPage() {
         <ProjectNameEditor project={null} />
       </Box>
       <Typography variant="body2" color="text.secondary" role="note" sx={{ mb: 2, flexShrink: 0 }} data-testid="new-project-note">
-        マイルストン・タスクを追加するには、先にプロジェクト名を保存してください。
+        マイルストン・タスクを追加するには、先にプロジェクト名を保存してください。保存すると「{INITIAL_MILESTONE_NAME}」も作成されます。
       </Typography>
       {/* 保存後に表示されるカードの位置に、無効な操作を示す（押してもDBは変更しない） */}
       <Box sx={{ display: 'flex', gap: 3, minHeight: 0, flex: 1, overflow: 'hidden' }}>
         <Box
           component="section"
-          aria-label="マイルストン未設定"
+          aria-label={`${INITIAL_MILESTONE_NAME}（保存時に作成）`}
           sx={{
             width: 320,
             flex: '0 0 auto',
@@ -51,11 +53,11 @@ export function NewProjectPage() {
           }}
         >
           <Typography component="h2" sx={{ fontSize: 13, fontWeight: 600, m: 0, px: 2, py: 1.5, color: 'text.secondary', borderBottom: `1px solid ${vscodeColors.border}` }}>
-            マイルストン未設定
+            {INITIAL_MILESTONE_NAME}（保存時に作成）
           </Typography>
           <Box sx={{ flex: 1 }} />
           <Box sx={{ px: 1, py: 1, borderTop: `1px solid ${vscodeColors.border}` }}>
-            <Button size="small" fullWidth disabled startIcon={<Plus size={14} aria-hidden />} sx={{ justifyContent: 'flex-start', fontSize: 12, fontWeight: 600 }} data-testid="new-task-unset-button">
+            <Button size="small" fullWidth disabled startIcon={<Plus size={14} aria-hidden />} sx={{ justifyContent: 'flex-start', fontSize: 12, fontWeight: 600 }} data-testid="new-task-placeholder-button">
               NEW TASK
             </Button>
           </Box>

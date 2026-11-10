@@ -1,17 +1,26 @@
-import { asc, eq } from 'drizzle-orm'
+import { and, asc, count, eq, isNotNull } from 'drizzle-orm'
 import type { AppDatabase } from '../db/client'
 import { milestones, type MilestoneRow } from '../db/schema'
 
 // SQLを使う取得・保存だけを置く。業務ルール（日時の付与・不要更新の判定・所属プロジェクトの確認）はServiceで行う。
+// フェーズ5.6: project_id がNULLのマイルストン（プロジェクトの削除で非表示になったもの）は、一覧・名前変更・削除の対象にしない。
 export type MilestoneRepository = {
   insert(row: MilestoneRow): void
+  // 非表示（project_id がNULL）のマイルストンも返す（Serviceが「見つからない」として扱う）
   findById(id: string): MilestoneRow | undefined
-  // 作成日時の古い順・IDの昇順（全プロジェクト分。表示もこの順）
+  // 表示対象（project_id あり）だけ。作成日時の古い順・IDの昇順（全プロジェクト分。表示もこの順）
   listAll(): MilestoneRow[]
   updateName(id: string, name: string, updatedAt: string): MilestoneRow | undefined
+  // プロジェクトに所属するマイルストンの件数
+  countByProject(projectId: string): number
+  // プロジェクトの削除に伴う所属解除（project_id = NULL）。名前・作成日時は変えない。変更した件数を返す
+  detachByProject(projectId: string, updatedAt: string): number
+  // 表示中のマイルストンの物理削除。削除した件数（0 or 1）を返す
+  deleteVisible(id: string): number
 }
 
 export function createMilestoneRepository(db: AppDatabase): MilestoneRepository {
+  const visible = (id: string) => and(eq(milestones.id, id), isNotNull(milestones.projectId))
   return {
     insert(row) {
       db.insert(milestones).values(row).run()
@@ -20,10 +29,24 @@ export function createMilestoneRepository(db: AppDatabase): MilestoneRepository 
       return db.select().from(milestones).where(eq(milestones.id, id)).get()
     },
     listAll() {
-      return db.select().from(milestones).orderBy(asc(milestones.createdAt), asc(milestones.id)).all()
+      return db
+        .select()
+        .from(milestones)
+        .where(isNotNull(milestones.projectId))
+        .orderBy(asc(milestones.createdAt), asc(milestones.id))
+        .all()
     },
     updateName(id, name, updatedAt) {
-      return db.update(milestones).set({ name, updatedAt }).where(eq(milestones.id, id)).returning().get()
+      return db.update(milestones).set({ name, updatedAt }).where(visible(id)).returning().get()
+    },
+    countByProject(projectId) {
+      return db.select({ value: count() }).from(milestones).where(eq(milestones.projectId, projectId)).get()?.value ?? 0
+    },
+    detachByProject(projectId, updatedAt) {
+      return db.update(milestones).set({ projectId: null, updatedAt }).where(eq(milestones.projectId, projectId)).run().changes
+    },
+    deleteVisible(id) {
+      return db.delete(milestones).where(visible(id)).run().changes
     }
   }
 }

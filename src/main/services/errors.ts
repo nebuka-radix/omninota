@@ -68,3 +68,15 @@ export function milestoneProjectMismatch(): BusinessError {
 export function milestoneInCompletedProjectConflict(): BusinessError {
   return new BusinessError('CONFLICT', '完了済みのプロジェクトにはマイルストンを追加できません。')
 }
+
+// プロジェクトだけへの所属（マイルストンなし）。フェーズ5.6で廃止（入力検証でも拒否する）
+export function milestoneRequired(): BusinessError {
+  return new BusinessError('CONFLICT', 'プロジェクトに所属させる場合は、そのプロジェクトのマイルストンも指定してください。')
+}
+
+// 削除の確認後に対象（配下の件数）が変わった（フェーズ5.6）。削除範囲を無断で広げない
+export function deletionScopeChanged(): BusinessError {
+  return new BusinessError('CONFLICT', '確認した後に対象の件数が変わったため、削除しませんでした。内容を確認してください。', {
+    kind: 'deletion-scope-changed'
+  })
+}

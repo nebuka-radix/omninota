@@ -5,6 +5,7 @@ import { ArrowLeft, X } from 'lucide-react'
 import { useDraftGuard } from '../../features/drafts/DraftGuard'
 import { NEW_PROJECT_PATH } from '../../features/projects/new-project'
 import { ProjectCompletionControl } from '../../features/projects/ProjectCompletionControl'
+import { ProjectDeleteControl } from '../../features/projects/ProjectDeleteControl'
 import { projectListQueryOptions } from '../../features/projects/project-queries'
 import { formatTaskDateTime } from '../../features/tasks/TaskList'
 import { TaskEditor } from '../../features/tasks/TaskEditor'
@@ -57,6 +58,7 @@ function TaskDetail({ taskId, scope }: { taskId: string | null; scope: TaskScope
 
 // プロジェクトの詳細（フェーズ5.5）。プロジェクト画面でタスクを選択していない時に表示する。
 // 状態（未完了／完了済み）・完了・完了の取り消しは、メインパネルからここへ移した（メインパネルには重複して置かない）。
+// フェーズ5.6: プロジェクトの削除もここに置く。
 function ProjectDetail({ projectId }: { projectId: string }) {
   const projects = useQuery(projectListQueryOptions)
   const { requestRevealOpenTasks } = useWorkspace()
@@ -76,6 +78,8 @@ function ProjectDetail({ projectId }: { projectId: string }) {
         作成 {formatTaskDateTime(project.createdAt)}
       </Typography>
       <ProjectCompletionControl key={project.id} project={project} onRevealOpenTasks={requestRevealOpenTasks} />
+      {/* 削除（フェーズ5.6）。完了の条件とは別の操作（未完了・完了済みのどちらでも削除できる） */}
+      <ProjectDeleteControl key={`delete-${project.id}`} project={project} />
       <Typography variant="caption" color="text.secondary" component="p" sx={{ m: 0 }}>
         タスクを選択すると、ここにタスクの詳細を表示します。
       </Typography>

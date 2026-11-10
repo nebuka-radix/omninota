@@ -22,6 +22,7 @@ import { useWorkspace } from '../workspace/WorkspaceContext'
 import { AssignMenu } from './AssignMenu'
 import { buildTaskGroups, milestonesOf, type Assignment } from './assignment'
 import { SortHeader, TASK_LIST_HELP_ID, TaskList } from './TaskList'
+import { TaskRowMenu, useTaskDeletion } from './TaskDeletion'
 import { TaskQuickAdd } from './TaskQuickAdd'
 import {
   taskListQueryOptions,
@@ -62,6 +63,8 @@ const STATUS_LABELS: Record<TaskStatusFilter, string> = { open: '未完了', com
 // - プロジェクト: マイルストン別のカード（MilestoneBoard）。カードごとに別の仮想リスト。検索・状態・ソートは全カード共通。
 //   常設の追加欄は置かず、各カードの NEW TASK・末尾の NEW MILESTONE から登録する。
 // - Inbox: 従来どおりの追加欄と一覧（カード表示にはしない）。
+// フェーズ5.6:
+// - Inbox・カードの行から削除できる（行のメニュー「…」・右クリック・Shift+F10 / ContextMenu、Delete キー）。確認後に物理削除する。
 export function TaskScopeView({
   scope,
   scopeLabel,
@@ -97,6 +100,8 @@ export function TaskScopeView({
   const setAssignment = useSetTaskAssignmentMutation()
   // 紐付けメニューの対象（Inbox）
   const [assignTarget, setAssignTarget] = useState<{ task: TaskDto; anchor: HTMLElement } | null>(null)
+  // 行のメニューの対象（フェーズ5.6）
+  const [rowMenu, setRowMenu] = useState<{ task: TaskDto; anchor: HTMLElement } | null>(null)
   const scopeKey = taskScopeKey(scope)
   // 呼び出し側が毎回新しいオブジェクトを渡しても、範囲が同じなら同じ値を使う（Tableの絞り込みを作り直さない）
   const stableScope = useMemo(() => scope, [scopeKey]) // scope は scopeKey と一対一
@@ -189,6 +194,11 @@ export function TaskScopeView({
     )
   }
 
+  const deletion = useTaskDeletion({ onDeleted: (task) => setAnnouncement(`「${task.title}」を削除しました`) })
+  // 保存中のタスクでも削除を要求できる（確認の前に、その保存が終わるのを待つ。useTaskDeletion）
+  const openRowMenu = (task: TaskDto, anchor: HTMLElement) => setRowMenu({ task, anchor })
+  const requestDelete = (task: TaskDto) => deletion.request(task)
+
   const resetScrollKey = `${scopeKey}\u0000${search}\u0000${status}\u0000${JSON.stringify(sorting)}\u0000${revealOpenRequest}`
   const handleSort = (column: TaskSortColumn) => onSortingChange((current) => nextSorting(current, column))
 
@@ -254,7 +264,7 @@ export function TaskScopeView({
         </Box>
         <Typography id={TASK_LIST_HELP_ID} variant="caption" color="text.secondary" component="p" sx={{ mb: 1 }}>
           一覧の操作: ↑↓ で移動、Enter で選択、Space で完了／未完了の切り替え
-          {scope.kind === 'inbox' ? '、M で紐付け' : '、← → で隣のカードへ'}
+          {scope.kind === 'inbox' ? '、M で紐付け' : '、← → で隣のカードへ'}、Delete で削除、Shift+F10 でメニュー
         </Typography>
         <Box
           role="status"
@@ -328,6 +338,9 @@ export function TaskScopeView({
               onSort={handleSort}
               onSelect={(taskId) => void handleSelect(taskId)}
               onToggleCompleted={(task) => void handleToggleCompleted(task)}
+              onRequestRowMenu={openRowMenu}
+              onRequestDelete={requestDelete}
+              onAnnounce={setAnnouncement}
             />
           ) : (
             <TaskList
@@ -335,6 +348,8 @@ export function TaskScopeView({
               onRequestAssign={
                 scope.kind === 'inbox' ? (task, anchor) => !pendingTaskIds.has(task.id) && setAssignTarget({ task, anchor }) : undefined
               }
+              onRequestRowMenu={openRowMenu}
+              onRequestDelete={requestDelete}
               totalCount={scopeCount}
               selectedTaskId={selectedTaskId}
               pendingTaskIds={pendingTaskIds}
@@ -347,6 +362,16 @@ export function TaskScopeView({
           )}
         </>
       )}
+      {rowMenu && (
+        <TaskRowMenu
+          task={rowMenu.task}
+          anchor={rowMenu.anchor}
+          onAssign={scope.kind === 'inbox' ? () => setAssignTarget(rowMenu) : undefined}
+          onDelete={() => requestDelete(rowMenu.task)}
+          onClose={() => setRowMenu(null)}
+        />
+      )}
+      {deletion.dialog}
       {assignTarget && (
         <AssignMenu
           task={assignTarget.task}

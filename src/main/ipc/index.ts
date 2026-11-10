@@ -3,17 +3,22 @@ import { IPC_CHANNELS, type AppInfo } from '../../shared/contracts/ipc'
 import { appGetInfoArgsSchema } from '../../shared/validation/app'
 import {
   milestonesCreateArgsSchema,
+  milestonesDeleteArgsSchema,
+  milestonesGetDeletionSummaryArgsSchema,
   milestonesListArgsSchema,
   milestonesRenameArgsSchema
 } from '../../shared/validation/milestones'
 import {
   projectsCreateArgsSchema,
+  projectsDeleteArgsSchema,
+  projectsGetDeletionSummaryArgsSchema,
   projectsListArgsSchema,
   projectsRenameArgsSchema,
   projectsSetCompletedArgsSchema
 } from '../../shared/validation/projects'
 import {
   tasksCreateArgsSchema,
+  tasksDeleteArgsSchema,
   tasksListArgsSchema,
   tasksSetCompletedArgsSchema,
   tasksSetAssignmentArgsSchema,
@@ -105,6 +110,16 @@ export function registerIpcHandlers(deps: {
   )
 
   ipcMain.handle(
+    IPC_CHANNELS.tasksDelete,
+    createIpcHandler({
+      channel: IPC_CHANNELS.tasksDelete,
+      argsSchema: tasksDeleteArgsSchema,
+      policy,
+      run: ([input]) => taskService.delete(input)
+    })
+  )
+
+  ipcMain.handle(
     IPC_CHANNELS.milestonesList,
     createIpcHandler({
       channel: IPC_CHANNELS.milestonesList,
@@ -131,6 +146,26 @@ export function registerIpcHandlers(deps: {
       argsSchema: milestonesRenameArgsSchema,
       policy,
       run: ([input]) => milestoneService.rename(input)
+    })
+  )
+
+  ipcMain.handle(
+    IPC_CHANNELS.milestonesGetDeletionSummary,
+    createIpcHandler({
+      channel: IPC_CHANNELS.milestonesGetDeletionSummary,
+      argsSchema: milestonesGetDeletionSummaryArgsSchema,
+      policy,
+      run: ([input]) => milestoneService.getDeletionSummary(input)
+    })
+  )
+
+  ipcMain.handle(
+    IPC_CHANNELS.milestonesDelete,
+    createIpcHandler({
+      channel: IPC_CHANNELS.milestonesDelete,
+      argsSchema: milestonesDeleteArgsSchema,
+      policy,
+      run: ([input]) => milestoneService.delete(input)
     })
   )
 
@@ -171,6 +206,26 @@ export function registerIpcHandlers(deps: {
       argsSchema: projectsSetCompletedArgsSchema,
       policy,
       run: ([input]) => projectService.setCompleted(input)
+    })
+  )
+
+  ipcMain.handle(
+    IPC_CHANNELS.projectsGetDeletionSummary,
+    createIpcHandler({
+      channel: IPC_CHANNELS.projectsGetDeletionSummary,
+      argsSchema: projectsGetDeletionSummaryArgsSchema,
+      policy,
+      run: ([input]) => projectService.getDeletionSummary(input)
+    })
+  )
+
+  ipcMain.handle(
+    IPC_CHANNELS.projectsDelete,
+    createIpcHandler({
+      channel: IPC_CHANNELS.projectsDelete,
+      argsSchema: projectsDeleteArgsSchema,
+      policy,
+      run: ([input]) => projectService.delete(input)
     })
   )
 

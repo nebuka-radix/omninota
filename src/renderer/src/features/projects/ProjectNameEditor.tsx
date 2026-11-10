@@ -86,6 +86,8 @@ export function ProjectNameEditor({ project }: { project: ProjectDto | null }) {
       create.reset()
       return
     }
+    // 再描画を待たずに「未保存なし」にする（破棄の直後の画面移動で、破棄した入力を未保存と誤認しない。フェーズ5.6）
+    latest.current.dirty = false
     setDraft(project.name)
     setEditing(false)
     rename.reset()

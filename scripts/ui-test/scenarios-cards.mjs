@@ -6,7 +6,7 @@ import { randomUUID } from 'node:crypto'
 import { writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { createRequire } from 'node:module'
-import { assert, closeInlineCreate, createDatabaseAt, openDatabaseReadOnly, PROJECT_ROOT, requestQuit, sleep } from './lib.mjs'
+import { assert, closeInlineCreate, createDatabaseAt, firstMilestoneId, openDatabaseReadOnly, PROJECT_ROOT, requestQuit, sleep } from './lib.mjs'
 
 const require = createRequire(join(PROJECT_ROOT, 'package.json'))
 
@@ -49,7 +49,7 @@ export function cardScenarios({ withApp, root }) {
       left: Math.round(e.getBoundingClientRect().left),
       tasks: [...e.querySelectorAll('[role=option]')].sort((a, b) => a.getBoundingClientRect().top - b.getBoundingClientRect().top).map((o) => o.dataset.taskId)
     }))`)
-  const newTaskSel = (milestoneId) => `[data-testid="new-task-${milestoneId ?? 'unset'}"]`
+  const newTaskSel = (milestoneId) => `[data-testid="new-task-${milestoneId}"]`
   const openNewTask = async (c, milestoneId) => {
     await c.click(`document.querySelector('${newTaskSel(milestoneId)} button')`)
     await c.waitFor(`document.activeElement === document.querySelector('${newTaskSel(milestoneId)} input')`, 3000, 'NEW TASK の入力欄へフォーカス')
@@ -150,7 +150,7 @@ export function cardScenarios({ withApp, root }) {
             editing: !!document.querySelector('[data-testid=project-name-editor]'),
             value: document.querySelector(${JSON.stringify(input)}).value,
             note: document.querySelector('[data-testid=new-project-note]')?.textContent,
-            newTask: document.querySelector('[data-testid=new-task-unset-button]')?.disabled,
+            newTask: document.querySelector('[data-testid=new-task-placeholder-button]')?.disabled,
             newMilestone: document.querySelector('[data-testid=new-milestone-button]')?.disabled,
             completion: !!document.querySelector('[data-testid=project-completion-button]'),
             status: !!document.querySelector('[data-testid=project-status]'),
@@ -239,7 +239,11 @@ export function cardScenarios({ withApp, root }) {
             '作成したプロジェクトの編集画面・サイドバーで選択・不要な確認なし',
             after
           )
-          assert(after.cards === 1 && after.status === '未完了', '作成後はカード（未設定）と右の状態を表示', after)
+          assert(after.cards === 1 && after.status === '未完了', '作成後はカード（新しいマイルストン）と右の状態を表示', after)
+          // 5.6: 作成と同時に「新しいマイルストン」が1件だけ（二重送信でも重複しない）
+          const createdMilestones = (await api(c, 'window.gtd.milestones.list()')).filter((m) => m.projectId === ids.created)
+          const cardLabel = await c.evaluate(`document.querySelector('[data-testid=milestone-card] [data-testid=group-label]')?.textContent`)
+          assert(createdMilestones.length === 1 && createdMilestones[0].name === '新しいマイルストン' && cardLabel === '新しいマイルストン', '初期マイルストンを1件だけ作成', { createdMilestones, cardLabel })
           // 作成後の別画面への移動でも確認を出さない
           await c.click(`document.querySelector('nav button[aria-label="Inbox"]')`)
           await c.waitFor(`location.hash === '#/inbox'`, 3000, '作成後に移動')
@@ -280,7 +284,7 @@ export function cardScenarios({ withApp, root }) {
         withApp({ label: 'detail-55', userDataDir: dir }, async (app) => {
           const c = app.cdp
           ids.p = (await api(c, `window.gtd.projects.create({ name: '状態の確認' })`)).id
-          ids.pt = (await api(c, `window.gtd.tasks.create({ title: '残りのタスク', projectId: ${JSON.stringify(ids.p)} })`)).id
+          ids.pt = (await api(c, `window.gtd.tasks.create({ title: '残りのタスク', projectId: ${JSON.stringify(ids.p)}, milestoneId: ${JSON.stringify(await firstMilestoneId(c, ids.p))} })`)).id
           await reload(c)
           await openProject(c, ids.p)
           const layout = await c.evaluate(`({
@@ -336,16 +340,17 @@ export function cardScenarios({ withApp, root }) {
         })
     ],
     [
-      'カード: マイルストン別（作成順・空も表示・最後に未設定・その後に NEW MILESTONE）、旧登録欄なし、NEW MILESTONE／NEW TASK の登録先・取消・空名・失敗時の入力保持、共通の検索・状態・ソート、カード見出しから名前変更',
+      'カード: マイルストン別（作成順・空も表示・未設定のカードはない・最後に NEW MILESTONE）、旧登録欄なし、NEW MILESTONE／NEW TASK の登録先・取消・空名・失敗時の入力保持、共通の検索・状態・ソート、カード見出しから名前変更',
       () =>
         withApp({ label: 'cards', userDataDir: dir }, async (app) => {
           const c = app.cdp
           ids.cp = (await api(c, `window.gtd.projects.create({ name: 'カード確認' })`)).id
+          ids.cpInitial = await firstMilestoneId(c, ids.cp)
           ids.m1 = (await api(c, `window.gtd.milestones.create({ projectId: ${JSON.stringify(ids.cp)}, name: 'M1' })`)).id
           ids.m2 = (await api(c, `window.gtd.milestones.create({ projectId: ${JSON.stringify(ids.cp)}, name: 'M2' })`)).id
           ids.c1 = (await api(c, `window.gtd.tasks.create({ title: 'b-M1のタスク', projectId: ${JSON.stringify(ids.cp)}, milestoneId: ${JSON.stringify(ids.m1)} })`)).id
           ids.c2 = (await api(c, `window.gtd.tasks.create({ title: 'a-M1のタスク', projectId: ${JSON.stringify(ids.cp)}, milestoneId: ${JSON.stringify(ids.m1)} })`)).id
-          ids.c3 = (await api(c, `window.gtd.tasks.create({ title: '未設定のタスク', projectId: ${JSON.stringify(ids.cp)} })`)).id
+          ids.c3 = (await api(c, `window.gtd.tasks.create({ title: '初期のタスク', projectId: ${JSON.stringify(ids.cp)}, milestoneId: ${JSON.stringify(ids.cpInitial)} })`)).id
           await reload(c)
           await openProject(c, ids.cp)
           const gone = await c.evaluate(`({
@@ -358,18 +363,18 @@ export function cardScenarios({ withApp, root }) {
           let list = await cards(c)
           assert(
             JSON.stringify(list.map((x) => [x.key, x.label, x.count])) ===
-              JSON.stringify([[`group:${ids.m1}`, 'M1', '2 件'], [`group:${ids.m2}`, 'M2', '0 件'], ['group:unset', 'マイルストン未設定', '1 件']]),
-            'マイルストンの作成順・空のM2も表示・最後に未設定',
+              JSON.stringify([[`group:${ids.cpInitial}`, '新しいマイルストン', '1 件'], [`group:${ids.m1}`, 'M1', '2 件'], [`group:${ids.m2}`, 'M2', '0 件']]),
+            'マイルストンの作成順（作成時の「新しいマイルストン」が先頭）・空のM2も表示・未設定のカードはない',
             list
           )
-          assert(JSON.stringify(list[0].tasks) === JSON.stringify([ids.c2, ids.c1]) && JSON.stringify(list[2].tasks) === JSON.stringify([ids.c3]), 'カード内に所属タスクを表示（作成日時の降順）', list)
+          assert(JSON.stringify(list[1].tasks) === JSON.stringify([ids.c2, ids.c1]) && JSON.stringify(list[0].tasks) === JSON.stringify([ids.c3]), 'カード内に所属タスクを表示（作成日時の降順）', list)
           const placement = await c.evaluate(`(() => {
             const cardsEl = [...document.querySelectorAll('[data-testid=milestone-card]')]
             const nm = document.querySelector('[data-testid=new-milestone]')
             const lastCard = cardsEl.at(-1).getBoundingClientRect()
-            return { sameRow: cardsEl.every((e) => Math.abs(e.getBoundingClientRect().top - cardsEl[0].getBoundingClientRect().top) < 2), afterUnset: nm.getBoundingClientRect().left >= lastCard.right - 1 }
+            return { sameRow: cardsEl.every((e) => Math.abs(e.getBoundingClientRect().top - cardsEl[0].getBoundingClientRect().top) < 2), afterLast: nm.getBoundingClientRect().left >= lastCard.right - 1 }
           })()`)
-          assert(placement.sameRow && placement.afterUnset, 'カードは横並び、NEW MILESTONE は未設定カードの後', placement)
+          assert(placement.sameRow && placement.afterLast, 'カードは横並び、NEW MILESTONE は最後のカードの後', placement)
 
           // NEW MILESTONE: 取消（Esc）・空名では作らない・登録（Enter）
           const milestoneCount = async () => (await api(c, 'window.gtd.milestones.list()')).filter((m) => m.projectId === ids.cp).length
@@ -378,13 +383,13 @@ export function cardScenarios({ withApp, root }) {
           await c.insertText('取り消すM')
           await c.key('Escape', 27)
           await c.waitFor(`document.activeElement === document.querySelector('[data-testid=new-milestone-button]')`, 3000, 'Escで閉じてボタンへフォーカス')
-          assert((await milestoneCount()) === 2, 'Escでは作らない')
+          assert((await milestoneCount()) === 3, 'Escでは作らない')
           await c.click(`document.querySelector('[data-testid=new-milestone-button]')`)
           await c.waitFor(`document.activeElement === document.querySelector('[data-testid=new-milestone] input')`, 3000, 'インライン入力（2回目）')
           await c.insertText('   ')
           await c.enter()
           await sleep(300)
-          assert((await milestoneCount()) === 2 && (await c.evaluate(`document.querySelector('[data-testid=new-milestone] button[type=submit]').disabled`)), '空白だけでは作らない（保存ボタンも無効）')
+          assert((await milestoneCount()) === 3 && (await c.evaluate(`document.querySelector('[data-testid=new-milestone] button[type=submit]').disabled`)), '空白だけでは作らない（保存ボタンも無効）')
           await c.click(c.byText('[data-testid=new-milestone] button', 'キャンセル'))
           await c.click(`document.querySelector('[data-testid=new-milestone-button]')`)
           await c.waitFor(`document.activeElement === document.querySelector('[data-testid=new-milestone] input')`, 3000, 'インライン入力（3回目）')
@@ -393,7 +398,7 @@ export function cardScenarios({ withApp, root }) {
           await c.waitFor(`[...document.querySelectorAll('[data-testid=group-label]')].some((e) => e.textContent === 'M3')`, 5000, 'M3のカード')
           ids.m3 = (await api(c, 'window.gtd.milestones.list()')).find((m) => m.name === 'M3').id
           list = await cards(c)
-          assert(list.map((x) => x.key).join() === [`group:${ids.m1}`, `group:${ids.m2}`, `group:${ids.m3}`, 'group:unset'].join(), '新しいカードは未設定の前（作成順）', list.map((x) => x.key))
+          assert(list.map((x) => x.key).join() === [`group:${ids.cpInitial}`, `group:${ids.m1}`, `group:${ids.m2}`, `group:${ids.m3}`].join(), '新しいカードは最後（作成順）', list.map((x) => x.key))
 
           // NEW TASK: カードごとの登録先。M2で入力を始め、途中で別カード（M1）のタスクを選んでも、登録先はM2のまま
           await openNewTask(c, ids.m2)
@@ -407,15 +412,15 @@ export function cardScenarios({ withApp, root }) {
           assert(m2Task.projectId === ids.cp && m2Task.milestoneId === ids.m2, 'マイルストンのカードは projectId と milestoneId を指定（最後に選んだ別カードを引き継がない）', m2Task)
           await c.waitFor(`document.activeElement === document.querySelector('${newTaskSel(ids.m2)} input') && document.activeElement.value === ''`, 3000, '登録後は入力欄を空にして続けて入力できる')
           await closeInlineCreate(c, `new-task-${ids.m2}`)
-          // 未設定カード: projectId だけ（milestoneId = null）。保存ボタンでも登録できる
-          await openNewTask(c, null)
-          await c.insertText('未設定に入るタスク')
-          await c.click(c.byText(`${newTaskSel(null)} button`, '追加'))
-          await c.waitFor(`(async () => (await window.gtd.tasks.list()).data.some((t) => t.title === '未設定に入るタスク'))()`, 5000, '未設定に登録')
-          const unsetTask = (await tasks(c)).find((t) => t.title === '未設定に入るタスク')
-          assert(unsetTask.projectId === ids.cp && unsetTask.milestoneId === null, '未設定カードは milestoneId = null', unsetTask)
+          // 初期マイルストンのカード: 保存ボタンでも登録できる
+          await openNewTask(c, ids.cpInitial)
+          await c.insertText('初期に入るタスク')
+          await c.click(c.byText(`${newTaskSel(ids.cpInitial)} button`, '追加'))
+          await c.waitFor(`(async () => (await window.gtd.tasks.list()).data.some((t) => t.title === '初期に入るタスク'))()`, 5000, '初期マイルストンに登録')
+          const initialTask = (await tasks(c)).find((t) => t.title === '初期に入るタスク')
+          assert(initialTask.projectId === ids.cp && initialTask.milestoneId === ids.cpInitial, 'カードのマイルストンに所属', initialTask)
           // 取消・空名
-          await closeInlineCreate(c, 'new-task-unset')
+          await closeInlineCreate(c, `new-task-${ids.cpInitial}`)
           await openNewTask(c, ids.m1)
           await c.insertText('取り消すタスク')
           await c.key('Escape', 27)
@@ -456,14 +461,14 @@ export function cardScenarios({ withApp, root }) {
           await c.setInput('input[aria-label="タイトルで絞り込み"]', 'M1のタスク')
           await sleep(300)
           list = await cards(c)
-          assert(list.length === 4 && list[0].tasks.length === 2 && list.slice(1).every((x) => x.tasks.length === 0), '検索は全カード共通・0件のカードも残す', list.map((x) => [x.label, x.tasks.length]))
+          assert(list.length === 4 && list[1].tasks.length === 2 && list.filter((_, i) => i !== 1).every((x) => x.tasks.length === 0), '検索は全カード共通・0件のカードも残す', list.map((x) => [x.label, x.tasks.length]))
           await c.click(`document.querySelector('[aria-label^="タイトルで並べ替え"]')`)
           await sleep(300)
           list = await cards(c)
-          assert(JSON.stringify(list[0].tasks) === JSON.stringify([ids.c2, ids.c1]), 'タイトル順（a → b）', list[0].tasks)
+          assert(JSON.stringify(list[1].tasks) === JSON.stringify([ids.c2, ids.c1]), 'タイトル順（a → b）', list[1].tasks)
           await c.click(`document.querySelector('[aria-label^="タイトルで並べ替え"]')`)
           await sleep(300)
-          assert(JSON.stringify((await cards(c))[0].tasks) === JSON.stringify([ids.c1, ids.c2]), 'タイトル降順（b → a）')
+          assert(JSON.stringify((await cards(c))[1].tasks) === JSON.stringify([ids.c1, ids.c2]), 'タイトル降順（b → a）')
           await c.setInput('input[aria-label="タイトルで絞り込み"]', '')
           await api(c, `window.gtd.tasks.setCompleted({ id: ${JSON.stringify(ids.c3)}, completed: true })`)
           await reload(c)
@@ -471,7 +476,7 @@ export function cardScenarios({ withApp, root }) {
           await c.click(c.byText('button', '完了'))
           await sleep(300)
           list = await cards(c)
-          assert(list.length === 4 && JSON.stringify(list.map((x) => x.tasks.length)) === JSON.stringify([0, 0, 0, 1]) && list[3].tasks[0] === ids.c3, '状態フィルターも全カード共通', list.map((x) => x.tasks))
+          assert(list.length === 4 && JSON.stringify(list.map((x) => x.tasks.length)) === JSON.stringify([1, 0, 0, 0]) && list[0].tasks[0] === ids.c3, '状態フィルターも全カード共通', list.map((x) => x.tasks))
           await c.click(c.byText('button', 'すべて'))
 
           // 完了切り替え（Space）・選択（Enter）・詳細の表示（カードの一覧で）
@@ -488,7 +493,7 @@ export function cardScenarios({ withApp, root }) {
           await c.waitFor(`(async () => (await window.gtd.tasks.list()).data.find((t) => t.id === ${JSON.stringify(ids.c1)}).milestoneId === ${JSON.stringify(ids.m3)})()`, 5000, '所属変更')
           await sleep(300)
           list = await cards(c)
-          assert(list.find((x) => x.key === `group:${ids.m3}`).tasks.includes(ids.c1) && !list[0].tasks.includes(ids.c1), 'M3のカードへ移る', list.map((x) => x.tasks))
+          assert(list.find((x) => x.key === `group:${ids.m3}`).tasks.includes(ids.c1) && !list[1].tasks.includes(ids.c1), 'M3のカードへ移る', list.map((x) => x.tasks))
           assert((await c.evaluate(`document.querySelector('[data-testid=task-editor] input:not([type=hidden])').value`)) === 'b-M1のタスク（ドラフト）', 'タイトルのドラフトを保持')
           await c.click(c.byText('[data-testid=task-editor] button', '変更を取り消す'))
 
@@ -524,7 +529,7 @@ export function cardScenarios({ withApp, root }) {
           const before = await workspace(c)
           assert(before.milestoneCardWidth === 320 && before.sidebarWidth === 260 && before.detailWidth === 340, '初期幅320px（既存の左右の幅は保持）', before)
           let list = await cards(c)
-          assert(list.every((x) => x.width === 320), '全カード（未設定を含む）が同じ幅', list.map((x) => x.width))
+          assert(list.every((x) => x.width === 320), '全カードが同じ幅', list.map((x) => x.width))
           const aria = await c.evaluate(`(() => { const h = document.querySelector('[data-testid=card-resize-handle]'); return { role: h.getAttribute('role'), name: h.getAttribute('aria-label'), now: h.getAttribute('aria-valuenow'), min: h.getAttribute('aria-valuemin'), max: h.getAttribute('aria-valuemax'), orientation: h.getAttribute('aria-orientation'), tab: h.tabIndex, inListbox: !!h.closest('[role=listbox]') } })()`)
           assert(aria.role === 'separator' && aria.name.includes('カードの幅') && aria.now === '320' && aria.min === '240' && aria.max === '640' && aria.orientation === 'vertical' && aria.tab === 0 && !aria.inListbox, 'ハンドルの名前・現在値・最小・最大（一覧の外）', aria)
 
@@ -621,13 +626,14 @@ export function cardScenarios({ withApp, root }) {
         })
     ],
     [
-      '大量データ（4,000件・マイルストン5つ）: カードごとの仮想化、← → でカード間を移動、End、aria-activedescendant は描画済みの行だけ、カードの高さは画面内',
+      '大量データ（4,000件・マイルストン6つ）: カードごとの仮想化、← → でカード間を移動、End、aria-activedescendant は描画済みの行だけ、カードの高さは画面内',
       async () => {
         const db = await createDatabaseAt(join(bulkDir, 'gtd.sqlite'))
         const projectId = randomUUID()
         db.prepare('INSERT INTO projects (id, name, created_at, updated_at, completed_at) VALUES (?, ?, ?, ?, NULL)').run(projectId, '大量', 'a', 'a')
         const milestoneIds = []
-        for (let i = 0; i < 5; i++) {
+        // 5.6: プロジェクトのタスクは必ずマイルストンに所属する（5.5までの「未設定」の代わりに6つ目のマイルストン）
+        for (let i = 0; i < 6; i++) {
           const id = randomUUID()
           milestoneIds.push(id)
           const at = `2026-11-0${i + 1}T00:00:00.000Z`
@@ -638,7 +644,7 @@ export function cardScenarios({ withApp, root }) {
         db.transaction(() => {
           for (let i = 0; i < 4000; i++) {
             const id = randomUUID()
-            const milestoneId = i % 6 === 5 ? null : milestoneIds[i % 6]
+            const milestoneId = milestoneIds[i % 6]
             const at = new Date(Date.UTC(2026, 9, 1) + i * 1000).toISOString()
             insert.run(id, `タスク ${i}`, at, at, null, projectId, milestoneId)
             rows.push({ id, createdAt: at, milestoneId })

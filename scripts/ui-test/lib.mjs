@@ -303,3 +303,10 @@ export async function closeInlineCreate(c, testId) {
   await c.waitFor(`document.activeElement === document.querySelector('[data-testid="${testId}-button"]')`, 3000, `${testId} のボタンへフォーカス`)
   await sleep(100)
 }
+
+// プロジェクトの最初のマイルストン（作成時に自動で作られる「新しいマイルストン」。フェーズ5.6）のID。なければ null
+export async function firstMilestoneId(c, projectId) {
+  return c.evaluate(
+    `window.gtd.milestones.list().then((r) => r.data.filter((m) => m.projectId === ${JSON.stringify(projectId)}).sort((a, b) => (a.createdAt < b.createdAt ? -1 : a.createdAt > b.createdAt ? 1 : a.id < b.id ? -1 : 1))[0]?.id ?? null)`
+  )
+}
