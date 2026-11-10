@@ -1,4 +1,5 @@
-// Inbox一覧のTanStack Table（v9）設定。表示対象（絞り込み）と順序（ソート）はTableが決める。
+// タスク一覧（Inbox・プロジェクト）のTanStack Table（v9）設定。表示対象（絞り込み）と順序（ソート）はTableが決める。
+// 表示範囲（所属）・状態・検索をすべてTableの絞り込みとして組み合わせる。データは全件Queryのまま（フェーズ5.2）。
 // features・columnsはモジュールに置いて安定させる（毎回作り直すと行モデルが作り直されるため）。
 import {
   columnFilteringFeature,
@@ -13,6 +14,7 @@ import {
   type SortingState
 } from '@tanstack/react-table'
 import type { TaskDto } from '../../../../shared/contracts/tasks'
+import { isTaskInScope, type TaskScope } from './task-scope'
 
 export const taskTableFeatures = tableFeatures({
   columnFilteringFeature,
@@ -27,7 +29,7 @@ export const taskTableFeatures = tableFeatures({
 export type TaskStatusFilter = 'open' | 'completed' | 'all'
 export type TaskSortColumn = 'title' | 'createdAt'
 
-export const TASK_COLUMN_IDS = { title: 'title', createdAt: 'createdAt', status: 'status' } as const
+export const TASK_COLUMN_IDS = { title: 'title', createdAt: 'createdAt', status: 'status', scope: 'scope' } as const
 
 const helper = createColumnHelper<typeof taskTableFeatures, TaskDto>()
 
@@ -57,6 +59,13 @@ export const taskColumns = helper.columns([
     enableGlobalFilter: false,
     filterFn: (row, columnId, filterValue: TaskStatusFilter) =>
       filterValue === 'all' || row.getValue(columnId) === filterValue
+  }),
+  // 表示しない列。表示範囲（Inbox = 未所属 / プロジェクト）の絞り込みに使う（フェーズ5.2）
+  helper.accessor((task) => task.projectId, {
+    id: TASK_COLUMN_IDS.scope,
+    enableSorting: false,
+    enableGlobalFilter: false,
+    filterFn: (row, _columnId, scope: TaskScope) => isTaskInScope(row.original, scope)
   })
 ])
 
@@ -65,6 +74,11 @@ export const DEFAULT_TASK_STATUS: TaskStatusFilter = 'open'
 
 export function statusFilterState(status: TaskStatusFilter): ColumnFiltersState {
   return [{ id: TASK_COLUMN_IDS.status, value: status }]
+}
+
+// 表示範囲と状態の絞り込み（検索はglobalFilterで別に指定する）
+export function scopeAndStatusFilterState(scope: TaskScope, status: TaskStatusFilter): ColumnFiltersState {
+  return [{ id: TASK_COLUMN_IDS.scope, value: scope }, ...statusFilterState(status)]
 }
 
 // 列見出しのクリックでのソート切り替え。同じ列なら昇順・降順を入れ替え、別の列なら既定の向きで始める。

@@ -63,8 +63,11 @@ WAL使用中は、稼働中のDBファイルを単純コピーしてもバック
 | created_at | TEXT NOT NULL | UTCのISO 8601文字列（例: `2026-11-09T10:00:00.000Z`） |
 | updated_at | TEXT NOT NULL | 同上。作成時は created_at と同じ値 |
 | completed_at | TEXT（NULL可） | 完了日時（UTCのISO 8601）。未完了ならNULL（フェーズ4・0002_add_task_completed_at） |
+| project_id | TEXT（NULL可）REFERENCES projects(id) | 所属するプロジェクト。NULLは未所属（Inbox）。0件または1件（フェーズ5.2・0004_add_task_project_id） |
 
-- 索引: `tasks_created_at_id_idx (created_at, id)`
+- 索引: `tasks_created_at_id_idx (created_at, id)`、`tasks_project_id_idx (project_id)`（フェーズ5.2）
+- 外部キー: `project_id → projects.id`。ON DELETE は指定しない（既定の NO ACTION。プロジェクトの削除は初期版の対象外）。
+  接続時に `foreign_keys = ON` を設定しているため、存在しないプロジェクトIDは保存できない。
 - 一覧の並び順: `created_at DESC, id DESC`（同じ作成日時でも常に同じ順序）
 - 日時は固定長・UTC固定のため、文字列の大小比較が時刻順と一致する。
 - 完了状態は completed_at だけから導出する（isCompleted のような列は持たない）。
@@ -77,9 +80,15 @@ WAL使用中は、稼働中のDBファイルを単純コピーしてもバック
 | 完了にする（未完了の場合のみ） | 現在日時 | 同じ現在日時 | 変えない |
 | 未完了に戻す（完了の場合のみ） | NULL | 現在日時 | 変えない |
 | 既に目的の状態・同じタイトル | 変えない | 変えない | 変えない |
+| 所属の変更・解除（保存済みと異なる場合のみ。フェーズ5.2） | 変えない | 現在日時 | 変えない |
+| 同じ所属への再要求 | 変えない | 変えない | 変えない |
 
 - 既存タスク（フェーズ3以前）は、マイグレーション後に未完了（NULL）として扱う。
-- プロジェクト、タグ、期限などは後続フェーズでマイグレーションにより追加する。
+- 既存タスク（フェーズ5.1以前）は、0004の適用後に未所属（project_id = NULL）として扱う。
+- 所属の変更でID・タイトル・作成日時・完了日時は変えない。
+- タスクの作成・所属の変更では、移動先プロジェクトの存在・未完了の確認と更新を1つのトランザクション（BEGIN IMMEDIATE）で行う
+  （`src/main/db/transaction.ts`）。完了済みプロジェクトへの追加・移動は拒否し、完了済みからの移動（未所属・別の未完了へ）は許可する。
+- タグ、期限などは後続フェーズでマイグレーションにより追加する。
 
 ### app_settings（フェーズ3・0001_add_app_settings）
 
@@ -153,7 +162,7 @@ WAL使用中は、稼働中のDBファイルを単純コピーしてもバック
 
 - 名前変更は、前後空白を除いた名前が保存済みと同じなら更新しない（updated_atも変えない）。存在しないIDは NOT_FOUND。
 - DBからの取得順は作成日時・IDの昇順。画面の表示順（未完了 → 完了、名前順）はRendererで決める。
-- タスクとの関連（`tasks.project_id`、外部キー・索引）は5.2で追加する。
+- タスクとの関連は `tasks.project_id`（フェーズ5.2で追加。上記 tasks を参照）。
 - 0003は新しいテーブルの追加だけで、既存の tasks・app_settings は変更しない。
   フェーズ4のスキーマ（0000〜0002）からの移行で、タスク（完了状態を含む）とWorkspace設定が保持されること、
   再実行で何も適用されないことを結合テストで確認した（`tests/main/migration-upgrade.test.ts`）。
@@ -183,6 +192,19 @@ WAL使用中は、稼働中のDBファイルを単純コピーしてもバック
 |---|---|
 | 開発・preview | `<プロジェクト>/migrations`（`app.getAppPath()` 基準） |
 | パッケージ版 | `GTD.app/Contents/Resources/migrations`（electron-builderの `extraResources`） |
+
+### 0004_add_task_project_id（フェーズ5.2）
+
+- 生成SQL: `ALTER TABLE tasks ADD project_id text REFERENCES projects(id)` と `CREATE INDEX tasks_project_id_idx`。
+  テーブルの再作成はしない（既存の行はそのまま残り、新しい列はNULL）。過去のマイグレーション（0000〜0003）は変更していない。
+- スキーマ定義（`src/main/db/schema/tasks.ts`）を変更して `npm run db:generate -- --name add_task_project_id` で生成した
+  （SQLとスナップショット `meta/0004_snapshot.json` は一致している。SQLだけを手で書き換えていない）。
+- 確認: 結合テスト（`tests/main/migration-upgrade.test.ts`）とUIテスト（`npm run test:ui` の「移行」シナリオ）で、
+  一時DBに0000〜0003を適用してタスク・プロジェクト・Workspace設定を登録した後に現在のマイグレーションを適用し、
+  データの保持・既存タスクの未所属・外部キーと索引・再実行で何も適用されないことを確認した。
+- **既存のDB（通常利用 GTD・開発 GTD-dev）は、次にアプリを通常起動した時に0004が適用される。**
+  適用前に、アプリを終了した状態で下記「手動バックアップ」の手順で整合性のあるバックアップを取ること。
+  フェーズ5.2の作業では、通常利用DB・開発DBへの適用・起動はしていない（2026-11-10時点: 通常利用DBは0002まで、開発DBは0003まで）。
 
 将来のスキーマ更新前バックアップは、`src/main/db/migrate.ts` の `runMigrations()` 先頭
 （未適用のマイグレーションがある場合）に追加する。

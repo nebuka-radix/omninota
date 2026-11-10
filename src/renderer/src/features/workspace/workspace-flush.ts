@@ -1,4 +1,5 @@
 import type { WorkspaceFlushOutcome } from '../../../../shared/contracts/ipc'
+import { taskSaveQueue } from '../tasks/task-save-queue'
 import { processFlushRequest, type DraftExitHandlers, type FlushResponse } from './flush-request-handler'
 
 // 終了・ウィンドウを閉じる前の問い合わせに応答する。
@@ -49,7 +50,8 @@ export function installWorkspaceFlushListener(): () => void {
         response = await processFlushRequest(request.draftAction, {
           draft: currentDraftHandlers,
           flushWorkspace: currentHandler,
-          waitForPendingCommits
+          waitForPendingCommits,
+          waitForTaskSaves: () => taskSaveQueue.waitForIdle()
         })
       } catch (error) {
         console.error('[workspace] 終了前の保存確認に失敗しました', error)

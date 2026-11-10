@@ -30,8 +30,17 @@ function insertOldTasks(db: AppDatabase): void {
   for (const task of oldTasks) insert.run(task.id, task.title, task.at, task.at)
 }
 const expectedAfterUpgrade = oldTasks
-  .map((task) => ({ id: task.id, title: task.title, createdAt: task.at, updatedAt: task.at, completedAt: null }))
-  .reverse() // 新しい順
+  .map((task) => ({ id: task.id, title: task.title, createdAt: task.at, updatedAt: task.at, completedAt: null, projectId: null }))
+  .reverse() // 新しい順（既存タスクは未所属で移行される）
+
+// 旧スキーマのDBから、当時の列だけでタスクを読む（現在のRepositoryは新しい列も選択するため使わない）
+function readOldTasks(db: AppDatabase) {
+  return db.$client
+    .prepare(
+      'SELECT id, title, created_at AS createdAt, updated_at AS updatedAt, completed_at AS completedAt FROM tasks ORDER BY created_at DESC, id DESC'
+    )
+    .all() as Record<string, unknown>[]
+}
 
 describe('既存データを保持したマイグレーション', () => {
   let temp: ReturnType<typeof createTempDir>
@@ -90,12 +99,12 @@ describe('既存データを保持したマイグレーション', () => {
     insertOldTasks(old)
     old.$client.prepare('UPDATE tasks SET completed_at = ? WHERE id = ?').run('2026-11-09T05:00:00.000Z', oldTasks[0]?.id)
     createSettingsRepository(old).upsert({ key: 'workspace', value: workspaceValue, updatedAt: '2026-11-09T03:00:00.000Z' })
-    const before = createTaskRepository(old).listAll()
+    const before = readOldTasks(old)
     closeDatabase(old)
 
     const upgraded = openDatabase(dbFile)
     expect(runMigrations(upgraded, MIGRATIONS_DIR)).toEqual({ appliedBefore: 3, appliedAfter: MIGRATION_COUNT })
-    expect(createTaskRepository(upgraded).listAll()).toEqual(before)
+    expect(createTaskRepository(upgraded).listAll()).toEqual(before.map((task) => ({ ...task, projectId: null })))
     expect(createSettingsRepository(upgraded).get('workspace')?.value).toBe(workspaceValue)
     expect(upgraded.$client.prepare('SELECT COUNT(*) AS c FROM projects').get()).toEqual({ c: 0 })
     closeDatabase(upgraded)
@@ -143,6 +152,66 @@ describe('既存データを保持したマイグレーション', () => {
       appliedBefore: MIGRATION_COUNT,
       appliedAfter: MIGRATION_COUNT
     })
+    closeDatabase(restarted)
+  })
+
+  it('フェーズ5.1（projectsまで）→ 現在: tasks.project_id を追加し、タスク・プロジェクト・Workspace設定を保持する', () => {
+    const dbFile = join(temp.dir, 'gtd.sqlite')
+    const oldMigrations = join(temp.dir, 'migrations-phase51')
+    createPartialMigrations(oldMigrations, 4)
+    const projectId = '33333333-3333-4333-8333-333333333333'
+    const workspaceValue = JSON.stringify({
+      version: 1,
+      sidebarWidth: 260,
+      detailWidth: 340,
+      detailVisible: true,
+      lastRoute: `/projects/${projectId}`
+    })
+    const projectRows = [
+      { id: projectId, name: '仕事', at: '2026-11-09T04:00:00.000Z', completedAt: null },
+      { id: '44444444-4444-4444-8444-444444444444', name: '完了済み', at: '2026-11-09T04:30:00.000Z', completedAt: '2026-11-09T06:00:00.000Z' }
+    ]
+
+    const old = openDatabase(dbFile)
+    expect(runMigrations(old, oldMigrations)).toEqual({ appliedBefore: 0, appliedAfter: 4 })
+    insertOldTasks(old)
+    old.$client.prepare('UPDATE tasks SET completed_at = ? WHERE id = ?').run('2026-11-09T05:00:00.000Z', oldTasks[1]?.id)
+    const insertProject = old.$client.prepare(
+      'INSERT INTO projects (id, name, created_at, updated_at, completed_at) VALUES (?, ?, ?, ?, ?)'
+    )
+    for (const project of projectRows) insertProject.run(project.id, project.name, project.at, project.at, project.completedAt)
+    createSettingsRepository(old).upsert({ key: 'workspace', value: workspaceValue, updatedAt: '2026-11-09T03:00:00.000Z' })
+    const beforeTasks = readOldTasks(old)
+    const beforeProjects = old.$client.prepare('SELECT * FROM projects ORDER BY id').all()
+    closeDatabase(old)
+
+    const upgraded = openDatabase(dbFile)
+    expect(runMigrations(upgraded, MIGRATIONS_DIR)).toEqual({ appliedBefore: 4, appliedAfter: MIGRATION_COUNT })
+    // 既存タスクはID・タイトル・日時・完了日時を保持し、未所属（projectId = null）になる
+    expect(createTaskRepository(upgraded).listAll()).toEqual(beforeTasks.map((task) => ({ ...task, projectId: null })))
+    expect(upgraded.$client.prepare('SELECT * FROM projects ORDER BY id').all()).toEqual(beforeProjects)
+    expect(createSettingsRepository(upgraded).get('workspace')?.value).toBe(workspaceValue)
+
+    // 外部キー（projects.id）と索引
+    expect(upgraded.$client.prepare('PRAGMA foreign_key_list(tasks)').all()).toEqual([
+      expect.objectContaining({ table: 'projects', from: 'project_id', to: 'id' })
+    ])
+    const indexes = upgraded.$client.prepare('PRAGMA index_list(tasks)').all() as { name: string }[]
+    expect(indexes.map((index) => index.name)).toContain('tasks_project_id_idx')
+    expect(upgraded.$client.prepare('PRAGMA foreign_key_check').all()).toEqual([])
+    expect(() =>
+      upgraded.$client
+        .prepare('UPDATE tasks SET project_id = ? WHERE id = ?')
+        .run('55555555-5555-4555-8555-555555555555', oldTasks[0]?.id)
+    ).toThrow(/FOREIGN KEY/)
+    closeDatabase(upgraded)
+
+    const restarted = openDatabase(dbFile)
+    expect(runMigrations(restarted, MIGRATIONS_DIR)).toEqual({
+      appliedBefore: MIGRATION_COUNT,
+      appliedAfter: MIGRATION_COUNT
+    })
+    expect(createTaskRepository(restarted).listAll()).toEqual(beforeTasks.map((task) => ({ ...task, projectId: null })))
     closeDatabase(restarted)
   })
 })

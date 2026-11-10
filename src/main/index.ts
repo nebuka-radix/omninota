@@ -5,6 +5,7 @@ import { APP_IDENTITY } from '../shared/app-identity'
 import { IPC_CHANNELS, type AppInfo } from '../shared/contracts/ipc'
 import { closeDatabase, openDatabase, type AppDatabase } from './db/client'
 import { runMigrations } from './db/migrate'
+import { createTransactionRunner } from './db/transaction'
 import { resolveDatabaseFile, resolveMigrationsDir, resolveUserDataDir } from './infrastructure/app-paths'
 import { fitWindowBounds, resolveTestMode, selectTestDisplay } from './infrastructure/test-mode'
 import { registerIpcHandlers } from './ipc'
@@ -282,11 +283,16 @@ if (!app.requestSingleInstanceLock()) {
     }
 
     // マイグレーション完了後にIPC（タスクAPI）を登録する。
+    const projectRepository = createProjectRepository(database)
     registerIpcHandlers({
       policy: { getWindow: () => mainWindow, isAllowedUrl: isAppUrl },
       getAppInfo,
-      taskService: createTaskService({ repository: createTaskRepository(database) }),
-      projectService: createProjectService({ repository: createProjectRepository(database) }),
+      taskService: createTaskService({
+        repository: createTaskRepository(database),
+        findProject: projectRepository.findById,
+        transaction: createTransactionRunner(database)
+      }),
+      projectService: createProjectService({ repository: projectRepository }),
       workspaceSettingsService: createWorkspaceSettingsService({
         repository: createSettingsRepository(database)
       }),

@@ -4,8 +4,10 @@
 // Mainの入力検証とRendererの入力欄で共通に使う。
 export const TASK_TITLE_MAX_LENGTH = 200
 
+// projectId: 作成するタスクの所属先（フェーズ5.2）。省略・nullなら未所属（Inbox）。
 export type CreateTaskInput = {
   title: string
+  projectId?: string | null
 }
 
 export type UpdateTaskTitleInput = {
@@ -20,6 +22,12 @@ export type SetTaskCompletedInput = {
   completed: boolean
 }
 
+// 所属の変更・解除（フェーズ5.2）。projectId: null で未所属にする。目的の状態を指定する（同じなら変更しない）。
+export type SetTaskProjectInput = {
+  id: string
+  projectId: string | null
+}
+
 // 日時はUTCのISO 8601文字列（例: 2026-11-09T10:00:00.000Z）
 // completedAt: 未完了ならnull。完了状態はcompletedAtだけから導出する。
 export type TaskDto = {
@@ -28,6 +36,8 @@ export type TaskDto = {
   createdAt: string
   updatedAt: string
   completedAt: string | null
+  // 所属するプロジェクトのID。nullは未所属（フェーズ5.2）
+  projectId: string | null
 }
 
 export function isTaskCompleted(task: Pick<TaskDto, 'completedAt'>): boolean {

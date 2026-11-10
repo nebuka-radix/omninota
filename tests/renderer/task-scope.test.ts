@@ -1,0 +1,201 @@
+import { constructTable, tableFeatures, type SortingState } from '@tanstack/react-table'
+import { storeReactivityBindings } from '@tanstack/table-core/store-reactivity-bindings'
+import { describe, expect, it } from 'vitest'
+import { buildProjectOptions, toProjectIdValue } from '../../src/renderer/src/features/tasks/project-options'
+import { createTaskSaveQueue } from '../../src/renderer/src/features/tasks/task-save-queue'
+import { INBOX_SCOPE, isTaskInScope, scopeProjectId, taskScopeKey, type TaskScope } from '../../src/renderer/src/features/tasks/task-scope'
+import {
+  DEFAULT_TASK_SORTING,
+  scopeAndStatusFilterState,
+  taskColumns,
+  taskTableFeatures,
+  taskTableOptions,
+  type TaskStatusFilter
+} from '../../src/renderer/src/features/tasks/task-table'
+import type { ProjectDto } from '../../src/shared/contracts/projects'
+import type { TaskDto } from '../../src/shared/contracts/tasks'
+
+const P1 = '00000000-0000-4000-8000-000000000001'
+const P2 = '00000000-0000-4000-8000-000000000002'
+
+const task = (id: string, title: string, projectId: string | null, completed = false, createdAt = '2026-11-10T00:00:00.000Z'): TaskDto => ({
+  id,
+  title,
+  createdAt,
+  updatedAt: createdAt,
+  completedAt: completed ? '2026-11-10T01:00:00.000Z' : null,
+  projectId
+})
+
+describe('表示範囲（Inbox / プロジェクト）', () => {
+  it('Inboxは未所属、プロジェクトはそのプロジェクトのタスクだけ', () => {
+    const project: TaskScope = { kind: 'project', projectId: P1 }
+    expect(isTaskInScope(task('a', 'a', null), INBOX_SCOPE)).toBe(true)
+    expect(isTaskInScope(task('a', 'a', P1), INBOX_SCOPE)).toBe(false)
+    expect(isTaskInScope(task('a', 'a', P1), project)).toBe(true)
+    expect(isTaskInScope(task('a', 'a', P2), project)).toBe(false)
+    expect(isTaskInScope(task('a', 'a', null), project)).toBe(false)
+  })
+
+  it('作成時の所属先: Inboxはnull、プロジェクトはそのID', () => {
+    expect(scopeProjectId(INBOX_SCOPE)).toBeNull()
+    expect(scopeProjectId({ kind: 'project', projectId: P1 })).toBe(P1)
+  })
+
+  it('範囲の識別子は範囲ごとに異なる', () => {
+    expect(new Set([taskScopeKey(INBOX_SCOPE), taskScopeKey({ kind: 'project', projectId: P1 }), taskScopeKey({ kind: 'project', projectId: P2 })]).size).toBe(3)
+  })
+})
+
+describe('Table: 表示範囲と状態・検索・ソートの組み合わせ', () => {
+  const headlessFeatures = tableFeatures({ ...taskTableFeatures, coreReactivityFeature: storeReactivityBindings() })
+  const data: TaskDto[] = [
+    task('i1', '牛乳', null, false, '2026-11-10T00:00:01.000Z'),
+    task('i2', '牛乳パック', null, true, '2026-11-10T00:00:02.000Z'),
+    task('p1', '牛乳の資料', P1, false, '2026-11-10T00:00:03.000Z'),
+    task('p2', '会議', P1, true, '2026-11-10T00:00:04.000Z'),
+    task('q1', '牛乳', P2, false, '2026-11-10T00:00:05.000Z')
+  ]
+  const ids = (scope: TaskScope, options: { status?: TaskStatusFilter; search?: string; sorting?: SortingState } = {}) =>
+    constructTable({
+      features: headlessFeatures,
+      columns: taskColumns,
+      data,
+      ...taskTableOptions,
+      state: {
+        sorting: options.sorting ?? DEFAULT_TASK_SORTING,
+        globalFilter: options.search ?? '',
+        columnFilters: scopeAndStatusFilterState(scope, options.status ?? 'all')
+      }
+    })
+      .getRowModel()
+      .rows.map((row) => row.id)
+
+  it('範囲だけ', () => {
+    expect(ids(INBOX_SCOPE)).toEqual(['i2', 'i1'])
+    expect(ids({ kind: 'project', projectId: P1 })).toEqual(['p2', 'p1'])
+    expect(ids({ kind: 'project', projectId: P2 })).toEqual(['q1'])
+  })
+
+  it('範囲 × 状態 × 検索 × ソート', () => {
+    expect(ids(INBOX_SCOPE, { status: 'open', search: '牛乳' })).toEqual(['i1'])
+    expect(ids(INBOX_SCOPE, { status: 'completed' })).toEqual(['i2'])
+    expect(ids({ kind: 'project', projectId: P1 }, { search: '牛乳' })).toEqual(['p1'])
+    expect(ids({ kind: 'project', projectId: P1 }, { sorting: [{ id: 'title', desc: false }] })).toEqual(['p2', 'p1'])
+    expect(ids(INBOX_SCOPE, { sorting: [{ id: 'createdAt', desc: false }] })).toEqual(['i1', 'i2'])
+  })
+})
+
+describe('詳細パネルの所属の選択肢', () => {
+  const project = (id: string, name: string, createdAt: string, completedAt: string | null = null): ProjectDto => ({
+    id,
+    name,
+    createdAt,
+    updatedAt: createdAt,
+    completedAt
+  })
+  const work1 = project('aaaaaaaa-0000-4000-8000-000000000001', '仕事', '2026-11-01T00:00:00.000Z')
+  const work2 = project('bbbbbbbb-0000-4000-8000-000000000002', '仕事', '2026-11-02T00:00:00.000Z')
+  const home = project('cccccccc-0000-4000-8000-000000000003', '家', '2026-11-03T00:00:00.000Z')
+  const done = project('dddddddd-0000-4000-8000-000000000004', '完了P', '2026-11-04T00:00:00.000Z', '2026-11-05T00:00:00.000Z')
+
+  it('未所属と未完了プロジェクトを選べる。完了済みは候補に出さない', () => {
+    const options = buildProjectOptions([work1, home, done], null)
+    expect(options.map((option) => option.value)).toEqual(['', home.id, work1.id])
+    expect(options[0]).toEqual({ value: '', label: '未所属（Inbox）', disabled: false })
+    expect(options.every((option) => !option.disabled)).toBe(true)
+  })
+
+  it('同名のプロジェクトはIDで区別し、作成日時とIDの先頭を補助情報として付ける', () => {
+    const options = buildProjectOptions([work2, work1, home], null)
+    const labels = options.filter((option) => option.value === work1.id || option.value === work2.id).map((option) => option.label)
+    expect(new Set(options.map((option) => option.value)).size).toBe(options.length)
+    expect(labels[0]).toContain('ID aaaaaaaa')
+    expect(labels[1]).toContain('ID bbbbbbbb')
+    expect(labels[0]).not.toBe(labels[1])
+    expect(options.find((option) => option.value === home.id)?.label).toBe('家')
+  })
+
+  it('現在の所属が完了済みなら、その名前を「完了済み」として表示する（選択不可。空欄・未所属に見せない）', () => {
+    const options = buildProjectOptions([work1, done], done.id)
+    expect(options.find((option) => option.value === done.id)).toEqual({ value: done.id, label: '完了P（完了済み）', disabled: true })
+  })
+
+  it('一覧にない所属は「不明なプロジェクト」として値を保つ', () => {
+    const missing = 'eeeeeeee-0000-4000-8000-000000000005'
+    expect(buildProjectOptions([work1], missing).at(-1)).toEqual({ value: missing, label: '不明なプロジェクト', disabled: true })
+  })
+
+  it('選択値の変換（空文字 = 未所属）', () => {
+    expect(toProjectIdValue('')).toBeNull()
+    expect(toProjectIdValue(work1.id)).toBe(work1.id)
+  })
+})
+
+describe('同じタスクの更新を順番に実行する（task-save-queue）', () => {
+  const deferred = <T,>() => {
+    let resolve!: (value: T) => void
+    let reject!: (reason: unknown) => void
+    const promise = new Promise<T>((res, rej) => {
+      resolve = res
+      reject = rej
+    })
+    return { promise, resolve, reject }
+  }
+  const tick = () => new Promise((resolve) => setTimeout(resolve, 0))
+
+  it('同じタスクは前の更新が終わってから実行し、応答も実行順に届く（古い応答で新しい値を上書きしない）', async () => {
+    const queue = createTaskSaveQueue()
+    const order: string[] = []
+    const first = deferred<string>()
+    const a = queue.run('t1', () => (order.push('start project'), first.promise))
+    const b = queue.run('t1', async () => (order.push('start title'), 'title-saved'))
+    const results: string[] = []
+    void a.then((value) => results.push(value))
+    void b.then((value) => results.push(value))
+    await tick()
+    expect(order).toEqual(['start project']) // タイトルの保存は所属の保存を待つ
+    first.resolve('project-saved')
+    await b
+    expect(order).toEqual(['start project', 'start title'])
+    expect(results).toEqual(['project-saved', 'title-saved'])
+  })
+
+  it('前の更新が失敗しても、次の更新は実行する。別のタスクは待たない', async () => {
+    const queue = createTaskSaveQueue()
+    const blocker = deferred<string>()
+    const failed = queue.run('t1', async () => {
+      throw new Error('失敗')
+    })
+    const next = queue.run('t1', async () => 'ok')
+    const other = queue.run('t2', () => blocker.promise)
+    await expect(failed).rejects.toThrow('失敗')
+    await expect(next).resolves.toBe('ok')
+    blocker.resolve('other')
+    await expect(other).resolves.toBe('other')
+  })
+
+  it('waitForIdle: 進行中の更新が終わるまで待ち、1つでも失敗していればfalse。何もなければすぐtrue', async () => {
+    const queue = createTaskSaveQueue()
+    expect(await queue.waitForIdle()).toBe(true)
+    const pending = deferred<string>()
+    void queue.run('t1', () => pending.promise)
+    let settled: boolean | null = null
+    void queue.waitForIdle().then((value) => (settled = value))
+    await tick()
+    expect(settled).toBeNull()
+    pending.resolve('ok')
+    await tick()
+    await tick()
+    expect(settled).toBe(true)
+
+    const failing = deferred<string>()
+    const run = queue.run('t1', () => failing.promise)
+    run.catch(() => {})
+    const waiting = queue.waitForIdle()
+    failing.reject(new Error('保存失敗'))
+    expect(await waiting).toBe(false)
+    // 終わった失敗は、次の待機には影響しない
+    expect(await queue.waitForIdle()).toBe(true)
+  })
+})

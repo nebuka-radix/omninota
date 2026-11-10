@@ -10,6 +10,7 @@ import {
   tasksCreateArgsSchema,
   tasksListArgsSchema,
   tasksSetCompletedArgsSchema,
+  tasksSetProjectArgsSchema,
   tasksUpdateTitleArgsSchema
 } from '../../shared/validation/tasks'
 import {
@@ -82,6 +83,16 @@ export function registerIpcHandlers(deps: {
       argsSchema: tasksSetCompletedArgsSchema,
       policy,
       run: ([input]) => taskService.setCompleted(input)
+    })
+  )
+
+  ipcMain.handle(
+    IPC_CHANNELS.tasksSetProject,
+    createIpcHandler({
+      channel: IPC_CHANNELS.tasksSetProject,
+      argsSchema: tasksSetProjectArgsSchema,
+      policy,
+      run: ([input]) => taskService.setProject(input)
     })
   )
 

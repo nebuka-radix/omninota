@@ -122,7 +122,8 @@ export function ProjectsSidebar({ pathname }: { pathname: string }) {
             >
               <ListItemText
                 primary={project.name}
-                slotProps={{ primary: { noWrap: true, sx: { fontSize: 13 } } }}
+                secondary={project.completedAt !== null ? '完了済み' : undefined}
+                slotProps={{ primary: { noWrap: true, sx: { fontSize: 13 } }, secondary: { sx: { fontSize: 11 } } }}
               />
             </ListItemButton>
           )

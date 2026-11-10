@@ -15,12 +15,15 @@ import { setWorkspaceFlushHandler } from './workspace-flush'
 // - settings: 保存対象（左右ペインの希望幅・詳細パネル表示・最後の画面）
 //   幅はユーザーが境界線を直接操作して決めた「希望幅」。画面上の実寸はAppShellが計算する。
 // - selectedTaskId: 詳細パネルの表示対象（保存しない）
+// - selectionScope: 選択した時の一覧の表示範囲（Inbox / プロジェクト。フェーズ5.2）。
+//   別の範囲の一覧を開いたら選択を解除する（同じ範囲へ戻った時は維持する）
 // - 現在の画面はRouterが正本。lastRouteは次回起動用のスナップショットとして追従させる。
 type State = {
   settings: WorkspaceSettings
   // ユーザー操作で設定が変わるたびに増やす。0の間（起動直後）は保存しない。
   revision: number
   selectedTaskId: string | null
+  selectionScope: string | null
   saveStatus: SaveStatus
 }
 
@@ -30,6 +33,7 @@ type Action =
   | { type: 'setDetailVisible'; visible: boolean }
   | { type: 'setLastRoute'; route: WorkspaceRoute }
   | { type: 'selectTask'; taskId: string | null }
+  | { type: 'enterScope'; scope: string }
   | { type: 'setSaveStatus'; status: SaveStatus }
 
 function updateSettings(state: State, patch: Partial<WorkspaceSettings>): State {
@@ -50,6 +54,9 @@ function reducer(state: State, action: Action): State {
       return updateSettings(state, { lastRoute: action.route })
     case 'selectTask':
       return state.selectedTaskId === action.taskId ? state : { ...state, selectedTaskId: action.taskId }
+    case 'enterScope':
+      if (state.selectionScope === action.scope) return state
+      return { ...state, selectionScope: action.scope, selectedTaskId: null }
     case 'setSaveStatus':
       return state.saveStatus === action.status ? state : { ...state, saveStatus: action.status }
   }
@@ -65,6 +72,8 @@ type WorkspaceContextValue = {
   setDetailWidth: (width: number) => void
   setDetailVisible: (visible: boolean) => void
   selectTask: (taskId: string | null) => void
+  // 一覧（表示範囲）を開いた時に呼ぶ。前回と別の範囲なら選択を解除する
+  enterTaskScope: (scope: string) => void
 }
 
 const WorkspaceContext = createContext<WorkspaceContextValue | null>(null)
@@ -82,6 +91,7 @@ export function WorkspaceProvider({
     settings: initialSettings,
     revision: 0,
     selectedTaskId: null,
+    selectionScope: null,
     saveStatus: 'idle'
   })
 
@@ -136,7 +146,8 @@ export function WorkspaceProvider({
       setSidebarWidth: (width) => dispatch({ type: 'setSidebarWidth', width }),
       setDetailWidth: (width) => dispatch({ type: 'setDetailWidth', width }),
       setDetailVisible: (visible) => dispatch({ type: 'setDetailVisible', visible }),
-      selectTask: (taskId) => dispatch({ type: 'selectTask', taskId })
+      selectTask: (taskId) => dispatch({ type: 'selectTask', taskId }),
+      enterTaskScope: (scope) => dispatch({ type: 'enterScope', scope })
     }),
     [state.settings, state.selectedTaskId, state.saveStatus, persistenceEnabled]
   )

@@ -11,7 +11,11 @@ const titleSchema = z
 // タスクIDはMain側で crypto.randomUUID() により生成したUUID
 const taskIdSchema = z.uuid({ error: 'タスクIDが正しくありません。' })
 
-export const createTaskInputSchema = z.strictObject({ title: titleSchema })
+// プロジェクトIDもMain側で生成したUUID。nullは未所属
+const projectIdSchema = z.uuid({ error: 'プロジェクトIDが正しくありません。' }).nullable()
+
+// projectId は省略可（フェーズ5.1までの呼び出しとの互換。省略時は未所属）
+export const createTaskInputSchema = z.strictObject({ title: titleSchema, projectId: projectIdSchema.optional() })
 
 export const updateTaskTitleInputSchema = z.strictObject({ id: taskIdSchema, title: titleSchema })
 
@@ -20,7 +24,10 @@ export const setTaskCompletedInputSchema = z.strictObject({
   completed: z.boolean({ error: '完了状態は true / false で指定してください。' })
 })
 
+export const setTaskProjectInputSchema = z.strictObject({ id: taskIdSchema, projectId: projectIdSchema })
+
 export const tasksCreateArgsSchema = z.tuple([createTaskInputSchema])
 export const tasksListArgsSchema = z.tuple([])
 export const tasksUpdateTitleArgsSchema = z.tuple([updateTaskTitleInputSchema])
 export const tasksSetCompletedArgsSchema = z.tuple([setTaskCompletedInputSchema])
+export const tasksSetProjectArgsSchema = z.tuple([setTaskProjectInputSchema])

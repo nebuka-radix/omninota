@@ -12,6 +12,8 @@ export type TaskRepository = {
   // 更新した行を返す。対象がなければundefined。
   updateTitle(id: string, title: string, updatedAt: string): TaskRow | undefined
   updateCompletedAt(id: string, completedAt: string | null, updatedAt: string): TaskRow | undefined
+  // 所属の変更・解除（フェーズ5.2）。projectIdの存在・状態の確認はServiceで行う（外部キーでも保証される）
+  updateProjectId(id: string, projectId: string | null, updatedAt: string): TaskRow | undefined
 }
 
 export function createTaskRepository(db: AppDatabase): TaskRepository {
@@ -30,6 +32,9 @@ export function createTaskRepository(db: AppDatabase): TaskRepository {
     },
     updateCompletedAt(id, completedAt, updatedAt) {
       return db.update(tasks).set({ completedAt, updatedAt }).where(eq(tasks.id, id)).returning().get()
+    },
+    updateProjectId(id, projectId, updatedAt) {
+      return db.update(tasks).set({ projectId, updatedAt }).where(eq(tasks.id, id)).returning().get()
     }
   }
 }

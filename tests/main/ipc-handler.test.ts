@@ -6,7 +6,7 @@ import { createIpcHandler, isTrustedSender, type InvokeEventLike, type SenderPol
 import { createTaskRepository } from '../../src/main/repositories/task-repository'
 import { createTaskService, type TaskService } from '../../src/main/services/task-service'
 import { tasksCreateArgsSchema, tasksListArgsSchema } from '../../src/shared/validation/tasks'
-import { createTempDir, MIGRATIONS_DIR } from '../helpers/temp-database'
+import { createTempDir, MIGRATIONS_DIR, taskServiceDeps } from '../helpers/temp-database'
 
 const APP_URL = 'file:///app/out/renderer/index.html#/inbox'
 const WINDOW_ID = 7
@@ -49,7 +49,7 @@ describe('Main側のIPCハンドラー（tasks.create / tasks.list）', () => {
     temp = createTempDir()
     db = openDatabase(join(temp.dir, 'gtd.sqlite'))
     runMigrations(db, MIGRATIONS_DIR)
-    service = createTaskService({ repository: createTaskRepository(db) })
+    service = createTaskService(taskServiceDeps(db))
     logger.warn.mockClear()
     logger.error.mockClear()
   })

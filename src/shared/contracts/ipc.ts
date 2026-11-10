@@ -1,7 +1,7 @@
 // IPC契約: 型とチャンネル名の定数だけを置く。実行時依存を持たない。
 // Main / Preload / Rendererのどこからimportしてもよい。
 import type { CreateProjectInput, ProjectDto, RenameProjectInput } from './projects'
-import type { CreateTaskInput, SetTaskCompletedInput, TaskDto, UpdateTaskTitleInput } from './tasks'
+import type { CreateTaskInput, SetTaskCompletedInput, SetTaskProjectInput, TaskDto, UpdateTaskTitleInput } from './tasks'
 import type { WorkspaceSettings } from './workspace'
 
 export const IPC_CHANNELS = {
@@ -10,6 +10,7 @@ export const IPC_CHANNELS = {
   tasksList: 'tasks:list',
   tasksUpdateTitle: 'tasks:update-title',
   tasksSetCompleted: 'tasks:set-completed',
+  tasksSetProject: 'tasks:set-project',
   projectsList: 'projects:list',
   projectsCreate: 'projects:create',
   projectsRename: 'projects:rename',
@@ -50,8 +51,9 @@ export type WorkspaceFlushResult = {
   draftKind?: DraftKind
 }
 
-// NOT_FOUND: 業務エラー（対象が存在しない）。その他は送信元・入力・予期しない障害。
-export type IpcErrorCode = 'FORBIDDEN' | 'INVALID_INPUT' | 'NOT_FOUND' | 'INTERNAL'
+// 業務エラー: NOT_FOUND（対象が存在しない）、CONFLICT（業務ルールにより実行できない。完了済みプロジェクトへの追加など。フェーズ5.2）。
+// その他は送信元・入力・予期しない障害。
+export type IpcErrorCode = 'FORBIDDEN' | 'INVALID_INPUT' | 'NOT_FOUND' | 'CONFLICT' | 'INTERNAL'
 
 export type IpcError = {
   code: IpcErrorCode
@@ -89,6 +91,8 @@ export type GtdApi = {
     // 用途別の更新API。任意の列は更新できない。成功時は保存後のタスクを返す。
     updateTitle: (input: UpdateTaskTitleInput) => Promise<IpcResult<TaskDto>>
     setCompleted: (input: SetTaskCompletedInput) => Promise<IpcResult<TaskDto>>
+    // 所属の変更・解除（フェーズ5.2）
+    setProject: (input: SetTaskProjectInput) => Promise<IpcResult<TaskDto>>
   }
   // 用途別のAPI（フェーズ5.1は一覧・作成・名前変更だけ。完了は5.3）
   projects: {

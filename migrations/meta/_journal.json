@@ -29,6 +29,13 @@
       "when": 1794224516358,
       "tag": "0003_add_projects",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1794271063391,
+      "tag": "0004_add_task_project_id",
+      "breakpoints": true
     }
   ]
 }

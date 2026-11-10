@@ -17,6 +17,7 @@ const task = (id: string, title: string, createdAt: string, completedAt: string 
   title,
   createdAt,
   updatedAt: createdAt,
+  projectId: null,
   completedAt
 })
 

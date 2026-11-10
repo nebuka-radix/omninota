@@ -2,10 +2,12 @@ import { queryOptions, useMutation, useMutationState, useQueryClient, type Query
 import type {
   CreateTaskInput,
   SetTaskCompletedInput,
+  SetTaskProjectInput,
   TaskDto,
   UpdateTaskTitleInput
 } from '../../../../shared/contracts/tasks'
 import { unwrapIpc } from '../../lib/ipc'
+import { taskSaveQueue } from './task-save-queue'
 
 export const taskKeys = {
   all: ['tasks'] as const,
@@ -15,21 +17,27 @@ export const taskKeys = {
 export const taskMutationKeys = {
   create: [...taskKeys.all, 'create'] as const,
   updateTitle: [...taskKeys.all, 'update-title'] as const,
-  setCompleted: [...taskKeys.all, 'set-completed'] as const
+  setCompleted: [...taskKeys.all, 'set-completed'] as const,
+  setProject: [...taskKeys.all, 'set-project'] as const
 }
 
-// タスク一覧の正本はこのQuery（全件）。一覧・詳細・件数はすべてここから導出する。
+// タスク一覧の正本はこのQuery（全件）。Inbox・プロジェクトの一覧、詳細、件数はすべてここから導出する。
+// 表示範囲（所属）はTableの絞り込みで決め、範囲ごとのQueryは作らない（フェーズ5.2）。
 export const taskListQueryOptions = queryOptions({
   queryKey: taskKeys.list(),
   queryFn: () => unwrapIpc(window.gtd.tasks.list())
 })
 
 // 更新成功時に、保存後のDTOで一覧キャッシュの該当行だけを置き換える。
-// 再取得しないので、一覧のスクロール位置や他の画面状態を初期化しない。
+// 再取得しないので、一覧のスクロール位置や他の画面状態を初期化しない。他のタスク・プロジェクトのキャッシュは変えない。
+// 一覧の再取得が進行中なら（更新前の状態を返す可能性があるため）、その結果で上書きされないよう取り直す。
 function replaceTaskInList(queryClient: QueryClient, saved: TaskDto): void {
   queryClient.setQueryData<TaskDto[]>(taskKeys.list(), (tasks) =>
     tasks?.map((task) => (task.id === saved.id ? saved : task))
   )
+  if (queryClient.isFetching({ queryKey: taskKeys.list() }) > 0) {
+    void queryClient.invalidateQueries({ queryKey: taskKeys.list() })
+  }
 }
 
 export function useCreateTaskMutation() {
@@ -42,11 +50,14 @@ export function useCreateTaskMutation() {
   })
 }
 
+// 既存タスクの更新は、同じタスクについて順番に1つずつ実行する（task-save-queue.ts）。
+// 各応答は保存後のタスク全体なので、最後に届いた応答が最新の状態になる（古いDTOで別の項目を上書きしない）。
 export function useUpdateTaskTitleMutation() {
   const queryClient = useQueryClient()
   return useMutation({
     mutationKey: taskMutationKeys.updateTitle,
-    mutationFn: (input: UpdateTaskTitleInput) => unwrapIpc(window.gtd.tasks.updateTitle(input)),
+    mutationFn: (input: UpdateTaskTitleInput) =>
+      taskSaveQueue.run(input.id, () => unwrapIpc(window.gtd.tasks.updateTitle(input))),
     onSuccess: (saved) => replaceTaskInList(queryClient, saved)
   })
 }
@@ -55,12 +66,24 @@ export function useSetTaskCompletedMutation() {
   const queryClient = useQueryClient()
   return useMutation({
     mutationKey: taskMutationKeys.setCompleted,
-    mutationFn: (input: SetTaskCompletedInput) => unwrapIpc(window.gtd.tasks.setCompleted(input)),
+    mutationFn: (input: SetTaskCompletedInput) =>
+      taskSaveQueue.run(input.id, () => unwrapIpc(window.gtd.tasks.setCompleted(input))),
     onSuccess: (saved) => replaceTaskInList(queryClient, saved)
   })
 }
 
-// 更新中（タイトル・完了状態）のタスクID。同じタスクへの重複更新を防ぐために使う。
+// 所属の変更・解除（フェーズ5.2）。詳細パネルで選んだら即時保存する。
+export function useSetTaskProjectMutation() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationKey: taskMutationKeys.setProject,
+    mutationFn: (input: SetTaskProjectInput) =>
+      taskSaveQueue.run(input.id, () => unwrapIpc(window.gtd.tasks.setProject(input))),
+    onSuccess: (saved) => replaceTaskInList(queryClient, saved)
+  })
+}
+
+// 更新中（タイトル・完了状態・所属）のタスクID。同じタスクへの重複操作を制限するために使う。
 export function usePendingTaskIds(): ReadonlySet<string> {
   const ids = useMutationState({
     filters: { status: 'pending', predicate: (mutation) => isTaskUpdateKey(mutation.options.mutationKey) },
@@ -76,10 +99,12 @@ export function usePendingTaskIds(): ReadonlySet<string> {
   return set
 }
 
+const TASK_UPDATE_KEYS: readonly unknown[] = [
+  taskMutationKeys.updateTitle[1],
+  taskMutationKeys.setCompleted[1],
+  taskMutationKeys.setProject[1]
+]
+
 function isTaskUpdateKey(key: readonly unknown[] | undefined): boolean {
-  return (
-    key !== undefined &&
-    key[0] === taskKeys.all[0] &&
-    (key[1] === taskMutationKeys.updateTitle[1] || key[1] === taskMutationKeys.setCompleted[1])
-  )
+  return key !== undefined && key[0] === taskKeys.all[0] && TASK_UPDATE_KEYS.includes(key[1])
 }

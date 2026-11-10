@@ -1,19 +1,21 @@
 import { Box, Typography } from '@mui/material'
 import { useQuery } from '@tanstack/react-query'
 import { taskListQueryOptions } from '../../features/tasks/task-queries'
+import { INBOX_SCOPE, isTaskInScope } from '../../features/tasks/task-scope'
 import { PaneHeader } from './PaneHeader'
 import { ProjectsSidebar } from '../../features/projects/ProjectsSidebar'
 import { SCREENS, screenOf } from './screens'
 
 function InboxSummary() {
-  // Inboxの一覧と同じQueryを使う（追加の取得APIは使わない）
+  // Inboxの一覧と同じQueryを使う（追加の取得APIは使わない）。Inboxはプロジェクトに属さないタスク（フェーズ5.2）
   const tasks = useQuery(taskListQueryOptions)
   let text: string
   if (tasks.isPending) text = '件数を読み込み中…'
   else if (tasks.isError) text = '件数を取得できませんでした'
   else {
-    const open = tasks.data.filter((task) => task.completedAt === null).length
-    text = `未完了 ${open} 件 / 全 ${tasks.data.length} 件`
+    const inbox = tasks.data.filter((task) => isTaskInScope(task, INBOX_SCOPE))
+    const open = inbox.filter((task) => task.completedAt === null).length
+    text = `未完了 ${open} 件 / 全 ${inbox.length} 件`
   }
   return (
     <Typography variant="body2" color="text.secondary" sx={{ px: 4 }}>

@@ -4,7 +4,7 @@ import { closeDatabase, openDatabase, type AppDatabase } from '../../src/main/db
 import { runMigrations } from '../../src/main/db/migrate'
 import { createTaskRepository } from '../../src/main/repositories/task-repository'
 import { createTaskService } from '../../src/main/services/task-service'
-import { createTempDir, MIGRATION_COUNT, MIGRATIONS_DIR } from '../helpers/temp-database'
+import { createTempDir, MIGRATION_COUNT, MIGRATIONS_DIR, taskServiceDeps } from '../helpers/temp-database'
 
 describe('DB・マイグレーション・Repository（ホストNode.js）', () => {
   let temp: ReturnType<typeof createTempDir>
@@ -55,7 +55,7 @@ describe('DB・マイグレーション・Repository（ホストNode.js）', () 
     const db = open()
     runMigrations(db, MIGRATIONS_DIR)
     const service = createTaskService({
-      repository: createTaskRepository(db),
+      ...taskServiceDeps(db),
       now: () => new Date('2026-11-09T01:02:03.004Z'),
       generateId: () => 'id-1'
     })
@@ -63,6 +63,7 @@ describe('DB・マイグレーション・Repository（ホストNode.js）', () 
     expect(created).toEqual({
       id: 'id-1',
       title: '牛乳を買う',
+      projectId: null,
       createdAt: '2026-11-09T01:02:03.004Z',
       updatedAt: '2026-11-09T01:02:03.004Z',
       completedAt: null

@@ -254,3 +254,38 @@ export function openDatabaseReadOnly(file) {
   const Database = require('better-sqlite3')
   return new Database(file, { readonly: true, fileMustExist: true })
 }
+
+// 一時DBを作り、先頭 count 件のマイグレーションだけを適用する（過去のフェーズのDBの再現・大量データの準備用）。
+// count を省略すると全件。アプリと同じ drizzle-orm の migrator を使う。テスト用の一時ディレクトリにだけ使うこと。
+export async function createDatabaseAt(file, count) {
+  const { copyFileSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } = await import('node:fs')
+  const { dirname } = await import('node:path')
+  const Database = require('better-sqlite3')
+  const { drizzle } = require('drizzle-orm/better-sqlite3')
+  const { migrate } = require('drizzle-orm/better-sqlite3/migrator')
+  const source = join(PROJECT_ROOT, 'migrations')
+  let folder = source
+  mkdirSync(dirname(file), { recursive: true })
+  if (count !== undefined) {
+    folder = mkdtempSync(join(dirname(file), 'migrations-'))
+    const journal = JSON.parse(readFileSync(join(source, 'meta', '_journal.json'), 'utf8'))
+    const entries = journal.entries.slice(0, count)
+    mkdirSync(join(folder, 'meta'), { recursive: true })
+    writeFileSync(join(folder, 'meta', '_journal.json'), JSON.stringify({ ...journal, entries }))
+    for (const entry of entries) copyFileSync(join(source, `${entry.tag}.sql`), join(folder, `${entry.tag}.sql`))
+  }
+  const sqlite = new Database(file)
+  sqlite.pragma('journal_mode = WAL')
+  sqlite.pragma('foreign_keys = ON')
+  sqlite.pragma('busy_timeout = 5000')
+  migrate(drizzle(sqlite), { migrationsFolder: folder })
+  return sqlite
+}
+
+// 起動中のアプリとは別の接続で、一時DBを書き換える（業務ルール違反をMain側で検出させる検証用）
+export function openDatabaseWritable(file) {
+  const Database = require('better-sqlite3')
+  const db = new Database(file, { fileMustExist: true })
+  db.pragma('busy_timeout = 5000')
+  return db
+}

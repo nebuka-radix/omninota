@@ -4,12 +4,15 @@ import { CircleCheck, RotateCcw, Save, Undo2 } from 'lucide-react'
 import { isTaskCompleted, TASK_TITLE_MAX_LENGTH, type TaskDto } from '../../../../shared/contracts/tasks'
 import { useDraftGuard } from '../drafts/DraftGuard'
 import { formatTaskDateTime } from './TaskList'
+import { TaskProjectField } from './TaskProjectField'
 import { usePendingTaskIds, useSetTaskCompletedMutation, useUpdateTaskTitleMutation } from './task-queries'
 
 // 詳細パネルのタスク編集。タイトルは明示的な保存方式（入力のたびには保存しない）。
 // - 入力中の値はドラフトとして持ち、同じタスクの一覧再取得では上書きしない（key=タスクIDで作り直す）。
 // - 保存成功後にだけ保存済みの値へ切り替える。失敗時は入力を残す。
 // - 別タスクの選択・画面遷移・パネルを閉じる・完了操作の前は DraftGuard で確認する。
+// - 所属の変更（TaskProjectField）は即時保存で、タイトルのドラフトとは独立している（フェーズ5.2）。
+//   同じタスクの更新は順番に実行されるため、タイトル保存と所属変更の応答が互いの新しい値を古い値で上書きしない。
 export function TaskEditor({ task }: { task: TaskDto }) {
   const [draft, setDraft] = useState(task.title)
   const updateTitle = useUpdateTaskTitleMutation()
@@ -156,6 +159,8 @@ export function TaskEditor({ task }: { task: TaskDto }) {
           完了状態を更新できませんでした: {setCompleted.error.message}
         </Alert>
       )}
+
+      <TaskProjectField task={task} busy={busy} />
 
       <Box component="dl" sx={{ display: 'grid', gridTemplateColumns: 'auto 1fr', columnGap: 3, rowGap: 1.5, mt: 4, mb: 0 }}>
         {dates

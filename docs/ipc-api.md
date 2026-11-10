@@ -19,7 +19,8 @@ type IpcResult<T> = { ok: true; data: T } | { ok: false; error: { code: IpcError
 |---|---|---|
 | FORBIDDEN | 送信元が自アプリのウィンドウのメインフレーム・許可URLではない | 固定文言 |
 | INVALID_INPUT | Zodの入力検証に失敗 | 最初の検証エラーの文言（画面表示用） |
-| NOT_FOUND | 業務エラー: 対象のタスクが存在しない | 固定文言（「対象のタスクが見つかりません。」） |
+| NOT_FOUND | 業務エラー: 対象が存在しない | 固定文言（「対象のタスクが見つかりません。」「対象のプロジェクトが見つかりません。」「指定したプロジェクトが見つかりません。」） |
+| CONFLICT | 業務エラー: 業務ルールにより実行できない（フェーズ5.2） | 固定文言（「完了済みのプロジェクトにはタスクを追加・移動できません。」） |
 | INTERNAL | 処理中の予期しないエラー | 固定文言。SQLやスタックはMainのログだけに出す |
 
 送信元検証の条件:
@@ -32,10 +33,11 @@ type IpcResult<T> = { ok: true; data: T } | { ok: false; error: { code: IpcError
 | window.gtd | チャンネル | 入力 | 出力 |
 |---|---|---|---|
 | `app.getInfo()` | `app:get-info` | なし | `AppInfo` |
-| `tasks.create(input)` | `tasks:create` | `{ title: string }` | `TaskDto` |
+| `tasks.create(input)` | `tasks:create` | `{ title: string, projectId?: string \| null }` | `TaskDto` |
 | `tasks.list()` | `tasks:list` | なし | `TaskDto[]` |
 | `tasks.updateTitle(input)` | `tasks:update-title` | `{ id, title }` | `TaskDto`（保存後） |
 | `tasks.setCompleted(input)` | `tasks:set-completed` | `{ id, completed }` | `TaskDto`（保存後） |
+| `tasks.setProject(input)` | `tasks:set-project` | `{ id, projectId: string \| null }` | `TaskDto`（保存後。フェーズ5.2） |
 | `projects.list()` | `projects:list` | なし | `ProjectDto[]` |
 | `projects.create(input)` | `projects:create` | `{ name }` | `ProjectDto` |
 | `projects.rename(input)` | `projects:rename` | `{ id, name }` | `ProjectDto`（保存後） |
@@ -71,10 +73,28 @@ type IpcResult<T> = { ok: true; data: T } | { ok: false; error: { code: IpcError
 - 既に目的の状態なら更新せず（日時を変えず）、そのままのタスクを返す。
 - 存在しないIDは NOT_FOUND。
 
+### tasks.create の所属・tasks.setProject（フェーズ5.2）
+
+- `tasks.create`: `projectId` は省略可（フェーズ5.1までの呼び出しと互換。省略・nullは未所属）。指定する場合はUUID。
+  指定したプロジェクトが存在しなければ NOT_FOUND（「指定したプロジェクトが見つかりません。」）、完了済みなら CONFLICT。
+- `tasks.setProject`: `projectId` は必須（解除は `null` で明示）。余分なキーは拒否。Main側の確認順:
+  1. タスクの存在（なければ NOT_FOUND「対象のタスクが見つかりません。」）
+  2. 既に同じ所属なら、変更しない成功（updatedAtも変えない。完了済みプロジェクトに所属中の再要求もエラーにしない）
+  3. 移動先プロジェクトの存在（NOT_FOUND「指定したプロジェクトが見つかりません。」）・未完了（CONFLICT）
+  4. 更新（updatedAt だけ更新。ID・タイトル・作成日時・完了日時は変えない）
+- 2〜4（作成では3〜4）は1つのトランザクションで行う。完了済みプロジェクトから外（未所属・別の未完了）への移動は許可する。
+
 ### TaskDto
 
 ```ts
-type TaskDto = { id: string; title: string; createdAt: string; updatedAt: string; completedAt: string | null } // 日時はUTCのISO 8601
+type TaskDto = {
+  id: string
+  title: string
+  createdAt: string
+  updatedAt: string
+  completedAt: string | null
+  projectId: string | null // 所属するプロジェクト。nullは未所属（フェーズ5.2）
+} // 日時はUTCのISO 8601
 ```
 
 ### projects.list / projects.create / projects.rename（フェーズ5.1）
@@ -118,6 +138,8 @@ type WorkspaceSettings = {
     / `draft-save-failed`（`save` でタイトル・プロジェクト名を保存できなかった。無効な入力を含む。フェーズ4.1、5.1で対象を追加）
   - `unsaved-draft` の場合、Mainは同じ終了フローのダイアログで「保存して終了 / 保存せずに終了 / キャンセル」を選んでもらう。
   - `draft-save-failed` の場合、Mainは終了・閉じる処理を中断する（ダイアログは重ねない）。
+  - 進行中のタスクの保存（所属の変更など）がある場合、Rendererはその完了を待ってから応答する。
+    失敗していれば `draft-save-failed` を返し、終了・閉じる処理を中断する（理由は画面に表示されている。フェーズ5.2）。
   - `draftKind`（任意、フェーズ5.1）: `task` / `project`。未保存ドラフトの対象で、終了時のダイアログの文言に使う。
     `unsaved-draft` / `draft-save-failed` の時に付ける。省略時はタスクのタイトルとして扱う（フェーズ4.1までの応答との互換）。
 - Main側の検証: 送信元検証に加え、`requestId` はUUID、`outcome` は上記4値、`draftKind` は上記2値、余分なキーは拒否。
@@ -130,9 +152,13 @@ type WorkspaceSettings = {
 - Queryキー: `['tasks', 'list']`（`src/renderer/src/features/tasks/task-queries.ts`）
 - タスク登録のMutationキー: `['tasks', 'create']`（StatusBarの「保存中」表示に使う）
 - `tasks.create` が成功した場合だけ、一覧のQueryを無効化して取り直す。
-- `tasks.updateTitle` / `tasks.setCompleted` が成功した場合は、返却されたDTOで一覧キャッシュの該当行だけを置き換える
-  （再取得しないので、スクロール位置や検索条件を初期化しない）。失敗時はキャッシュを変えない（楽観的更新はしない）。
-- 更新中のタスクID（`usePendingTaskIds`）の行・ボタンは、同じタスクへの重複更新を防ぐため無効にする。
+- `tasks.updateTitle` / `tasks.setCompleted` / `tasks.setProject` が成功した場合は、返却されたDTOで一覧キャッシュの該当行だけを置き換える
+  （再取得しないので、スクロール位置や検索条件を初期化しない。他のタスク・プロジェクトのキャッシュは変えない）。
+  失敗時はキャッシュを変えない（楽観的更新はしない）。一覧の再取得中だった場合は、更新前の結果で上書きされないよう取り直す。
+- 同じタスクへの更新（タイトル・完了・所属）は、Renderer内で順番に1つずつ送る（`task-save-queue.ts`、フェーズ5.2）。
+  各応答は保存後のタスク全体なので、最後の応答が最新の状態になり、古いDTOで別の項目を上書きしない。
+- 更新中のタスクID（`usePendingTaskIds`）の行・ボタン・所属の選択は、同じタスクへの重複操作を防ぐため無効にする。
+- Inbox・プロジェクトの一覧は同じ全件Query（`['tasks', 'list']`）から、Tableの絞り込みで表示範囲を決める（範囲ごとのQueryは作らない）。
 - Workspace設定は起動時に `['workspace', 'settings']` で1回だけ読み込み、以後はWorkspaceContextが正本。
   保存は最新値だけを順番に送るキューを通す。
 - `ok: false` は `IpcCallError` として扱い、画面に失敗を表示する。

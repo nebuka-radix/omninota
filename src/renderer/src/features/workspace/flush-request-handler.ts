@@ -20,6 +20,8 @@ export async function processFlushRequest(
     flushWorkspace: (() => Promise<WorkspaceFlushOutcome>) | null
     // 直前の操作で確定した値が保存キューに入るのを待つ
     waitForPendingCommits: () => Promise<void>
+    // 進行中のタスクの保存（所属の変更など）の完了を待つ。1つでも失敗していればfalse（フェーズ5.2）
+    waitForTaskSaves: () => Promise<boolean>
   }
 ): Promise<FlushResponse> {
   const { draft } = deps
@@ -27,6 +29,9 @@ export async function processFlushRequest(
     const kind = draft?.kind() ?? null
     return kind ? { outcome, draftKind: kind } : { outcome }
   }
+
+  // 進行中の保存が失敗した場合は続行しない（理由は画面に表示されている。黙って終了しない）
+  if (!(await deps.waitForTaskSaves())) return withKind('draft-save-failed')
 
   if (draftAction === 'save' && draft?.isDirty()) {
     // 保存するのは問い合わせ時点のドラフト。保存中は入力欄が読み取り専用になる

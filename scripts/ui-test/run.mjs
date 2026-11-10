@@ -16,6 +16,7 @@ import {
   sleep,
   TestFailure
 } from './lib.mjs'
+import { taskProjectScenarios } from './scenarios-task-projects.mjs'
 
 const args = process.argv.slice(2)
 const mode = args[0]
@@ -255,6 +256,9 @@ const scenarios = [
       })
   ]
 ]
+
+// フェーズ5.2: タスクのプロジェクト所属とプロジェクト内タスク表示
+scenarios.push(...taskProjectScenarios({ withApp, root }))
 
 console.log(`UIテスト（${mode}${displayId ? `、表示先 ${displayId}` : ''}）一時ディレクトリ: ${root}`)
 let failed = 0

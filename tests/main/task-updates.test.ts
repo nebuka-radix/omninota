@@ -10,7 +10,7 @@ import {
   tasksSetCompletedArgsSchema,
   tasksUpdateTitleArgsSchema
 } from '../../src/shared/validation/tasks'
-import { createTempDir, MIGRATIONS_DIR } from '../helpers/temp-database'
+import { createTempDir, MIGRATIONS_DIR, taskServiceDeps } from '../helpers/temp-database'
 
 const ID = '6f1c2f8e-3c1d-4f0a-9b7e-2a6d1f3c9e10'
 const MISSING_ID = '00000000-0000-4000-8000-000000000000'
@@ -36,7 +36,7 @@ describe('タスクの更新（Service・一時DB）', () => {
     dbFile = join(temp.dir, 'gtd.sqlite')
     db = openDatabase(dbFile)
     runMigrations(db, MIGRATIONS_DIR)
-    service = createTaskService({ repository: createTaskRepository(db), now: createClock(), generateId: () => ID })
+    service = createTaskService({ ...taskServiceDeps(db), now: createClock(), generateId: () => ID })
   })
 
   afterEach(() => {
@@ -126,7 +126,7 @@ describe('タスク更新APIの入力検証とエラー（IPCハンドラー）'
     temp = createTempDir()
     db = openDatabase(join(temp.dir, 'gtd.sqlite'))
     runMigrations(db, MIGRATIONS_DIR)
-    service = createTaskService({ repository: createTaskRepository(db), generateId: () => ID })
+    service = createTaskService({ ...taskServiceDeps(db), generateId: () => ID })
     service.create({ title: '元のタイトル' })
     logger.warn.mockClear()
     logger.error.mockClear()

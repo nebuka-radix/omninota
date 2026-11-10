@@ -2,6 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import { Button, Dialog, DialogActions, DialogContent, DialogContentText, DialogTitle } from '@mui/material'
 import { useBlocker } from '@tanstack/react-router'
 import type { DraftKind } from '../../../../shared/contracts/ipc'
+import { taskSaveQueue } from '../tasks/task-save-queue'
 import { setDraftExitHandlers } from '../workspace/workspace-flush'
 
 // 未保存の編集（ドラフト）を、黙って失わないための確認（フェーズ5.1でタスク名・プロジェクト名に一般化）。
@@ -24,6 +25,7 @@ export const DRAFT_LABELS: Record<DraftKind, string> = { task: 'タスクのタ�
 type DraftGuardValue = {
   register: (handle: DraftHandle) => () => void
   // 続行してよければtrue（未保存の編集がない・保存した・破棄した）。キャンセル・保存失敗ならfalse。
+  // 進行中のタスクの保存があれば、その完了を先に待つ（失敗していればfalse）。
   // target を指定すると、その対象の編集だけを確認する（完了操作など）。
   confirmLeave: (options?: { target?: { kind: DraftKind; id: string } }) => Promise<boolean>
 }
@@ -49,7 +51,10 @@ export function DraftGuardProvider({ children }: { children: ReactNode }) {
     }
   }, [])
 
-  const confirmLeave = useCallback((options?: { target?: { kind: DraftKind; id: string } }) => {
+  const confirmLeave = useCallback(async (options?: { target?: { kind: DraftKind; id: string } }) => {
+    // 進行中のタスクの保存（所属の変更など）が終わるまで待つ。失敗していれば移動しない
+    // （理由は詳細パネル・一覧に表示されている。黙って失わせない。フェーズ5.2）
+    if (!(await taskSaveQueue.waitForIdle())) return false
     const target = options?.target
     const targets = dirtyHandles().filter(
       (handle) => !target || (handle.kind === target.kind && handle.targetId === target.id)
