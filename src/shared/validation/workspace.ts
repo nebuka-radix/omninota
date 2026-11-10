@@ -24,7 +24,8 @@ export const workspaceSettingsSchema = z.strictObject({
   lastRoute: z.union([
     z.enum(WORKSPACE_STATIC_ROUTES),
     z.custom<ProjectRoute>((value) => typeof value === 'string' && PROJECT_ROUTE_PATTERN.test(value))
-  ])
+  ]),
+  milestoneCardWidth: width(WORKSPACE_LIMITS.milestoneCardWidth)
 })
 
 export const workspaceGetArgsSchema = z.tuple([])
@@ -48,12 +49,15 @@ const looseSchema = z.object({
   sidebarWidth: z.unknown(),
   detailWidth: z.unknown(),
   detailVisible: z.unknown(),
-  lastRoute: z.unknown()
+  lastRoute: z.unknown(),
+  // フェーズ5.5より前の保存値にはないため、キー自体を省略可能にする（ないことで他の項目まで既定値に戻さない）
+  milestoneCardWidth: z.unknown().optional()
 })
 
 // DBから読み取った値（JSON文字列）を検証し、使える値に正規化する。
 // - 値なし・JSONとして読めない・バージョン不一致 → 既定値
 // - 幅が範囲外 → 範囲内に丸める / 型が違う・未知の画面 → その項目だけ既定値
+// - milestoneCardWidth がない（フェーズ5.5より前の保存値）→ 既定値。補正ではなく正しい旧形式として扱う
 export function normalizeWorkspaceSettings(raw: string | undefined): NormalizeResult {
   if (raw === undefined) return { settings: DEFAULT_WORKSPACE_SETTINGS, source: 'default' }
 
@@ -79,9 +83,14 @@ export function normalizeWorkspaceSettings(raw: string | undefined): NormalizeRe
     sidebarWidth: toWidth(value.sidebarWidth, WORKSPACE_LIMITS.sidebarWidth, defaults.sidebarWidth),
     detailWidth: toWidth(value.detailWidth, WORKSPACE_LIMITS.detailWidth, defaults.detailWidth),
     detailVisible: typeof value.detailVisible === 'boolean' ? value.detailVisible : defaults.detailVisible,
-    lastRoute: route.success ? route.data : defaults.lastRoute
+    lastRoute: route.success ? route.data : defaults.lastRoute,
+    milestoneCardWidth: toWidth(value.milestoneCardWidth, WORKSPACE_LIMITS.milestoneCardWidth, defaults.milestoneCardWidth)
   }
 
-  const unchanged = workspaceSettingsSchema.safeParse(parsedJson).success
+  const legacy =
+    typeof parsedJson === 'object' && parsedJson !== null && !('milestoneCardWidth' in parsedJson)
+      ? { ...parsedJson, milestoneCardWidth: defaults.milestoneCardWidth }
+      : parsedJson
+  const unchanged = workspaceSettingsSchema.safeParse(legacy).success
   return { settings, source: unchanged ? 'saved' : 'repaired' }
 }

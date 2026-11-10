@@ -1,95 +1,47 @@
-import { useRef, useState, type FormEvent, type KeyboardEvent } from 'react'
 import {
   Alert,
   Box,
   CircularProgress,
-  IconButton,
   List,
   ListItemButton,
   ListItemText,
   ListSubheader,
-  TextField,
-  Tooltip,
   Typography
 } from '@mui/material'
 import { useQuery } from '@tanstack/react-query'
 import { useNavigate } from '@tanstack/react-router'
 import { Plus } from 'lucide-react'
-import { PROJECT_NAME_MAX_LENGTH, type ProjectDto } from '../../../../shared/contracts/projects'
+import type { ProjectDto } from '../../../../shared/contracts/projects'
 import { projectIdFromRoute } from '../../../../shared/contracts/workspace'
 import { formatTaskDateTime } from '../tasks/TaskList'
+import { NEW_PROJECT_PATH, rememberNewProjectReturn } from './new-project'
 import { groupProjects } from './project-order'
-import { projectListQueryOptions, useCreateProjectMutation } from './project-queries'
+import { projectListQueryOptions } from './project-queries'
 
-// Projectsの左サイドバー: 作成欄とプロジェクト一覧。
-// - 作成欄の未送信の入力は、タスクの追加欄と同じく未保存確認（DraftGuard）の対象にしない。
-// - プロジェクトの選択はルートの変更（未保存の編集があれば、遷移の前に既存の確認が出る）。
-function ProjectCreateForm() {
-  const [name, setName] = useState('')
-  const create = useCreateProjectMutation()
+// Projectの左サイドバー: プロジェクト一覧（未完了・完了済みの区分）と、最下段の「NEW PROJECT」（フェーズ5.5）。
+// - 旧来の名前入力欄と＋ボタンは廃止した。NEW PROJECT はメインパネルに新規プロジェクトの編集画面を開く（DBにはまだ作らない）。
+// - プロジェクトの選択・NEW PROJECT はルートの変更（未保存の編集があれば、遷移の前に既存の確認が出る）。
+function NewProjectItem({ pathname }: { pathname: string }) {
   const navigate = useNavigate()
-  const submittingRef = useRef(false)
-  const blank = name.trim().length === 0
-
-  const submit = (event: FormEvent) => {
-    event.preventDefault()
-    if (blank || submittingRef.current) return
-    submittingRef.current = true
-    create.mutate(
-      { name },
-      {
-        onSuccess: (project) => {
-          setName('')
-          void navigate({ to: '/projects/$projectId', params: { projectId: project.id } })
-        },
-        onSettled: () => {
-          submittingRef.current = false
-        }
-      }
-    )
-  }
-
-  const handleKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
-    // 日本語IMEの変換確定のEnterでは作成しない
-    if (event.key === 'Enter' && (event.nativeEvent.isComposing || event.keyCode === 229)) event.preventDefault()
-  }
-
+  const current = pathname === NEW_PROJECT_PATH
   return (
-    <Box component="form" onSubmit={submit} noValidate sx={{ px: 3, pb: 2 }}>
-      <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
-        <TextField
-          value={name}
-          onChange={(event) => {
-            setName(event.target.value)
-            if (create.isError) create.reset()
-          }}
-          onKeyDown={handleKeyDown}
-          placeholder="新しいプロジェクト"
-          size="small"
-          fullWidth
-          autoComplete="off"
-          slotProps={{
-            htmlInput: {
-              'aria-label': '新しいプロジェクトの名前',
-              maxLength: PROJECT_NAME_MAX_LENGTH,
-              readOnly: create.isPending
-            }
-          }}
-        />
-        <Tooltip title="プロジェクトを作成">
-          <span>
-            <IconButton type="submit" aria-label="プロジェクトを作成" disabled={blank || create.isPending}>
-              <Plus size={16} aria-hidden />
-            </IconButton>
-          </span>
-        </Tooltip>
-      </Box>
-      {create.isError && (
-        <Alert severity="error" variant="outlined" sx={{ mt: 1, py: 0 }}>
-          作成できませんでした: {create.error.message}
-        </Alert>
-      )}
-    </Box>
+    <ListItemButton
+      selected={current}
+      aria-current={current ? 'page' : undefined}
+      data-testid="new-project"
+      onClick={() => {
+        if (current) return
+        rememberNewProjectReturn(pathname)
+        void navigate({ to: NEW_PROJECT_PATH })
+      }}
+      sx={{ px: 4, gap: 1.5, mt: 1 }}
+    >
+      <Plus size={14} aria-hidden />
+      <ListItemText
+        primary="NEW PROJECT"
+        slotProps={{ primary: { noWrap: true, sx: { fontSize: 12, fontWeight: 600, letterSpacing: 0.4 } } }}
+      />
+    </ListItemButton>
   )
 }
 
@@ -183,8 +135,11 @@ export function ProjectsSidebar({ pathname }: { pathname: string }) {
 
   return (
     <>
-      <ProjectCreateForm />
       {body}
+      {/* 区分の中ではなく、Project配下全体の最後に置く（0件・読み込み失敗時も表示） */}
+      <List dense disablePadding aria-label="プロジェクトの作成">
+        <NewProjectItem pathname={pathname} />
+      </List>
     </>
   )
 }

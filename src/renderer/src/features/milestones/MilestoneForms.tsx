@@ -1,80 +1,16 @@
 import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from 'react'
 import { Alert, Box, Button, TextField } from '@mui/material'
-import { Flag, Plus, Save, Undo2 } from 'lucide-react'
+import { Flag, Save, Undo2 } from 'lucide-react'
 import { MILESTONE_NAME_MAX_LENGTH, type MilestoneDto } from '../../../../shared/contracts/milestones'
 import { useDraftGuard } from '../drafts/DraftGuard'
-import { useCreateMilestoneMutation, useRenameMilestoneMutation } from './milestone-queries'
+import { useRenameMilestoneMutation } from './milestone-queries'
 
 const isImeEnter = (event: KeyboardEvent<HTMLElement>) =>
   event.key === 'Enter' && (event.nativeEvent.isComposing || event.keyCode === 229)
 
-// マイルストンの登録欄（フェーズ5.4）。未送信の入力は、タスク・プロジェクトの追加欄と同じく未保存確認の対象外。
-// 完了済みのプロジェクトでは無効にする（Main側でも拒否する）。
-export function MilestoneCreateForm({ projectId, disabledReason }: { projectId: string; disabledReason?: string | undefined }) {
-  const [name, setName] = useState('')
-  const create = useCreateMilestoneMutation()
-  const submittingRef = useRef(false)
-  const blank = name.trim().length === 0
-  const disabled = disabledReason !== undefined
-
-  const submit = (event: FormEvent) => {
-    event.preventDefault()
-    if (blank || disabled || submittingRef.current) return
-    submittingRef.current = true
-    create.mutate(
-      { projectId, name },
-      {
-        onSuccess: () => setName(''),
-        onSettled: () => {
-          submittingRef.current = false
-        }
-      }
-    )
-  }
-
-  return (
-    <Box component="form" onSubmit={submit} noValidate sx={{ mb: 3, flexShrink: 0 }} data-testid="milestone-create">
-      <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
-        <TextField
-          value={name}
-          onChange={(event) => {
-            setName(event.target.value)
-            if (create.isError) create.reset()
-          }}
-          onKeyDown={(event) => {
-            // 日本語IMEの変換確定のEnterでは登録しない
-            if (isImeEnter(event)) event.preventDefault()
-          }}
-          placeholder={disabled ? disabledReason : '新しいマイルストン — 名前を入力して Enter'}
-          size="small"
-          fullWidth
-          disabled={disabled}
-          autoComplete="off"
-          slotProps={{
-            htmlInput: { 'aria-label': '新しいマイルストンの名前', maxLength: MILESTONE_NAME_MAX_LENGTH, readOnly: create.isPending }
-          }}
-        />
-        <Button
-          type="submit"
-          size="small"
-          variant="outlined"
-          disabled={disabled || blank || create.isPending}
-          startIcon={<Plus size={14} aria-hidden />}
-          sx={{ flexShrink: 0, height: 32 }}
-        >
-          {create.isPending ? '保存中…' : 'マイルストン登録'}
-        </Button>
-      </Box>
-      {create.isError && (
-        <Alert severity="error" variant="outlined" sx={{ mt: 1, py: 0 }}>
-          登録できませんでした: {create.error.message}
-        </Alert>
-      )}
-    </Box>
-  )
-}
-
-// マイルストン名の編集欄（フェーズ5.4）。一覧の見出しの「名前変更」で開く。仮想リストの外に置くため、スクロールで入力を失わない。
+// マイルストン名の編集欄（フェーズ5.4）。フェーズ5.5からはカードの見出しの「名前を変更」で、その見出しの位置に開く
+// （見出しは仮想リストの外にあるため、スクロールで入力を失わない）。Esc で取り消す。
+// 登録は「NEW MILESTONE」（InlineCreate）で行う（5.4の常設の登録欄は廃止）。
 // 未保存の確認は既存の DraftGuard に統合する（kind: 'milestone'。終了時のダイアログも共通）。
 export function MilestoneNameEditor({ milestone, onClose }: { milestone: MilestoneDto; onClose: () => void }) {
   const [draft, setDraft] = useState(milestone.name)
@@ -150,7 +86,7 @@ export function MilestoneNameEditor({ milestone, onClose }: { milestone: Milesto
   }
 
   return (
-    <Box component="form" onSubmit={handleSubmit} noValidate sx={{ mb: 3, flexShrink: 0 }} data-testid="milestone-name-editor">
+    <Box component="form" onSubmit={handleSubmit} noValidate sx={{ flexShrink: 0 }} data-testid="milestone-name-editor">
       <TextField
         value={draft}
         onChange={(event) => {
@@ -158,7 +94,14 @@ export function MilestoneNameEditor({ milestone, onClose }: { milestone: Milesto
           if (rename.isError) rename.reset()
         }}
         onKeyDown={(event) => {
-          if (isImeEnter(event)) event.preventDefault()
+          if (isImeEnter(event)) {
+            event.preventDefault()
+            return
+          }
+          if (event.key === 'Escape' && !event.nativeEvent.isComposing && !rename.isPending) {
+            event.preventDefault()
+            cancel()
+          }
         }}
         label="マイルストン名"
         size="small"
@@ -181,7 +124,7 @@ export function MilestoneNameEditor({ milestone, onClose }: { milestone: Milesto
         </Button>
       </Box>
       {rename.isError && (
-        <Alert severity="error" variant="outlined" sx={{ mt: 2 }}>
+        <Alert severity="error" variant="outlined" sx={{ mt: 1, py: 0 }}>
           保存できませんでした: {rename.error.message}
         </Alert>
       )}

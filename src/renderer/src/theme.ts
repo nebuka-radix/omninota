@@ -18,6 +18,8 @@ export const vscodeColors = {
   // 一覧の選択行・ホバー行
   listActiveSelection: '#04395e',
   listHover: '#2a2d2e',
+  // バッジ（VS Code の badge.background 相当。文字色 foreground とのコントラストを確保する）
+  badgeBackground: '#4d4d4d',
   // ペインの境界線（ドラッグ・ホバー・フォーカス時はfocusBorder）
   sash: '#2b2b2b',
   scrollbarThumb: 'rgba(121, 121, 121, 0.4)',

@@ -7,7 +7,7 @@ import { useDraftGuard } from '../drafts/DraftGuard'
 import { formatTaskDateTime } from '../tasks/TaskList'
 import { usePendingProjectIds, useSetProjectCompletedMutation } from './project-queries'
 
-// プロジェクトの完了・完了の取り消し（フェーズ5.3）。見出しの下に置く。
+// プロジェクトの完了・完了の取り消し（フェーズ5.3）。フェーズ5.5から右の詳細パネル（プロジェクトの詳細）に置く。
 // - 状態は文字でも示す（「未完了」「完了済み（日時）」）。
 // - 操作の前に、未保存の編集（プロジェクト名・タスクのタイトル）を既存の DraftGuard で確認する。
 //   保存に成功した場合・破棄した場合だけ続行し、保存失敗・キャンセルなら何もしない。進行中の保存の完了も待つ。
@@ -47,6 +47,9 @@ export function ProjectCompletionControl({
 
   return (
     <Box sx={{ mb: 3, flexShrink: 0 }} data-testid="project-completion">
+      <Typography variant="caption" color="text.secondary" component="p" sx={{ m: 0, mb: 0.5 }}>
+        状態
+      </Typography>
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap' }}>
         <Typography variant="body2" sx={{ fontWeight: 600 }} data-testid="project-status">
           {completed ? `完了済み（${formatTaskDateTime(project.completedAt as string)}）` : '未完了'}

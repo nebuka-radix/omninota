@@ -108,7 +108,7 @@ WAL使用中は、稼働中のDBファイルを単純コピーしてもバック
 `workspace` の値（version 1）:
 
 ```json
-{ "version": 1, "sidebarWidth": 240, "detailWidth": 300, "detailVisible": true, "lastRoute": "/inbox" }
+{ "version": 1, "sidebarWidth": 240, "detailWidth": 300, "detailVisible": true, "lastRoute": "/inbox", "milestoneCardWidth": 320 }
 ```
 
 | 項目 | 範囲・値 | 既定値 |
@@ -117,6 +117,12 @@ WAL使用中は、稼働中のDBファイルを単純コピーしてもバック
 | detailWidth | 220〜560（整数px） | 300 |
 | detailVisible | true / false | true |
 | lastRoute | `/inbox` / `/settings` / `/projects` / `/projects/<小文字のUUID>`（5.1で追加） | `/inbox` |
+| milestoneCardWidth | 240〜640（整数px）。マイルストンカードの共通の幅（5.5で追加） | 320 |
+
+フェーズ5.5の `milestoneCardWidth` は、既存の `app_settings`（key = `workspace`）のJSONに項目を加えただけで、
+テーブル・列は変えていない（**マイグレーションは追加していない**。マイグレーションは6件のまま）。
+追加前の保存値にはこの項目がないため、読み取り時に既定値で補う（形式の互換を保つため version は 1 のまま。
+項目がないことを「補正」とは扱わず、他の項目を既定値に戻さない）。値の書き込みは、ユーザーがカードの幅を変えた時だけ行う。
 
 範囲は `src/shared/contracts/workspace.ts` の `WORKSPACE_LIMITS` に集約している。
 

@@ -32,7 +32,8 @@ export function createWorkspaceSettingsService(deps: {
         sidebarWidth: input.sidebarWidth,
         detailWidth: input.detailWidth,
         detailVisible: input.detailVisible,
-        lastRoute: input.lastRoute
+        lastRoute: input.lastRoute,
+        milestoneCardWidth: input.milestoneCardWidth
       }
       deps.repository.upsert({
         key: SETTINGS_KEYS.workspace,

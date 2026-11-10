@@ -16,6 +16,7 @@ import {
   sleep,
   TestFailure
 } from './lib.mjs'
+import { cardScenarios } from './scenarios-cards.mjs'
 import { milestoneScenarios } from './scenarios-milestones.mjs'
 import { projectCompletionScenarios } from './scenarios-project-completion.mjs'
 import { taskProjectScenarios } from './scenarios-task-projects.mjs'
@@ -146,16 +147,19 @@ const scenarios = [
       })
   ],
   [
-    'Projects: 作成・名前変更・画面遷移時の未保存確認',
+    'Project: 作成・名前変更・画面遷移時の未保存確認',
     () =>
       withApp({ label: 'projects' }, async (app) => {
         const c = app.cdp
-        await c.click(`document.querySelector('nav button[aria-label="Projects"]')`)
+        await c.click(`document.querySelector('nav button[aria-label="Project"]')`)
+        // フェーズ5.5: NEW PROJECT → 名前欄（表示時にフォーカス）→ Enter で作成
         for (const name of ['UIテストA', 'UIテストB']) {
-          await c.focus('input[aria-label="新しいプロジェクトの名前"]')
+          await c.click(`document.querySelector('[data-testid=new-project]')`)
+          await c.waitFor(`document.activeElement === document.querySelector('[data-testid=project-name-editor] input')`, 3000, '新規プロジェクトの名前欄')
           await c.insertText(name)
           await c.enter()
-          await sleep(500)
+          await c.waitFor(`/^#\\/projects\\/[0-9a-f-]{36}$/.test(location.hash)`, 5000, '作成したプロジェクトを開く')
+          await sleep(300)
         }
         const projects = await projectList(c)
         assert(projects.length === 2, '作成', projects)
@@ -181,7 +185,7 @@ const scenarios = [
         await c.waitFor(`location.hash === '#/inbox'`, 3000, '破棄して移動')
         assert((await projectList(c)).find((p) => p.id === projectId).name === 'UIテストA2', '破棄した名前は保存しない')
         // 次のシナリオ（終了・復元）のため、このプロジェクトを開いて終了する
-        await c.click(`document.querySelector('nav button[aria-label="Projects"]')`)
+        await c.click(`document.querySelector('nav button[aria-label="Project"]')`)
         await c.click(projectSelector(projectId))
         await sleep(400)
         const quit = await requestQuit(app)
@@ -268,6 +272,8 @@ scenarios.push(...taskProjectScenarios({ withApp, root }))
 scenarios.push(...projectCompletionScenarios({ withApp, root }))
 // フェーズ5.4: マイルストン・Inboxからの紐付け・幅広ナビゲーション
 scenarios.push(...milestoneScenarios({ withApp, root }))
+// フェーズ5.5: 左サイドバー・新規プロジェクト・右サイドバーのプロジェクト詳細・マイルストン別カード
+scenarios.push(...cardScenarios({ withApp, root }))
 
 console.log(`UIテスト（${mode}${displayId ? `、表示先 ${displayId}` : ''}）一時ディレクトリ: ${root}`)
 let failed = 0

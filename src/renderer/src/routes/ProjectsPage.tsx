@@ -1,27 +1,71 @@
 import { useState } from 'react'
-import { Alert, Box, CircularProgress, Typography } from '@mui/material'
+import { Alert, Box, Button, CircularProgress, Typography } from '@mui/material'
 import { useQuery } from '@tanstack/react-query'
 import type { SortingState } from '@tanstack/react-table'
-import { FolderKanban } from 'lucide-react'
+import { FolderKanban, Plus } from 'lucide-react'
 import { Page } from '../components/Page'
-import { useDraftGuard } from '../features/drafts/DraftGuard'
-import { MilestoneCreateForm, MilestoneNameEditor } from '../features/milestones/MilestoneForms'
-import { milestoneListQueryOptions } from '../features/milestones/milestone-queries'
-import { ProjectCompletionControl } from '../features/projects/ProjectCompletionControl'
 import { ProjectNameEditor } from '../features/projects/ProjectNameEditor'
 import { projectListQueryOptions } from '../features/projects/project-queries'
 import { getProjectPageState } from '../features/projects/project-route'
 import { TaskScopeView } from '../features/tasks/TaskScopeView'
 import { initialStatusForProject } from '../features/tasks/task-rules'
 import { DEFAULT_TASK_SORTING } from '../features/tasks/task-table'
+import { useWorkspace } from '../features/workspace/WorkspaceContext'
+import { vscodeColors } from '../theme'
 
 // /projects: 未選択
 export function ProjectsIndexPage() {
   return (
-    <Page title="Projects" icon={FolderKanban}>
+    <Page title="Project" icon={FolderKanban}>
       <Typography variant="body2" color="text.secondary">
-        左のサイドバーからプロジェクトを選択するか、新しいプロジェクトを作成してください。
+        左のサイドバーからプロジェクトを選択するか、「NEW PROJECT」で新しいプロジェクトを作成してください。
       </Typography>
+    </Page>
+  )
+}
+
+// /projects/new: 新規プロジェクトの編集画面（フェーズ5.5）。既存プロジェクトの画面と同じ名前の編集部品を使う。
+// 名前を保存するまではDBにプロジェクトを作らない。マイルストン・タスクの追加は、名前を保存するまで無効にする。
+export function NewProjectPage() {
+  return (
+    <Page title="Project" icon={FolderKanban} fill>
+      <Box sx={{ flexShrink: 0 }}>
+        <ProjectNameEditor project={null} />
+      </Box>
+      <Typography variant="body2" color="text.secondary" role="note" sx={{ mb: 2, flexShrink: 0 }} data-testid="new-project-note">
+        マイルストン・タスクを追加するには、先にプロジェクト名を保存してください。
+      </Typography>
+      {/* 保存後に表示されるカードの位置に、無効な操作を示す（押してもDBは変更しない） */}
+      <Box sx={{ display: 'flex', gap: 3, minHeight: 0, flex: 1, overflow: 'hidden' }}>
+        <Box
+          component="section"
+          aria-label="マイルストン未設定"
+          sx={{
+            width: 320,
+            flex: '0 0 auto',
+            display: 'flex',
+            flexDirection: 'column',
+            bgcolor: vscodeColors.sideBarBackground,
+            border: `1px solid ${vscodeColors.border}`,
+            borderRadius: 1
+          }}
+        >
+          <Typography component="h2" sx={{ fontSize: 13, fontWeight: 600, m: 0, px: 2, py: 1.5, color: 'text.secondary', borderBottom: `1px solid ${vscodeColors.border}` }}>
+            マイルストン未設定
+          </Typography>
+          <Box sx={{ flex: 1 }} />
+          <Box sx={{ px: 1, py: 1, borderTop: `1px solid ${vscodeColors.border}` }}>
+            <Button size="small" fullWidth disabled startIcon={<Plus size={14} aria-hidden />} sx={{ justifyContent: 'flex-start', fontSize: 12, fontWeight: 600 }} data-testid="new-task-unset-button">
+              NEW TASK
+            </Button>
+          </Box>
+        </Box>
+        <Box sx={{ width: 220, flex: '0 0 auto', pt: 0.5 }}>
+          <Button size="small" fullWidth disabled startIcon={<Plus size={14} aria-hidden />} sx={{ justifyContent: 'flex-start', fontSize: 12, fontWeight: 600 }} data-testid="new-milestone-button">
+            NEW MILESTONE
+          </Button>
+        </Box>
+      </Box>
     </Page>
   )
 }
@@ -32,24 +76,14 @@ export function ProjectsIndexPage() {
 // 状態は「未完了のプロジェクトなら未完了、完了済みなら完了」（フェーズ5.3）、タスクの選択は解除し、ソートは維持する
 // （このコンポーネントは切り替えても作り直されないため、ソートをここで持つ）。
 // 同じ画面のまま完了・取り消しをしても、状態フィルターは変えない（一覧が突然空になる・入れ替わることを避ける）。
+// フェーズ5.5: 状態の表示・完了・完了の取り消しは右の詳細パネルへ移した（ここには置かない）。
+// 「未完了のタスクを表示」の要求は詳細パネルから WorkspaceContext を通して届く。
 export function ProjectPage({ projectId }: { projectId: string }) {
   const projects = useQuery(projectListQueryOptions)
   const state = getProjectPageState(projectId, projects)
   const [sorting, setSorting] = useState<SortingState>(DEFAULT_TASK_SORTING)
-  // 「未完了のタスクを表示」の要求回数（TaskScopeView が増えた時だけ反応する）
-  const [revealOpenRequest, setRevealOpenRequest] = useState(0)
-  // 名前を編集中のマイルストン（一覧の見出しの「名前変更」で開く。フェーズ5.4）
-  const [editingMilestoneId, setEditingMilestoneId] = useState<string | null>(null)
-  const milestones = useQuery(milestoneListQueryOptions)
-  const { confirmLeave } = useDraftGuard()
-  // 表示中のプロジェクトのマイルストンだけを編集対象にする（プロジェクトを切り替えたら閉じる）
-  const editingMilestone = milestones.data?.find((item) => item.id === editingMilestoneId && item.projectId === projectId)
-  const openMilestoneEditor = async (milestoneId: string) => {
-    if (milestoneId === editingMilestoneId) return
-    // 別の編集（マイルストン名・プロジェクト名・タスクのタイトル）が未保存なら、先に既存の確認を行う
-    if (!(await confirmLeave())) return
-    setEditingMilestoneId(milestoneId)
-  }
+  // 「未完了のタスクを表示」の要求回数（TaskScopeView は表示した後に増えた時だけ反応する）
+  const { revealOpenRequest } = useWorkspace()
 
   let body
   switch (state.kind) {
@@ -88,41 +122,15 @@ export function ProjectPage({ projectId }: { projectId: string }) {
           <Box sx={{ flexShrink: 0 }}>
             <ProjectNameEditor key={state.project.id} project={state.project} />
           </Box>
-          <ProjectCompletionControl
-            key={`completion-${state.project.id}`}
-            project={state.project}
-            onRevealOpenTasks={() => setRevealOpenRequest((count) => count + 1)}
-          />
-          <MilestoneCreateForm
-            key={`milestone-create-${state.project.id}`}
-            projectId={state.project.id}
-            disabledReason={
-              state.project.completedAt !== null ? '完了済みのプロジェクトにはマイルストンを追加できません' : undefined
-            }
-          />
-          {editingMilestone && (
-            <MilestoneNameEditor
-              key={editingMilestone.id}
-              milestone={editingMilestone}
-              onClose={() => setEditingMilestoneId(null)}
-            />
-          )}
           <TaskScopeView
             key={state.project.id}
             scope={{ kind: 'project', projectId: state.project.id }}
             scopeLabel={`プロジェクト「${state.project.name}」`}
-            addTargetLabel={`「${state.project.name}」に追加`}
-            addDisabledReason={
-              state.project.completedAt !== null
-                ? `「${state.project.name}」は完了済みのため、タスクを追加できません。`
-                : undefined
-            }
             sorting={sorting}
             onSortingChange={setSorting}
             initialStatus={initialStatusForProject(state.project)}
             revealOpenRequest={revealOpenRequest}
             project={state.project}
-            onRenameMilestone={(milestoneId) => void openMilestoneEditor(milestoneId)}
           />
         </>
       )
@@ -130,7 +138,7 @@ export function ProjectPage({ projectId }: { projectId: string }) {
   }
 
   return (
-    <Page title="Projects" icon={FolderKanban} fill={state.kind === 'found'}>
+    <Page title="Project" icon={FolderKanban} fill={state.kind === 'found'}>
       {body}
     </Page>
   )

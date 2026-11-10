@@ -18,7 +18,8 @@ const valid: WorkspaceSettings = {
   sidebarWidth: 260,
   detailWidth: 320,
   detailVisible: false,
-  lastRoute: '/settings'
+  lastRoute: '/settings',
+  milestoneCardWidth: 400
 }
 
 describe('workspace.save の入力検証（厳格）', () => {
@@ -39,6 +40,10 @@ describe('workspace.save の入力検証（厳格）', () => {
     ['サイドバー幅が最小未満', [{ ...valid, sidebarWidth: WORKSPACE_LIMITS.sidebarWidth.min - 1 }]],
     ['詳細幅が最大超過', [{ ...valid, detailWidth: WORKSPACE_LIMITS.detailWidth.max + 1 }]],
     ['幅が小数', [{ ...valid, sidebarWidth: 250.5 }]],
+    ['カード幅が最小未満', [{ ...valid, milestoneCardWidth: WORKSPACE_LIMITS.milestoneCardWidth.min - 1 }]],
+    ['カード幅が最大超過', [{ ...valid, milestoneCardWidth: WORKSPACE_LIMITS.milestoneCardWidth.max + 1 }]],
+    ['カード幅が文字列', [{ ...valid, milestoneCardWidth: '320' }]],
+    ['カード幅なし', [(({ milestoneCardWidth: _omit, ...rest }) => rest)(valid)]],
     ['表示状態が文字列', [{ ...valid, detailVisible: 'true' }]],
     ['任意キー指定の試み', ['theme', 'dark']]
   ])('拒否する: %s', (_label, args) => {
@@ -100,7 +105,8 @@ describe('保存値の読み取り時の正規化（フォールバック）', (
       sidebarWidth: 99999,
       detailWidth: 10,
       detailVisible: 'yes',
-      lastRoute: '/review'
+      lastRoute: '/review',
+      milestoneCardWidth: 5000
     })
     expect(normalizeWorkspaceSettings(raw)).toEqual({
       settings: {
@@ -108,10 +114,34 @@ describe('保存値の読み取り時の正規化（フォールバック）', (
         sidebarWidth: WORKSPACE_LIMITS.sidebarWidth.max,
         detailWidth: WORKSPACE_LIMITS.detailWidth.min,
         detailVisible: DEFAULT_WORKSPACE_SETTINGS.detailVisible,
-        lastRoute: '/inbox'
+        lastRoute: '/inbox',
+        milestoneCardWidth: WORKSPACE_LIMITS.milestoneCardWidth.max
       },
       source: 'repaired'
     })
+  })
+
+  it('カード幅（フェーズ5.5）: 未設定の旧形式は既定値（320px）で補い、補正扱いにしない。他の項目（左右の幅など）は変えない', () => {
+    const { milestoneCardWidth: _omit, ...legacy } = valid
+    expect(DEFAULT_WORKSPACE_SETTINGS.milestoneCardWidth).toBe(320)
+    expect(normalizeWorkspaceSettings(JSON.stringify(legacy))).toEqual({
+      settings: { ...legacy, milestoneCardWidth: 320 },
+      source: 'saved'
+    })
+  })
+
+  it.each<[string, unknown, number]>([
+    ['最小未満', 10, WORKSPACE_LIMITS.milestoneCardWidth.min],
+    ['最大超過', 99999, WORKSPACE_LIMITS.milestoneCardWidth.max],
+    ['小数', 300.4, 300],
+    ['文字列', '400', 320],
+    ['null', null, 320],
+    ['NaN相当（文字列）', 'NaN', 320]
+  ])('カード幅が %s なら範囲内・既定値に補正する（左右の幅は変えない）', (_label, milestoneCardWidth, expected) => {
+    const raw = JSON.stringify({ ...valid, milestoneCardWidth })
+    const result = normalizeWorkspaceSettings(raw)
+    expect(result.settings).toEqual({ ...valid, milestoneCardWidth: expected })
+    expect(result.source).toBe('repaired')
   })
 })
 
@@ -144,6 +174,9 @@ describe('Workspace設定の保存・取得（一時DB）', () => {
     expect(service().get()).toEqual(valid)
     service().save({ ...valid, sidebarWidth: 300 })
     expect(service().get().sidebarWidth).toBe(300)
+    // カード幅は左右の幅とは独立して保存・取得できる
+    service().save({ ...valid, sidebarWidth: 300, milestoneCardWidth: 512 })
+    expect(service().get()).toEqual({ ...valid, sidebarWidth: 300, milestoneCardWidth: 512 })
     const count = db.$client.prepare('SELECT COUNT(*) AS c FROM app_settings').get() as { c: number }
     expect(count.c).toBe(1)
   })

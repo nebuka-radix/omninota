@@ -291,3 +291,15 @@ export async function createDatabaseAt(file, count) {
   migrate(drizzle(sqlite), { migrationsFolder: folder })
   return sqlite
 }
+
+// インライン入力（NEW TASK など）を、登録の完了（入力が空に戻り、編集できる状態）を待ってから Esc で閉じる
+export async function closeInlineCreate(c, testId) {
+  const input = `document.querySelector('[data-testid="${testId}"] input')`
+  await c.waitFor(`${input} && ${input}.value === '' && !${input}.readOnly`, 5000, `${testId} の登録完了`)
+  await c.focus(`[data-testid="${testId}"] input`)
+  await c.key('Escape', 27)
+  await c.waitFor(`!${input}`, 3000, `${testId} を閉じる`)
+  // 閉じた後、フォーカスがボタンへ戻る（戻る時のスクロールが終わってから次の操作をする）
+  await c.waitFor(`document.activeElement === document.querySelector('[data-testid="${testId}-button"]')`, 3000, `${testId} のボタンへフォーカス`)
+  await sleep(100)
+}

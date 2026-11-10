@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest'
 import {
   buildAssignmentOptions,
   buildTaskGroups,
-  flattenRows,
   groupKey,
   sameAssignment,
   UNSET_GROUP_KEY
@@ -65,28 +64,15 @@ describe('マイルストン別のグループ', () => {
   })
 })
 
-describe('仮想化のためのフラットな行モデル', () => {
-  it('見出し行とタスク行を並べ、キーは見出し "group:..." とタスクIDで衝突しない。キーボード移動の順はタスク行だけ', () => {
-    const groups = buildTaskGroups([task('t1', m1.id), task('t2', null)], [m1])
-    const { rows, orderedTasks } = flattenRows([], groups)
-    expect(rows.map((row) => [row.kind, row.key])).toEqual([
-      ['header', groupKey(m1.id)],
-      ['task', 't1'],
-      ['header', UNSET_GROUP_KEY],
-      ['task', 't2']
-    ])
-    expect(new Set(rows.map((row) => row.key)).size).toBe(rows.length)
-    expect(orderedTasks.map((t) => t.id)).toEqual(['t1', 't2'])
-    expect(rows.filter((row) => row.kind === 'task').map((row) => (row.kind === 'task' ? [row.taskIndex, row.groupLabel] : null))).toEqual([
-      [0, 'M1'],
-      [1, 'マイルストン未設定']
-    ])
-  })
-
-  it('グループなし（Inbox）はタスク行だけ', () => {
-    const { rows, orderedTasks } = flattenRows([task('a', null, null), task('b', null, null)], null)
-    expect(rows.map((row) => row.kind)).toEqual(['task', 'task'])
-    expect(orderedTasks).toHaveLength(2)
+describe('カードのキー', () => {
+  it('カードのキーは "group:<マイルストンID>" と "group:unset" で、タスクID（UUID）と衝突せず、互いに重複しない', () => {
+    const groups = buildTaskGroups([task('t1', m1.id), task('t2', null)], [m1, m2, mSame])
+    const keys = groups.map((group) => group.key)
+    expect(new Set(keys).size).toBe(keys.length)
+    expect(keys.every((key) => key.startsWith('group:'))).toBe(true)
+    // 各タスクはちょうど1枚のカードに入る（カード間で同じタスクの行が重ならない）
+    const placed = groups.flatMap((group) => group.tasks.map((t) => t.id))
+    expect(placed.sort()).toEqual(['t1', 't2'])
   })
 })
 

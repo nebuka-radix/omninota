@@ -25,12 +25,16 @@ type State = {
   selectedTaskId: string | null
   selectionScope: string | null
   saveStatus: SaveStatus
+  // 「未完了のタスクを表示」の要求回数（右の詳細パネルの完了操作 → メインパネルの一覧。保存しない。フェーズ5.5）
+  revealOpenRequest: number
 }
 
 type Action =
   | { type: 'setSidebarWidth'; width: number }
   | { type: 'setDetailWidth'; width: number }
   | { type: 'setDetailVisible'; visible: boolean }
+  | { type: 'setMilestoneCardWidth'; width: number }
+  | { type: 'requestRevealOpen' }
   | { type: 'setLastRoute'; route: WorkspaceRoute }
   | { type: 'selectTask'; taskId: string | null }
   | { type: 'enterScope'; scope: string }
@@ -50,6 +54,10 @@ function reducer(state: State, action: Action): State {
       return updateSettings(state, { detailWidth: clampWidth(action.width, WORKSPACE_LIMITS.detailWidth) })
     case 'setDetailVisible':
       return updateSettings(state, { detailVisible: action.visible })
+    case 'setMilestoneCardWidth':
+      return updateSettings(state, { milestoneCardWidth: clampWidth(action.width, WORKSPACE_LIMITS.milestoneCardWidth) })
+    case 'requestRevealOpen':
+      return { ...state, revealOpenRequest: state.revealOpenRequest + 1 }
     case 'setLastRoute':
       return updateSettings(state, { lastRoute: action.route })
     case 'selectTask':
@@ -71,6 +79,10 @@ type WorkspaceContextValue = {
   setSidebarWidth: (width: number) => void
   setDetailWidth: (width: number) => void
   setDetailVisible: (visible: boolean) => void
+  // マイルストンカードの幅（全カード共通）。ドラッグ中は呼ばず、確定した時だけ呼ぶ（呼ぶたびに保存される）
+  setMilestoneCardWidth: (width: number) => void
+  revealOpenRequest: number
+  requestRevealOpenTasks: () => void
   selectTask: (taskId: string | null) => void
   // 一覧（表示範囲）を開いた時に呼ぶ。前回と別の範囲なら選択を解除する
   enterTaskScope: (scope: string) => void
@@ -92,7 +104,8 @@ export function WorkspaceProvider({
     revision: 0,
     selectedTaskId: null,
     selectionScope: null,
-    saveStatus: 'idle'
+    saveStatus: 'idle',
+    revealOpenRequest: 0
   })
 
   // 保存キュー（コンポーネントの生存期間中は1つだけ）
@@ -146,10 +159,13 @@ export function WorkspaceProvider({
       setSidebarWidth: (width) => dispatch({ type: 'setSidebarWidth', width }),
       setDetailWidth: (width) => dispatch({ type: 'setDetailWidth', width }),
       setDetailVisible: (visible) => dispatch({ type: 'setDetailVisible', visible }),
+      setMilestoneCardWidth: (width) => dispatch({ type: 'setMilestoneCardWidth', width }),
+      revealOpenRequest: state.revealOpenRequest,
+      requestRevealOpenTasks: () => dispatch({ type: 'requestRevealOpen' }),
       selectTask: (taskId) => dispatch({ type: 'selectTask', taskId }),
       enterTaskScope: (scope) => dispatch({ type: 'enterScope', scope })
     }),
-    [state.settings, state.selectedTaskId, state.saveStatus, persistenceEnabled]
+    [state.settings, state.selectedTaskId, state.saveStatus, state.revealOpenRequest, persistenceEnabled]
   )
 
   return <WorkspaceContext.Provider value={value}>{children}</WorkspaceContext.Provider>

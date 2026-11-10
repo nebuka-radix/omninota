@@ -166,8 +166,12 @@ type WorkspaceSettings = {
   detailWidth: number // 220〜560の整数px
   detailVisible: boolean
   lastRoute: '/inbox' | '/settings' | '/projects' | `/projects/${string}` // 小文字のUUIDだけ
+  milestoneCardWidth: number // 240〜640の整数px（フェーズ5.5。マイルストンカードの共通の幅）
 }
 ```
+
+- `milestoneCardWidth` はフェーズ5.5で追加した。追加前に保存した値（このキーがない）は、読み取り時に既定値320pxで補う
+  （補正扱いにせず、他の項目もそのまま使う）。保存要求では必須。`/projects/new`（新規プロジェクトの画面）は lastRoute に保存しない。
 
 - `get`: 保存値を検証・正規化して返す。未保存・破損時は既定値（docs/database.md 参照）。
 - `save`: 範囲外・小数・余分なキー・未知の画面・バージョン違いはINVALID_INPUT。全体を置き換える。

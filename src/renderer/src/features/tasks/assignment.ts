@@ -105,6 +105,7 @@ export function buildAssignmentOptions(
 
 // プロジェクト画面のグループ（マイルストン別。マイルストンは作成順、最後に「マイルストン未設定」）。
 // tasks は表示中のタスク（検索・状態・ソート済み）。空のマイルストンも表示する。
+// フェーズ5.5から、グループ1つをカード1枚として表示する（カードごとに別の仮想リスト。key はカードの安定したID）。
 export type TaskGroup = {
   key: string
   milestoneId: string | null
@@ -131,28 +132,4 @@ export function buildTaskGroups(tasks: readonly TaskDto[], milestones: readonly 
     group.tasks.push(task)
   }
   return [...groups, unset]
-}
-
-// 仮想化のためのフラットな行（見出し行とタスク行）。キーは見出しが "group:..."、タスクがタスクID（UUID）で衝突しない。
-export type ListRow =
-  | { kind: 'header'; key: string; group: TaskGroup }
-  | { kind: 'task'; key: string; task: TaskDto; taskIndex: number; groupLabel: string | null }
-
-export function flattenRows(tasks: readonly TaskDto[], groups: readonly TaskGroup[] | null): { rows: ListRow[]; orderedTasks: TaskDto[] } {
-  if (!groups) {
-    return {
-      rows: tasks.map((task, taskIndex) => ({ kind: 'task', key: task.id, task, taskIndex, groupLabel: null })),
-      orderedTasks: [...tasks]
-    }
-  }
-  const rows: ListRow[] = []
-  const orderedTasks: TaskDto[] = []
-  for (const group of groups) {
-    rows.push({ kind: 'header', key: group.key, group })
-    for (const task of group.tasks) {
-      rows.push({ kind: 'task', key: task.id, task, taskIndex: orderedTasks.length, groupLabel: group.label })
-      orderedTasks.push(task)
-    }
-  }
-  return { rows, orderedTasks }
 }

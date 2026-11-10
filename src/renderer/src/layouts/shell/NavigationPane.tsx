@@ -13,28 +13,34 @@ import { PaneHeader } from './PaneHeader'
 import { SCREENS, screenOf, type ScreenId } from './screens'
 
 // 幅広のナビゲーション（フェーズ5.4。旧アクティビティバー＋サイドバーを1つのペインに統合）。
-// - Inbox / Projects（登録欄・未完了と完了済みの区分つきプロジェクト一覧）/ 設定 を縦に並べ、全体を縦スクロールする。
+// - Inbox / Project（未完了と完了済みの区分つきプロジェクト一覧、最下段に NEW PROJECT）/ 設定 を縦に並べ、全体を縦スクロールする。
 // - 選択状態はRouterの現在位置から導出する（aria-current）。プロジェクトの選択は既存の未保存確認（useBlocker）を通る。
-// - Projects は折りたためる（保存しない）。折りたたんでも選択中のプロジェクト名は表示し、選択が分からなくならないようにする。
+// - Project は折りたためる（保存しない）。折りたたんでも選択中のプロジェクト名は表示し、選択が分からなくならないようにする。
 // - 幅は既存の左ペインの希望幅（Workspace設定の sidebarWidth、既定240px）をそのまま使う。
+// フェーズ5.5: Inbox の件数は行内のバッジで示す（項目名のラベルは出さない）。バッジは別の操作対象にせず、
+// ボタンの一部とする。読み上げでは件数を説明（aria-describedby）として伝える（ボタンの名前は「Inbox」のまま）。
+type NavBadge = { text: string; description: string }
+
 function NavItem({
   screen,
   active,
-  secondary,
+  badge,
   onClick,
   trailing
 }: {
   screen: ScreenId
   active: boolean
-  secondary?: string | undefined
+  badge?: NavBadge | undefined
   onClick: () => void
   trailing?: ReactNode
 }) {
   const { label, icon: Icon } = SCREENS[screen]
+  const descriptionId = `nav-${screen}-badge-description`
   return (
     <Box sx={{ display: 'flex', alignItems: 'center' }}>
       <ButtonBase
         aria-label={label}
+        aria-describedby={badge ? descriptionId : undefined}
         aria-current={active ? 'page' : undefined}
         onClick={onClick}
         sx={{
@@ -56,10 +62,39 @@ function NavItem({
         <Typography component="span" sx={{ fontSize: 13, fontWeight: 600 }}>
           {label}
         </Typography>
-        {secondary && (
-          <Typography component="span" noWrap sx={{ fontSize: 11, color: 'text.secondary', ml: 'auto' }}>
-            {secondary}
-          </Typography>
+        {badge && (
+          <>
+            <Box
+              component="span"
+              aria-hidden
+              data-testid={`nav-${screen}-badge`}
+              sx={{
+                ml: 'auto',
+                minWidth: 20,
+                height: 18,
+                px: 1.5,
+                borderRadius: 9,
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontSize: 11,
+                fontWeight: 600,
+                lineHeight: 1,
+                color: vscodeColors.foreground,
+                bgcolor: vscodeColors.badgeBackground,
+                fontVariantNumeric: 'tabular-nums'
+              }}
+            >
+              {badge.text}
+            </Box>
+            <Box
+              component="span"
+              id={descriptionId}
+              sx={{ position: 'absolute', width: 1, height: 1, overflow: 'hidden', clip: 'rect(0 0 0 0)', whiteSpace: 'nowrap' }}
+            >
+              {badge.description}
+            </Box>
+          </>
         )}
       </ButtonBase>
       {trailing}
@@ -67,13 +102,13 @@ function NavItem({
   )
 }
 
-function useInboxSummary(): string | undefined {
-  // Inboxの一覧と同じQueryを使う（追加の取得APIは使わない）。Inboxはプロジェクトに属さないタスク
+function useInboxBadge(): NavBadge {
+  // Inboxの一覧と同じQueryを使う（追加の取得APIは使わない）。集計条件は従来どおり「プロジェクトに属さない未完了のタスク」
   const tasks = useQuery(taskListQueryOptions)
-  if (tasks.isPending) return '読み込み中…'
-  if (tasks.isError) return '件数を取得できません'
+  if (tasks.isPending) return { text: '…', description: 'タスクの件数を読み込み中' }
+  if (tasks.isError) return { text: '!', description: 'タスクの件数を取得できません' }
   const open = tasks.data.filter((task) => isTaskInScope(task, INBOX_SCOPE) && task.completedAt === null).length
-  return `未完了 ${open}`
+  return { text: String(open), description: `未完了のタスク ${open} 件` }
 }
 
 export function NavigationPane({ pathname }: { pathname: string }) {
@@ -83,7 +118,7 @@ export function NavigationPane({ pathname }: { pathname: string }) {
   const projects = useQuery(projectListQueryOptions)
   const selectedProjectId = projectIdFromRoute(pathname)
   const selectedProject = projects.data?.find((project) => project.id === selectedProjectId)
-  const inboxSummary = useInboxSummary()
+  const inboxBadge = useInboxBadge()
 
   return (
     <Box
@@ -94,7 +129,7 @@ export function NavigationPane({ pathname }: { pathname: string }) {
     >
       <PaneHeader id="navigation-title" title="GTD" />
       <Box sx={{ flex: 1, minHeight: 0, overflowY: 'auto', overflowX: 'hidden', pb: 2 }}>
-        <NavItem screen="inbox" active={screen === 'inbox'} secondary={inboxSummary} onClick={() => void navigate({ to: '/inbox' })} />
+        <NavItem screen="inbox" active={screen === 'inbox'} badge={inboxBadge} onClick={() => void navigate({ to: '/inbox' })} />
         <NavItem
           screen="projects"
           active={pathname === '/projects'}

@@ -1,7 +1,12 @@
 import type { ReactNode, Ref } from 'react'
-import { Box, IconButton, Tooltip, Typography } from '@mui/material'
+import { Box, Button, IconButton, Tooltip, Typography } from '@mui/material'
 import { useQuery } from '@tanstack/react-query'
-import { X } from 'lucide-react'
+import { ArrowLeft, X } from 'lucide-react'
+import { useDraftGuard } from '../../features/drafts/DraftGuard'
+import { NEW_PROJECT_PATH } from '../../features/projects/new-project'
+import { ProjectCompletionControl } from '../../features/projects/ProjectCompletionControl'
+import { projectListQueryOptions } from '../../features/projects/project-queries'
+import { formatTaskDateTime } from '../../features/tasks/TaskList'
 import { TaskEditor } from '../../features/tasks/TaskEditor'
 import { taskListQueryOptions } from '../../features/tasks/task-queries'
 import { INBOX_SCOPE, isTaskInScope, type TaskScope } from '../../features/tasks/task-scope'
@@ -19,6 +24,7 @@ function EmptyMessage({ children }: { children: ReactNode }) {
 
 // 選択中タスクの詳細。一覧と同じQuery（全件）のデータから探す（詳細取得APIや別の正本は持たない）。
 // TaskEditorはタスクIDごとに作り直し、編集中のドラフトはそのタスクの間だけ保持する。
+// プロジェクト画面では、タスク未選択ならプロジェクトの詳細、選択中ならタスクの詳細（と「プロジェクトの詳細」へ戻る操作）を表示する。
 // 画面（ルート）に対応するタスク一覧の表示範囲。タスク一覧のない画面ではnull
 function scopeOfPath(pathname: string): TaskScope | null {
   if (pathname === '/inbox') return INBOX_SCOPE
@@ -49,6 +55,76 @@ function TaskDetail({ taskId, scope }: { taskId: string | null; scope: TaskScope
   )
 }
 
+// プロジェクトの詳細（フェーズ5.5）。プロジェクト画面でタスクを選択していない時に表示する。
+// 状態（未完了／完了済み）・完了・完了の取り消しは、メインパネルからここへ移した（メインパネルには重複して置かない）。
+function ProjectDetail({ projectId }: { projectId: string }) {
+  const projects = useQuery(projectListQueryOptions)
+  const { requestRevealOpenTasks } = useWorkspace()
+  if (projects.isPending) return <EmptyMessage>読み込み中…</EmptyMessage>
+  if (projects.isError) return <EmptyMessage>プロジェクトを読み込めませんでした。</EmptyMessage>
+  const project = projects.data.find((item) => item.id === projectId)
+  if (!project) return <EmptyMessage>プロジェクトが見つかりません。</EmptyMessage>
+  return (
+    <Box component="section" aria-labelledby="project-detail-name" sx={{ px: 4, py: 3 }} data-testid="project-detail">
+      <Typography variant="caption" color="text.secondary" component="p" sx={{ m: 0 }}>
+        プロジェクト
+      </Typography>
+      <Typography id="project-detail-name" component="h2" sx={{ fontSize: 14, fontWeight: 600, m: 0, mb: 1, wordBreak: 'break-all' }} data-testid="project-detail-name">
+        {project.name}
+      </Typography>
+      <Typography variant="caption" color="text.secondary" component="p" sx={{ m: 0, mb: 3 }}>
+        作成 {formatTaskDateTime(project.createdAt)}
+      </Typography>
+      <ProjectCompletionControl key={project.id} project={project} onRevealOpenTasks={requestRevealOpenTasks} />
+      <Typography variant="caption" color="text.secondary" component="p" sx={{ m: 0 }}>
+        タスクを選択すると、ここにタスクの詳細を表示します。
+      </Typography>
+    </Box>
+  )
+}
+
+// タスクの詳細からプロジェクトの詳細へ戻る（タスクの選択を解除する）。未保存のタイトルは既存の確認を通す
+function BackToProject({ taskId }: { taskId: string }) {
+  const { selectTask } = useWorkspace()
+  const { confirmLeave } = useDraftGuard()
+  return (
+    <Box sx={{ px: 2, pt: 2 }}>
+      <Button
+        size="small"
+        startIcon={<ArrowLeft size={14} aria-hidden />}
+        aria-label="プロジェクトの詳細へ戻る"
+        data-testid="back-to-project"
+        onClick={async () => {
+          if (await confirmLeave({ target: { kind: 'task', id: taskId } })) selectTask(null)
+        }}
+        sx={{ fontSize: 12 }}
+      >
+        プロジェクトの詳細
+      </Button>
+    </Box>
+  )
+}
+
+function DetailBody({ pathname }: { pathname: string }) {
+  const { selectedTaskId } = useWorkspace()
+  if (pathname === NEW_PROJECT_PATH) {
+    // 新規プロジェクトは保存前なので、状態の表示・完了操作は出さない
+    return <EmptyMessage>プロジェクト名を保存すると、ここにプロジェクトの状態を表示します。</EmptyMessage>
+  }
+  const scope = scopeOfPath(pathname)
+  if (!scope) return <EmptyMessage>この画面に関連する詳細情報はありません。</EmptyMessage>
+  if (scope.kind === 'project') {
+    if (!selectedTaskId) return <ProjectDetail projectId={scope.projectId} />
+    return (
+      <>
+        <BackToProject taskId={selectedTaskId} />
+        <TaskDetail taskId={selectedTaskId} scope={scope} />
+      </>
+    )
+  }
+  return <TaskDetail taskId={selectedTaskId} scope={scope} />
+}
+
 export function DetailPanel({
   pathname,
   onClose,
@@ -58,9 +134,6 @@ export function DetailPanel({
   onClose: () => void
   containerRef: Ref<HTMLElement>
 }) {
-  const { selectedTaskId } = useWorkspace()
-  const scope = scopeOfPath(pathname)
-
   return (
     <Box
       component="aside"
@@ -81,11 +154,7 @@ export function DetailPanel({
         }
       />
       <Box sx={{ flex: 1, minHeight: 0, overflowY: 'auto', overflowX: 'hidden' }}>
-        {scope ? (
-          <TaskDetail taskId={selectedTaskId} scope={scope} />
-        ) : (
-          <EmptyMessage>この画面に関連する詳細情報はありません。</EmptyMessage>
-        )}
+        <DetailBody pathname={pathname} />
       </Box>
     </Box>
   )

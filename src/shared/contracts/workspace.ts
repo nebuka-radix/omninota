@@ -25,6 +25,8 @@ export function projectIdFromRoute(route: string): string | null {
 export const WORKSPACE_LIMITS = {
   sidebarWidth: { min: 180, max: 480 },
   detailWidth: { min: 220, max: 560 },
+  // プロジェクト画面のマイルストンカードの幅（全カード・全プロジェクト共通。フェーズ5.5）
+  milestoneCardWidth: { min: 240, max: 640 },
   // メインパネルの最小幅（保存はしない。ウィンドウ最小幅の計算に使う）
   mainMinWidth: 320
 } as const
@@ -38,6 +40,9 @@ export type WorkspaceSettings = {
   detailWidth: number
   detailVisible: boolean
   lastRoute: WorkspaceRoute
+  // マイルストンカードの幅（px）。sidebarWidth・detailWidth とは独立した値（フェーズ5.5で追加。
+  // 追加前の保存値にはないため、読み取り時は既定値で補う。形式の互換を保つためバージョンは上げない）
+  milestoneCardWidth: number
 }
 
 export const DEFAULT_WORKSPACE_SETTINGS: WorkspaceSettings = {
@@ -45,7 +50,8 @@ export const DEFAULT_WORKSPACE_SETTINGS: WorkspaceSettings = {
   sidebarWidth: 240,
   detailWidth: 300,
   detailVisible: true,
-  lastRoute: '/inbox'
+  lastRoute: '/inbox',
+  milestoneCardWidth: 320
 }
 
 export function isWorkspaceRoute(value: unknown): value is WorkspaceRoute {

@@ -19,7 +19,7 @@ export function taskProjectScenarios({ withApp, root }) {
   const tasksById = async (c) => new Map((await api(c, 'window.gtd.tasks.list()')).map((task) => [task.id, task]))
   const openProject = async (c, projectId) => {
     if (!(await c.evaluate(`!!document.querySelector('[data-testid=project-list]')`))) {
-      await c.click(`document.querySelector('nav button[aria-label="Projects"]')`)
+      await c.click(`document.querySelector('nav button[aria-label="Project"]')`)
       await c.waitFor(`document.querySelector('[data-testid=project-list]')`, 5000, 'プロジェクト一覧')
     }
     await c.click(`[...document.querySelectorAll('[data-testid=project-list] [data-project-id]')].find((e) => e.dataset.projectId === ${JSON.stringify(projectId)})`)
@@ -33,6 +33,17 @@ export function taskProjectScenarios({ withApp, root }) {
   const countText = (c) => c.evaluate(`document.querySelector('[data-testid=task-count]')?.textContent`)
   const addTask = async (c, title) => {
     await c.focus('input[aria-label="タスクのタイトル"]')
+    await c.insertText(title)
+    await c.enter()
+  }
+  // プロジェクト画面の追加（フェーズ5.5: 「マイルストン未設定」カードの NEW TASK）
+  const addProjectTask = async (c, title) => {
+    if (!(await c.evaluate(`!!document.querySelector('[data-testid=new-task-unset] input')`))) {
+      await c.click(`document.querySelector('[data-testid=new-task-unset-button]')`)
+      await c.waitFor(`document.activeElement === document.querySelector('[data-testid=new-task-unset] input')`, 3000, 'NEW TASK の入力欄')
+    } else {
+      await c.focus('[data-testid=new-task-unset] input')
+    }
     await c.insertText(title)
     await c.enter()
   }
@@ -76,14 +87,14 @@ export function taskProjectScenarios({ withApp, root }) {
           assert(app.logs.some((line) => line.includes(`migrations applied: 4 -> ${latest}`)), '0004以降だけを適用する', app.logs.filter((l) => l.includes('[db]')))
           await c.waitFor(`location.hash === ${JSON.stringify(`#/projects/${projectId}`)}`, 5000, '保存済みの画面（プロジェクト）を復元')
           const settings = await api(c, 'window.gtd.workspace.get()')
-          assert(JSON.stringify(settings) === JSON.stringify(workspace), 'Workspace設定を保持', settings)
+          // フェーズ5.5で追加したカード幅は、旧形式にはないため既定値（320px）で補う（他の項目は保持）
+          assert(JSON.stringify(settings) === JSON.stringify({ ...workspace, milestoneCardWidth: 320 }), 'Workspace設定を保持', settings)
           const tasks = await api(c, 'window.gtd.tasks.list()')
           assert(tasks.every((task) => task.projectId === null), '既存タスクは未所属', tasks)
           await c.waitFor(`document.querySelector('[data-testid=project-name]')?.textContent === '移行前のプロジェクト'`, 5000, 'プロジェクト名の表示')
-          assert(
-            (await c.evaluate(`document.querySelector('[data-testid=task-add-target]')?.textContent`)) === '「移行前のプロジェクト」（マイルストン未設定）に追加',
-            'プロジェクト画面に追加欄を表示'
-          )
+          // フェーズ5.5: プロジェクト画面はカード表示。追加は「マイルストン未設定」カードの NEW TASK
+          const card = await c.evaluate(`({ label: document.querySelector('[data-testid=milestone-card] [data-testid=group-label]')?.textContent, add: document.querySelector('[data-testid=new-task-unset-button]')?.disabled })`)
+          assert(card.label === 'マイルストン未設定' && card.add === false, 'プロジェクト画面に未設定カードと NEW TASK を表示', card)
           await openInbox(c)
           await c.click(c.byText('button', 'すべて'))
           const shown = (await listIds(c)).sort()
@@ -117,12 +128,11 @@ export function taskProjectScenarios({ withApp, root }) {
           await c.waitFor(`document.querySelector('nav button[aria-label="Inbox"]')`, 10000, '再読み込み')
           await sleep(500)
 
-          // プロジェクト画面: 追加先の明示、作成時の所属、範囲の絞り込み
+          // プロジェクト画面: 作成時の所属、範囲の絞り込み（5.5: 追加は「マイルストン未設定」カードの NEW TASK）
           await openProject(c, ids.work1)
-          const target = await c.evaluate(`document.querySelector('[data-testid=task-add-target]')?.textContent`)
-          // 5.4から、マイルストンの指定がない場合は「（マイルストン未設定）」と明示する
-          assert(target === '「仕事」（マイルストン未設定）に追加', '追加欄に追加先を表示', target)
-          await addTask(c, '仕事1のタスク')
+          const target = await c.evaluate(`document.querySelector('[data-testid=new-task-unset] [data-testid=new-task-unset-button]')?.closest('[data-testid=milestone-card]')?.getAttribute('aria-label')`)
+          assert(target === 'マイルストン未設定', 'NEW TASK は追加先のカードの中にある', target)
+          await addProjectTask(c, '仕事1のタスク')
           await c.waitFor(`document.querySelectorAll('[data-testid=task-list] [role=option]').length === 1`, 5000, 'プロジェクトの一覧に追加')
           const all = await tasksById(c)
           ids.work1Task = [...all.values()].find((task) => task.title === '仕事1のタスク').id
@@ -203,11 +213,11 @@ export function taskProjectScenarios({ withApp, root }) {
           // （画面を開き直すと一覧を取り直し、追加欄は無効になる。次のシナリオで確認）
           await openProject(c, ids.later)
           await api(c, `window.gtd.projects.setCompleted({ id: ${JSON.stringify(ids.later)}, completed: true })`)
-          await addTask(c, '完了済みへの追加')
-          await c.waitFor(`[...document.querySelectorAll('form .MuiAlert-message')].some((e) => e.textContent.includes('完了済み'))`, 5000, '追加の失敗表示')
-          const addError = await c.evaluate(`[...document.querySelectorAll('form .MuiAlert-message')].map((e) => e.textContent).join(' ')`)
+          await addProjectTask(c, '完了済みへの追加')
+          await c.waitFor(`document.querySelector('[data-testid=new-task-unset-error]')`, 5000, '追加の失敗表示')
+          const addError = await c.evaluate(`document.querySelector('[data-testid=new-task-unset-error]').textContent`)
           assert(addError.includes('完了済み'), '完了済みプロジェクトへの追加はMainが拒否', addError)
-          assert((await c.evaluate(`document.querySelector('input[aria-label="タスクのタイトル"]').value`)) === '完了済みへの追加', '入力を残す')
+          assert((await c.evaluate(`document.querySelector('[data-testid=new-task-unset] input').value`)) === '完了済みへの追加', '入力を残す')
           const quit = await requestQuit(app)
           assert(quit?.code === 0, '正常終了', quit)
         })
@@ -258,8 +268,8 @@ export function taskProjectScenarios({ withApp, root }) {
         withApp({ label: 'completed-project', userDataDir: scopeDir }, async (app) => {
           const c = app.cdp
           await openProject(c, ids.home)
-          const target = await c.evaluate(`({ text: document.querySelector('[data-testid=task-add-target]').textContent, disabled: document.querySelector('input[aria-label="タスクのタイトル"]').disabled })`)
-          assert(target.disabled && target.text.includes('完了済みのため、タスクを追加できません'), '追加を無効にして理由を表示', target)
+          const target = await c.evaluate(`({ notice: document.querySelector('[data-testid=project-completed-notice]')?.textContent ?? '', disabled: document.querySelector('[data-testid=new-task-unset-button]').disabled })`)
+          assert(target.disabled && target.notice.includes('完了済みのプロジェクトには、マイルストン・タスクを追加できません'), '追加を無効にして理由を表示', target)
           const sidebar = await c.evaluate(`[...document.querySelectorAll('[data-testid=project-list] [data-project-id]')].find((e) => e.dataset.projectId === ${JSON.stringify(ids.home)}).textContent`)
           assert(sidebar.includes('完了済み'), 'サイドバーで完了済みを区別', sidebar)
           await selectRow(c, ids.homeTask)
@@ -315,7 +325,7 @@ export function taskProjectScenarios({ withApp, root }) {
           assert(JSON.stringify(shown.slice(0, 5)) === JSON.stringify(inboxOpen.slice(0, 5).map((row) => row.id)), '先頭の行が期待どおり', shown.slice(0, 5))
 
           // プロジェクトA × 検索「報告」× 完了 × タイトル昇順
-          await c.click(`document.querySelector('nav button[aria-label="Projects"]')`)
+          await c.click(`document.querySelector('nav button[aria-label="Project"]')`)
           await c.waitFor(`document.querySelector('[data-testid=project-list]')`, 5000, 'プロジェクト一覧')
           await c.click(`[...document.querySelectorAll('[data-testid=project-list] [data-project-id]')].find((e) => e.dataset.projectId === ${JSON.stringify(projectA)})`)
           await c.waitFor(`document.querySelectorAll('[data-testid=task-list] [role=option]').length > 0`, 10000, 'プロジェクトAの一覧')

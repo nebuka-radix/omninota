@@ -13,7 +13,7 @@ import { workspaceSettingsQueryOptions } from './features/workspace/workspace-qu
 import { AppFrame } from './layouts/AppFrame'
 import { queryClient } from './lib/query-client'
 import { InboxPage } from './routes/InboxPage'
-import { ProjectPage, ProjectsIndexPage } from './routes/ProjectsPage'
+import { NewProjectPage, ProjectPage, ProjectsIndexPage } from './routes/ProjectsPage'
 import { NotFoundPage } from './routes/NotFoundPage'
 import { SettingsPage } from './routes/SettingsPage'
 
@@ -51,6 +51,14 @@ const projectsRoute = createRoute({
   component: ProjectsIndexPage
 })
 
+// 新規プロジェクトの画面（フェーズ5.5）。静的なパスは $projectId より優先される。
+// 最後の画面としては保存しない（isWorkspaceRoute の対象外。次回起動時に作成途中の画面は開かない）
+const newProjectRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/projects/new',
+  component: NewProjectPage
+})
+
 const projectRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/projects/$projectId',
@@ -72,7 +80,7 @@ const settingsRoute = createRoute({
   component: SettingsPage
 })
 
-const routeTree = rootRoute.addChildren([indexRoute, inboxRoute, settingsRoute, projectsRoute, projectRoute])
+const routeTree = rootRoute.addChildren([indexRoute, inboxRoute, settingsRoute, projectsRoute, newProjectRoute, projectRoute])
 
 export const router = createRouter({
   routeTree,

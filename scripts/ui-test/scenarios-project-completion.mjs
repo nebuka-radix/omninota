@@ -1,7 +1,7 @@
 // フェーズ5.3: プロジェクトの完了ルールのUIシナリオ。run.mjs から呼ぶ。専用の一時userData（root配下）だけを使う。
 // 完了・取り消しは、画面の操作（見出しのボタン）と、Preloadが公開する用途別API（projects.setCompleted）で行う。DBは直接変更しない。
 import { join } from 'node:path'
-import { assert, requestQuit, sleep } from './lib.mjs'
+import { assert, closeInlineCreate, requestQuit, sleep } from './lib.mjs'
 
 export function projectCompletionScenarios({ withApp, root }) {
   const dir = join(root, 'userData-completion')
@@ -14,7 +14,7 @@ export function projectCompletionScenarios({ withApp, root }) {
   const task = async (c, id) => (await api(c, 'window.gtd.tasks.list()')).find((t) => t.id === id)
   const openProject = async (c, projectId) => {
     if (!(await c.evaluate(`!!document.querySelector('[data-testid=project-list]')`))) {
-      await c.click(`document.querySelector('nav button[aria-label="Projects"]')`)
+      await c.click(`document.querySelector('nav button[aria-label="Project"]')`)
       await c.waitFor(`document.querySelector('[data-testid=project-list]')`, 5000, 'プロジェクト一覧')
     }
     await c.click(`document.querySelector('[data-testid=project-list] [data-project-id="${projectId}"]')`)
@@ -25,7 +25,12 @@ export function projectCompletionScenarios({ withApp, root }) {
   const pressed = (c, value) => c.evaluate(`document.querySelector('button[value=${value}]')?.getAttribute('aria-pressed') === 'true'`)
   const sectionOf = (c, projectId) =>
     c.evaluate(`(() => { const e = document.querySelector('[data-testid=project-list] [data-project-id="${projectId}"]'); if (!e) return null; return { section: e.closest('[data-testid^=project-section-]')?.dataset.testid, current: e.getAttribute('aria-current'), text: e.textContent } })()`)
-  const clickCompletion = (c) => c.click(`document.querySelector('[data-testid=project-completion-button]')`)
+  // フェーズ5.5: 完了操作は右の詳細パネル（タスク未選択時のプロジェクト詳細）にある
+  const clickCompletion = (c) => c.click(`document.querySelector('#detail-panel [data-testid=project-completion-button]')`)
+  const backToProject = async (c) => {
+    await c.click(`document.querySelector('[data-testid=back-to-project]')`)
+    await c.waitFor(`document.querySelector('#detail-panel [data-testid=project-detail]')`, 3000, 'プロジェクトの詳細へ戻る')
+  }
   const titleInput = '[data-testid=task-editor] input:not([type=hidden])'
   const reload = async (c) => {
     await c.evaluate('location.reload()')
@@ -82,8 +87,8 @@ export function projectCompletionScenarios({ withApp, root }) {
           const section = await sectionOf(c, ids.p)
           assert(section.section === 'project-section-completed' && section.current === 'page' && section.text.includes('完了済み'), 'サイドバーの「完了済み」区分へ移り、選択を維持（文字でも表示）', section)
           assert(await pressed(c, 'open'), '同じ画面のまま完了しても、表示フィルターは変えない')
-          const add = await c.evaluate(`({ disabled: document.querySelector('input[aria-label="タスクのタイトル"]').disabled, text: document.querySelector('[data-testid=task-add-target]').textContent })`)
-          assert(add.disabled && add.text.includes('完了済み'), '追加欄は無効で理由を表示', add)
+          const add = await c.evaluate(`({ disabled: document.querySelector('[data-testid=new-task-unset-button]').disabled, text: document.querySelector('[data-testid=project-completed-notice]')?.textContent ?? '' })`)
+          assert(add.disabled && add.text.includes('完了済み'), 'NEW TASK は無効で理由を表示', add)
           assert((await task(c, ids.inbox)).completedAt === null, '他のタスクは変わらない')
 
           // 別の画面へ移って戻ると、完了済みプロジェクトは「完了」を初期表示
@@ -124,6 +129,8 @@ export function projectCompletionScenarios({ withApp, root }) {
           assert((await project(c, ids.p)).completedAt !== null, '改名しても完了のまま')
 
           // 取り消し: 表示フィルター（完了）はそのまま、一覧も突然空にならない。区分は未完了へ戻り、選択を維持
+          // （タスクを選択中なので、詳細パネルをプロジェクトの詳細へ戻してから操作する）
+          await backToProject(c)
           await clickCompletion(c)
           await c.waitFor(`document.querySelector('[data-testid=project-status]')?.textContent === '未完了'`, 5000, '取り消しの確定表示')
           assert((await project(c, ids.p)).completedAt === null, '取り消し')
@@ -190,18 +197,24 @@ export function projectCompletionScenarios({ withApp, root }) {
           // タスクのタイトルを編集中に取り消し → 破棄 → 取り消しを続行（タイトルは保存しない）
           await clickCompletion(c) // 未完了に戻す（ドラフトなし）
           await c.waitFor(`document.querySelector('[data-testid=project-status]')?.textContent === '未完了'`, 5000, '取り消し')
-          await c.focus('input[aria-label="タスクのタイトル"]')
+          await c.click(`document.querySelector('[data-testid=new-task-unset-button]')`)
+          await c.waitFor(`document.activeElement === document.querySelector('[data-testid=new-task-unset] input')`, 3000, 'NEW TASK の入力欄')
           await c.insertText('Rのタスク')
           await c.enter()
           await c.waitFor(`document.querySelectorAll('[data-testid=task-list] [role=option]').length === 1`, 5000, '追加')
+          await closeInlineCreate(c, 'new-task-unset')
           ids.rTask = (await api(c, 'window.gtd.tasks.list()')).find((t) => t.title === 'Rのタスク').id
           await c.click(`document.querySelector('[data-testid=task-list] [role=option]')`)
           await c.waitFor(`document.querySelector('[data-testid=task-editor]')`, 3000, '詳細')
           await c.setInput(titleInput, 'Rのタスク（未保存）')
-          await clickCompletion(c)
+          // 5.5: タスクの詳細を表示中は完了操作が出ない。「プロジェクトの詳細」へ戻る時に既存の確認が出る
+          assert(!(await c.evaluate(`!!document.querySelector('[data-testid=project-completion-button]')`)), 'タスクの詳細の表示中は完了操作を出さない')
+          await c.click(`document.querySelector('[data-testid=back-to-project]')`)
           await c.waitFor(`document.querySelector('[role=dialog]')?.innerText.includes('タスクのタイトルの変更を保存しますか')`, 3000, 'タイトルの確認')
           await c.click(c.byText('[role=dialog] button', '破棄'))
-          await c.waitFor(`document.querySelector('[data-testid=project-completion-error]')`, 5000, '破棄後に完了を要求 → 未完了タスクで拒否')
+          await c.waitFor(`document.querySelector('#detail-panel [data-testid=project-detail]')`, 3000, '破棄してプロジェクトの詳細へ')
+          await clickCompletion(c)
+          await c.waitFor(`document.querySelector('[data-testid=project-completion-error]')`, 5000, '完了を要求 → 未完了タスクで拒否')
           assert((await task(c, ids.rTask)).title === 'Rのタスク', '破棄したタイトルは保存しない')
           assert((await project(c, ids.r)).completedAt === null, '未完了タスクがあるため完了しない')
 
@@ -211,7 +224,7 @@ export function projectCompletionScenarios({ withApp, root }) {
           await c.setInput('[data-testid=project-name-editor] input', 'ドラフト確認3')
           await c.evaluate(`(() => {
             document.querySelector('[data-testid=project-name-editor]').requestSubmit()
-            document.querySelector('[data-testid=project-completion-button]').click()
+            document.querySelector('#detail-panel [data-testid=project-completion-button]').click()
           })()`)
           // 名前の保存が終わる前に確認が出た場合は「保存」を選ぶ（保存済みなら続行される）
           for (let i = 0; i < 30; i++) {
