@@ -13,6 +13,8 @@
     "typecheck:node": "tsc --noEmit -p tsconfig.node.json",
     "typecheck:web": "tsc --noEmit -p tsconfig.web.json",
     "test": "vitest run",
+    "test:ui": "electron-vite build && node scripts/ui-test/run.mjs hidden",
+    "test:ui:secondary": "electron-vite build && node scripts/ui-test/run.mjs secondary",
     "db:generate": "drizzle-kit generate",
     "package:dir": "electron-vite build && electron-builder --mac dir --x64"
   },

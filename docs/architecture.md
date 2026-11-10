@@ -227,6 +227,14 @@ check → unsaved-draft → ダイアログ（保存して終了 / 保存せず�
   閉じる操作を止めて ExitCoordinator へ回す設計が必要（開発時の再読み込みも止まるため、区別の方法を含めて別途設計する）。
 - 強制終了（SIGKILL、短時間に繰り返したSIGTERM）、クラッシュ、電源断。
 
+### 自動テスト用の起動モード（GTD_TEST_UI）
+
+- 未パッケージ時だけ有効。`hidden`（表示しない）/ `secondary`（プライマリ以外のディスプレイに `showInactive()`）。
+- 一時ディレクトリ内の userData を必須とし、誤った設定ではuserDataを決める前に終了する。
+- Mainのネイティブダイアログは `lifecycle/message-box.ts` のアダプター経由。テストモードでは起動時に環境変数で指定した回答を使い、
+  回答がなければキャンセル扱い＋失敗記録。Rendererから回答を注入するIPCは公開しない。
+- 通常起動・パッケージ版の表示、多重起動の防止、実ダイアログは変えない。詳細は docs/testing.md。
+
 ### Projects（フェーズ5.1）
 
 - ルート: `/projects`（未選択）、`/projects/$projectId`（選択中）。プロジェクトの選択はルートの変更として扱い、

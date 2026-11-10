@@ -207,4 +207,10 @@ E2E:
 - パッケージ化後の保存
 
 Unit・Integrationはvitest（ホストNode.js、`npm test`）で実行する。
-E2Eのテストツールは未選定。採用前に実行環境とElectron対応を確認する。
+E2Eのテストツール（フレームワーク）は未選定。採用前に実行環境とElectron対応を確認する。
+
+UIの自動テスト（2026-11-10に整備。フェーズ5.1と5.2の間の基盤整備）:
+- Electronの非表示ウィンドウ（`npm run test:ui`）と、セカンダリディスプレイへの非アクティブ表示（`npm run test:ui:secondary`）。
+- 依存を追加せず、Node.js標準のWebSocketでCDPに接続するスクリプト（`scripts/ui-test/`）で実行する。
+- ユーザーの作業を妨げない（前面化・フォーカス・ネイティブダイアログ・OS全体への入力をしない）。詳細は docs/testing.md。
+- 実IME、VoiceOver、OSの実フォーカス、ネイティブダイアログの実ボタンは、引き続き手動確認（docs/manual-checks.md）。

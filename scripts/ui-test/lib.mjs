@@ -1,0 +1,256 @@
+// UIテストの共通処理（依存の追加なし。Node.js 標準の fetch / WebSocket / child_process だけを使う）。
+// - アプリは GTD_TEST_UI（hidden / secondary）で起動し、自分が起動した子プロセスだけを操作・終了する。
+// - 操作は対象ページへのCDP（DOM・Input.dispatchKeyEvent）に限定する。OS全体へのキー入力・マウス操作はしない。
+import { execFileSync, spawn } from 'node:child_process'
+import { existsSync } from 'node:fs'
+import { createRequire } from 'node:module'
+import { createServer } from 'node:net'
+import { dirname, join } from 'node:path'
+import { fileURLToPath } from 'node:url'
+
+const require = createRequire(import.meta.url)
+export const PROJECT_ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..')
+const electronBinary = require('electron')
+
+export const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
+
+// ループバックで空いているポートを1つ得る
+async function freePort() {
+  return new Promise((resolve, reject) => {
+    const server = createServer()
+    server.once('error', reject)
+    server.listen(0, '127.0.0.1', () => {
+      const { port } = server.address()
+      server.close(() => resolve(port))
+    })
+  })
+}
+
+// 指定ポートで待ち受けているアドレス（lsofの読み取りのみ）
+export function listeningAddresses(port) {
+  try {
+    const out = execFileSync('lsof', ['-nP', `-iTCP:${port}`, '-sTCP:LISTEN', '-Fn'], { encoding: 'utf8' })
+    return out.split('\n').filter((line) => line.startsWith('n')).map((line) => line.slice(1))
+  } catch {
+    return []
+  }
+}
+
+// 最前面のアプリのPID（lsappinfoの読み取りのみ。他アプリの前面化などはしない）
+function frontmostPid() {
+  try {
+    const asn = execFileSync('lsappinfo', ['front'], { encoding: 'utf8' }).trim()
+    const info = execFileSync('lsappinfo', ['info', '-only', 'pid', asn], { encoding: 'utf8' })
+    const match = /"pid"=(\d+)/.exec(info)
+    return match ? Number(match[1]) : null
+  } catch {
+    return null
+  }
+}
+
+function processTree(rootPid) {
+  try {
+    const out = execFileSync('ps', ['-Ao', 'pid=,ppid='], { encoding: 'utf8' })
+    const pairs = out.trim().split('\n').map((line) => line.trim().split(/\s+/).map(Number))
+    const result = new Set([rootPid])
+    let added = true
+    while (added) {
+      added = false
+      for (const [pid, ppid] of pairs) {
+        if (result.has(ppid) && !result.has(pid)) {
+          result.add(pid)
+          added = true
+        }
+      }
+    }
+    return result
+  } catch {
+    return new Set([rootPid])
+  }
+}
+
+export class TestFailure extends Error {}
+export function assert(condition, message, detail) {
+  if (!condition) throw new TestFailure(detail === undefined ? message : `${message}: ${JSON.stringify(detail)}`)
+}
+
+// アプリを起動する。userDataDir は呼び出し側が作った一時ディレクトリ。
+export async function launchApp({ mode, userDataDir, dialogAnswers = [], displayId, label }) {
+  if (!existsSync(join(PROJECT_ROOT, 'out', 'main', 'index.js'))) {
+    throw new Error('out/ がありません。先に npm run build を実行してください（npm run test:ui は自動でビルドします）')
+  }
+  const port = await freePort()
+  const env = { ...process.env, GTD_TEST_UI: mode, GTD_DEV_USER_DATA_DIR: userDataDir }
+  delete env.ELECTRON_RENDERER_URL // ビルド済みのファイルを読み込む（開発サーバーは使わない）
+  delete env.GTD_TEST_DIALOG_ANSWERS
+  delete env.GTD_TEST_DISPLAY_ID
+  if (dialogAnswers.length > 0) env.GTD_TEST_DIALOG_ANSWERS = JSON.stringify(dialogAnswers)
+  if (displayId !== undefined && displayId !== null) env.GTD_TEST_DISPLAY_ID = String(displayId)
+
+  const child = spawn(electronBinary, ['.', `--remote-debugging-port=${port}`], {
+    cwd: PROJECT_ROOT,
+    env,
+    stdio: ['ignore', 'pipe', 'pipe']
+  })
+  const logs = []
+  const onData = (chunk) => logs.push(...chunk.toString().split('\n').filter(Boolean))
+  child.stdout.on('data', onData)
+  child.stderr.on('data', onData)
+  let exitInfo = null
+  const exited = new Promise((resolve) => {
+    child.once('exit', (code, signal) => {
+      exitInfo = { code, signal }
+      resolve(exitInfo)
+    })
+  })
+
+  // 最前面のアプリが、テスト対象のプロセスにならないことを監視する
+  const focusViolations = []
+  const monitor = setInterval(() => {
+    const front = frontmostPid()
+    if (front !== null && processTree(child.pid).has(front)) focusViolations.push(new Date().toISOString())
+  }, 250)
+
+  const app = {
+    label,
+    pid: child.pid,
+    port,
+    logs,
+    focusViolations,
+    exited,
+    get exitInfo() {
+      return exitInfo
+    },
+    // 自分が起動したプロセスにだけシグナルを送る（killall などの一括終了はしない）
+    signal(sig) {
+      if (exitInfo === null) child.kill(sig)
+    },
+    async waitExit(timeoutMs = 15000) {
+      const result = await Promise.race([exited, sleep(timeoutMs).then(() => null)])
+      return result
+    },
+    stopMonitor() {
+      clearInterval(monitor)
+    },
+    dialogFailures() {
+      return logs.filter((line) => line.includes('[test-dialog] FAIL'))
+    }
+  }
+
+  // ページ（CDPのターゲット）が現れるのを待つ。起動前に終了した場合はその理由を返す
+  const deadline = Date.now() + 30000
+  for (;;) {
+    if (exitInfo !== null) return app
+    try {
+      const targets = await (await fetch(`http://127.0.0.1:${port}/json/list`)).json()
+      const page = targets.find((target) => target.type === 'page')
+      if (page) {
+        app.cdp = await connectCdp(page.webSocketDebuggerUrl)
+        break
+      }
+    } catch {
+      // まだ待ち受けていない
+    }
+    if (Date.now() > deadline) {
+      app.signal('SIGKILL')
+      throw new Error(`起動を確認できませんでした: ${logs.join('\n')}`)
+    }
+    await sleep(200)
+  }
+  // 非表示・非アクティブでもフォーカスがある前提で操作できるようにする（ページ内だけの擬似。OSのフォーカスは変えない）
+  await app.cdp.send('Emulation.setFocusEmulationEnabled', { enabled: true })
+  await app.cdp.waitFor(`!!document.querySelector('nav button[aria-label="Inbox"]')`, 15000, '画面の表示')
+  return app
+}
+
+// アプリの終了を要求する（SIGTERM → Electronが app.quit() として扱い、before-quit の保存確認を通る）
+export async function requestQuit(app, timeoutMs = 15000) {
+  app.cdp?.close()
+  app.signal('SIGTERM')
+  return app.waitExit(timeoutMs)
+}
+
+// 異常時の後始末（自分の子プロセスだけ）
+export async function forceStop(app) {
+  app.cdp?.close()
+  if (app.exitInfo === null) {
+    app.signal('SIGKILL')
+    await app.waitExit(5000)
+  }
+  app.stopMonitor()
+}
+
+export async function connectCdp(url) {
+  const ws = new WebSocket(url)
+  await new Promise((resolve, reject) => {
+    ws.onopen = resolve
+    ws.onerror = reject
+  })
+  let id = 0
+  const pending = new Map()
+  ws.onmessage = (message) => {
+    const data = JSON.parse(message.data)
+    const callback = pending.get(data.id)
+    if (callback) {
+      pending.delete(data.id)
+      callback(data)
+    }
+  }
+  const send = (method, params = {}) =>
+    new Promise((resolve, reject) => {
+      if (ws.readyState !== WebSocket.OPEN) return reject(new Error('CDPの接続が閉じています'))
+      const requestId = ++id
+      pending.set(requestId, (data) => (data.error ? reject(new Error(`${method}: ${data.error.message}`)) : resolve(data.result)))
+      ws.send(JSON.stringify({ id: requestId, method, params }))
+    })
+  const evaluate = async (expression) => {
+    const result = await send('Runtime.evaluate', { expression, awaitPromise: true, returnByValue: true })
+    if (result.exceptionDetails) throw new Error(`評価に失敗: ${JSON.stringify(result.exceptionDetails).slice(0, 300)}`)
+    return result.result.value
+  }
+  const waitFor = async (expression, timeoutMs = 5000, label = expression) => {
+    const deadline = Date.now() + timeoutMs
+    for (;;) {
+      if (await evaluate(`Boolean(${expression})`)) return
+      if (Date.now() > deadline) throw new TestFailure(`待機がタイムアウトしました: ${label}`)
+      await sleep(100)
+    }
+  }
+  // 対象ページにだけキー入力を送る
+  const key = async (keyName, keyCode, extra = {}) => {
+    const code = extra.code ?? keyName
+    await send('Input.dispatchKeyEvent', { type: 'rawKeyDown', key: keyName, code, windowsVirtualKeyCode: keyCode })
+    if (extra.text) await send('Input.dispatchKeyEvent', { type: 'char', key: keyName, text: extra.text })
+    await send('Input.dispatchKeyEvent', { type: 'keyUp', key: keyName, code, windowsVirtualKeyCode: keyCode })
+  }
+  const enter = () => key('Enter', 13, { text: '\r' })
+  const space = () => key(' ', 32, { code: 'Space', text: ' ' })
+  const insertText = (text) => send('Input.insertText', { text })
+  // DOM要素をクリックする（対象ページへのマウスイベント。OSのカーソルは動かさない）
+  const click = async (selectorExpr) => {
+    const pos = await evaluate(
+      `(() => { const e = ${selectorExpr}; if (!e) return null; e.scrollIntoView({ block: 'nearest' }); const r = e.getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 } })()`
+    )
+    if (!pos) throw new TestFailure(`要素が見つかりません: ${selectorExpr}`)
+    for (const type of ['mouseMoved', 'mousePressed', 'mouseReleased']) {
+      await send('Input.dispatchMouseEvent', { type, x: pos.x, y: pos.y, button: 'left', clickCount: 1 })
+    }
+    await sleep(150)
+  }
+  const focus = (selector) => evaluate(`document.querySelector(${JSON.stringify(selector)}).focus()`)
+  const setInput = async (selector, value) => {
+    await evaluate(
+      `(() => { const i = document.querySelector(${JSON.stringify(selector)}); const s = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set; s.call(i, ${JSON.stringify(value)}); i.dispatchEvent(new Event('input', { bubbles: true })); })()`
+    )
+    await sleep(100)
+  }
+  const byText = (selector, text) =>
+    `[...document.querySelectorAll(${JSON.stringify(selector)})].find((e) => e.textContent.trim() === ${JSON.stringify(text)})`
+  return { send, evaluate, waitFor, key, enter, space, insertText, click, focus, setInput, byText, close: () => ws.close() }
+}
+
+// テスト終了後のDBを読み取り専用で開く（アプリの終了後に使う）
+export function openDatabaseReadOnly(file) {
+  const Database = require('better-sqlite3')
+  return new Database(file, { readonly: true, fileMustExist: true })
+}
