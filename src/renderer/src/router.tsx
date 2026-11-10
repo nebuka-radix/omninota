@@ -6,8 +6,9 @@ import {
   createRouter,
   redirect
 } from '@tanstack/react-router'
-import { DEFAULT_WORKSPACE_SETTINGS, projectIdFromRoute } from '../../shared/contracts/workspace'
+import { DEFAULT_WORKSPACE_SETTINGS } from '../../shared/contracts/workspace'
 import { projectListQueryOptions } from './features/projects/project-queries'
+import { resolveStartupTarget } from './features/projects/project-route'
 import { workspaceSettingsQueryOptions } from './features/workspace/workspace-queries'
 import { AppFrame } from './layouts/AppFrame'
 import { queryClient } from './lib/query-client'
@@ -25,6 +26,7 @@ const rootRoute = createRootRouteWithContext<{ queryClient: QueryClient }>()({
 // ルート未指定（'/'）で起動した場合だけ、保存済みの最後の画面へ移動する。
 // 明示的なルート（#/settings など）が指定されていればそれを優先する。
 // 保存値はMain側で検証済みで、未知の画面はInboxに正規化される。読み込み失敗時もInboxへ。
+// 保存済みのプロジェクトが存在しなければ /projects へ（判定は resolveStartupTarget）。
 const indexRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/',
@@ -35,24 +37,11 @@ const indexRoute = createRoute({
     } catch {
       // 読み込み失敗はAppFrame側で表示する
     }
-    const projectId = projectIdFromRoute(target)
-    if (projectId) {
-      // 保存済みのプロジェクトが存在しなければ /projects へ。取得に失敗した場合は判定せず、そのまま開く
-      // （画面側で取得失敗として表示する。存在しないとは扱わない）
-      let exists = true
-      try {
-        const projects = await context.queryClient.ensureQueryData(projectListQueryOptions)
-        exists = projects.some((project) => project.id === projectId)
-      } catch {
-        exists = true
-      }
-      if (!exists) throw redirect({ to: '/projects', replace: true })
-      throw redirect({ to: '/projects/$projectId', params: { projectId }, replace: true })
+    const next = await resolveStartupTarget(target, () => context.queryClient.ensureQueryData(projectListQueryOptions))
+    if (next.to === '/projects/$projectId') {
+      throw redirect({ to: next.to, params: { projectId: next.projectId }, replace: true })
     }
-    if (target === '/inbox' || target === '/settings' || target === '/projects') {
-      throw redirect({ to: target, replace: true })
-    }
-    throw redirect({ to: '/inbox', replace: true })
+    throw redirect({ to: next.to, replace: true })
   }
 })
 

@@ -4,7 +4,8 @@ import {
   createFlushRequester,
   type ExitKind,
   type FailureChoice,
-  type FlushCheckOutcome
+  type FlushCheckOutcome,
+  unsavedDraftDialogText
 } from '../../src/main/lifecycle/workspace-flush'
 import type { DraftExitAction } from '../../src/shared/contracts/ipc'
 import { workspaceFlushResultArgsSchema } from '../../src/shared/validation/workspace'
@@ -75,6 +76,20 @@ describe('Rendererへの保存確認（FlushRequester）', () => {
     } finally {
       vi.useRealTimers()
     }
+  })
+
+  it('応答で伝えられた未保存ドラフトの対象（タスク名・プロジェクト名）を保持する', async () => {
+    let n = 0
+    const requester = createFlushRequester({ send: () => true, generateId: () => `req-${++n}` })
+    expect(requester.lastDraftKind()).toBeNull()
+    const first = requester.request()
+    requester.resolve('req-1', 'unsaved-draft', 'project')
+    await first
+    expect(requester.lastDraftKind()).toBe('project')
+    const second = requester.request()
+    requester.resolve('req-2', 'saved')
+    await second
+    expect(requester.lastDraftKind()).toBeNull()
   })
 
   it('未知のrequestIdは無視する', () => {
@@ -285,6 +300,49 @@ describe('終了・ウィンドウを閉じる処理の調整（ExitCoordinator�
   })
 })
 
+describe('未保存の対象の種類（タスク名・プロジェクト名）と終了ダイアログ', () => {
+  it('ダイアログの文言は対象と終了・閉じるの別で切り替える（対象不明はタスクのタイトル）', () => {
+    expect(unsavedDraftDialogText('project', 'quit')).toMatchObject({
+      buttons: ['保存して終了', '保存せずに終了', 'キャンセル'],
+      message: 'プロジェクト名に未保存の変更があります'
+    })
+    expect(unsavedDraftDialogText('project', 'quit').detail).toContain('プロジェクト名の変更だけを破棄')
+    expect(unsavedDraftDialogText('task', 'close')).toMatchObject({
+      buttons: ['保存して閉じる', '保存せずに閉じる', 'キャンセル'],
+      message: 'タスクのタイトルに未保存の変更があります'
+    })
+    expect(unsavedDraftDialogText(null, 'quit').message).toBe('タスクのタイトルに未保存の変更があります')
+  })
+
+  it('Rendererが project と応答すると、終了時のダイアログはプロジェクト名の文言になり、保存して終了まで進む', async () => {
+    let n = 0
+    const sent: { requestId: string; draftAction: DraftExitAction }[] = []
+    const requester = createFlushRequester({ send: (request) => (sent.push(request), true), generateId: () => `req-${++n}` })
+    const messages: string[] = []
+    const continueQuit = vi.fn()
+    const coordinator = createExitCoordinator({
+      requestFlush: (action) => requester.request(action),
+      askOnFailure: async (_outcome, kind) => {
+        messages.push(unsavedDraftDialogText(requester.lastDraftKind(), kind).message)
+        return 'save'
+      },
+      continueQuit,
+      continueClose: () => {},
+      logger: silent
+    })
+    coordinator.onQuitRequested({ preventDefault: () => {} })
+    await tick()
+    expect(sent.map((request) => request.draftAction)).toEqual(['check'])
+    requester.resolve('req-1', 'unsaved-draft', 'project')
+    await tick()
+    expect(messages).toEqual(['プロジェクト名に未保存の変更があります'])
+    expect(sent.map((request) => request.draftAction)).toEqual(['check', 'save'])
+    requester.resolve('req-2', 'saved')
+    await tick()
+    expect(continueQuit).toHaveBeenCalledTimes(1)
+  })
+})
+
 describe('保存確認の応答（IPC入力）の検証', () => {
   const id = '6f1c2f8e-3c1d-4f0a-9b7e-2a6d1f3c9e10'
   it('requestId（UUID）と既知の結果だけを受け付ける', () => {
@@ -292,5 +350,11 @@ describe('保存確認の応答（IPC入力）の検証', () => {
     expect(workspaceFlushResultArgsSchema.safeParse([{ requestId: 'x', outcome: 'saved' }]).success).toBe(false)
     expect(workspaceFlushResultArgsSchema.safeParse([{ requestId: id, outcome: 'timeout' }]).success).toBe(false)
     expect(workspaceFlushResultArgsSchema.safeParse([{ requestId: id, outcome: 'saved', extra: 1 }]).success).toBe(false)
+    expect(
+      workspaceFlushResultArgsSchema.safeParse([{ requestId: id, outcome: 'unsaved-draft', draftKind: 'project' }]).success
+    ).toBe(true)
+    expect(
+      workspaceFlushResultArgsSchema.safeParse([{ requestId: id, outcome: 'unsaved-draft', draftKind: 'other' }]).success
+    ).toBe(false)
   })
 })

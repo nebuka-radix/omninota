@@ -10,7 +10,8 @@ import {
   createFlushRequester,
   type ExitKind,
   type FailureChoice,
-  type FlushCheckOutcome
+  type FlushCheckOutcome,
+  unsavedDraftDialogText
 } from './lifecycle/workspace-flush'
 import { createProjectRepository } from './repositories/project-repository'
 import { createSettingsRepository } from './repositories/settings-repository'
@@ -60,18 +61,16 @@ async function askOnFlushFailure(outcome: FlushCheckOutcome, kind: ExitKind): Pr
   const verb = kind === 'quit' ? '終了' : '閉じる'
   console.warn(`[exit] 確認ダイアログを表示します（${outcome}）`)
 
-  // 詳細パネルに未保存のタイトル編集がある場合
+  // 未保存の編集（タスクのタイトル・プロジェクト名）がある場合
   if (outcome === 'unsaved-draft') {
-    const draftTarget = flushRequester.lastDraftKind() === 'project' ? 'プロジェクト名' : 'タスクのタイトル'
+    const text = unsavedDraftDialogText(flushRequester.lastDraftKind(), kind)
     const response = await show({
       type: 'warning',
-      buttons: [`保存して${verb}`, `保存せずに${verb}`, 'キャンセル'],
+      buttons: text.buttons,
       defaultId: 0,
       cancelId: 2,
-      message: `${draftTarget}に未保存の変更があります`,
-      detail:
-        `「保存せずに」を選ぶと、${draftTarget}の変更だけを破棄します（ペイン幅などのUI設定は保存します）。\n` +
-        '保存できなかった場合は中断し、入力は残ります。'
+      message: text.message,
+      detail: text.detail
     })
     return response === 0 ? 'save' : response === 1 ? 'discard' : 'cancel'
   }

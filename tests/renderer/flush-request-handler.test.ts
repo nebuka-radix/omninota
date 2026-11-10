@@ -1,10 +1,11 @@
 import { describe, expect, it, vi } from 'vitest'
 import { processFlushRequest, type DraftExitHandlers } from '../../src/renderer/src/features/workspace/flush-request-handler'
 
-function createDraft(options: { dirty: boolean; saveOk?: boolean }) {
+function createDraft(options: { dirty: boolean; saveOk?: boolean; kind?: 'task' | 'project' }) {
   let dirty = options.dirty
   const handlers: DraftExitHandlers = {
     isDirty: () => dirty,
+    kind: () => (dirty ? (options.kind ?? 'task') : null),
     save: vi.fn(async () => {
       if (options.saveOk === false) return false
       dirty = false
@@ -35,7 +36,7 @@ describe('終了前の問い合わせの処理（Renderer）', () => {
   it('確認（check）: ドラフトがあれば変えずに unsaved-draft を返す', async () => {
     const draft = createDraft({ dirty: true })
     const { deps: d } = deps(draft, 'saved')
-    expect(await processFlushRequest('check', d)).toBe('unsaved-draft')
+    expect(await processFlushRequest('check', d)).toEqual({ outcome: 'unsaved-draft', draftKind: 'task' })
     expect(draft.save).not.toHaveBeenCalled()
     expect(draft.discard).not.toHaveBeenCalled()
   })
@@ -43,7 +44,7 @@ describe('終了前の問い合わせの処理（Renderer）', () => {
   it('保存（save）: タイトルを保存してから、確定済みの値を待ってWorkspace状態を保存する', async () => {
     const draft = createDraft({ dirty: true })
     const { deps: d, order } = deps(draft, 'saved')
-    expect(await processFlushRequest('save', d)).toBe('saved')
+    expect(await processFlushRequest('save', d)).toEqual({ outcome: 'saved' })
     expect(draft.save).toHaveBeenCalledTimes(1)
     expect(order).toEqual(['wait', 'workspace'])
   })
@@ -51,7 +52,7 @@ describe('終了前の問い合わせの処理（Renderer）', () => {
   it('保存（save）に失敗・無効な入力なら draft-save-failed（Workspace状態の確認へ進まない）', async () => {
     const draft = createDraft({ dirty: true, saveOk: false })
     const { deps: d } = deps(draft)
-    expect(await processFlushRequest('save', d)).toBe('draft-save-failed')
+    expect(await processFlushRequest('save', d)).toEqual({ outcome: 'draft-save-failed', draftKind: 'task' })
     expect(d.flushWorkspace).not.toHaveBeenCalled()
     expect(draft.isDirty()).toBe(true) // ドラフトは残る
   })
@@ -59,7 +60,7 @@ describe('終了前の問い合わせの処理（Renderer）', () => {
   it('破棄（discard）: タイトルは保存せず、Workspace状態の保存は省略しない', async () => {
     const draft = createDraft({ dirty: true })
     const { deps: d } = deps(draft, 'saved')
-    expect(await processFlushRequest('discard', d)).toBe('saved')
+    expect(await processFlushRequest('discard', d)).toEqual({ outcome: 'saved' })
     expect(draft.save).not.toHaveBeenCalled()
     expect(draft.discard).toHaveBeenCalledTimes(1)
     expect(d.flushWorkspace).toHaveBeenCalledTimes(1)
@@ -67,12 +68,19 @@ describe('終了前の問い合わせの処理（Renderer）', () => {
 
   it('Workspace状態の保存に失敗したら failed を優先する', async () => {
     const { deps: d } = deps(createDraft({ dirty: true }), 'failed')
-    expect(await processFlushRequest('check', d)).toBe('failed')
+    expect(await processFlushRequest('check', d)).toEqual({ outcome: 'failed' })
   })
 
   it('ドラフトもWorkspaceProviderもなければ nothing', async () => {
     expect(
       await processFlushRequest('save', { draft: null, flushWorkspace: null, waitForPendingCommits: async () => {} })
-    ).toBe('nothing')
+    ).toEqual({ outcome: 'nothing' })
+  })
+
+  it('プロジェクト名のドラフトなら対象を project として伝える（終了時のダイアログの文言用）', async () => {
+    const draft = createDraft({ dirty: true, kind: 'project' })
+    const { deps: d } = deps(draft, 'saved')
+    expect(await processFlushRequest('check', d)).toEqual({ outcome: 'unsaved-draft', draftKind: 'project' })
+    expect(await processFlushRequest('save', d)).toEqual({ outcome: 'saved' })
   })
 })

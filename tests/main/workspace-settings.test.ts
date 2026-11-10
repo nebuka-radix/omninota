@@ -29,7 +29,12 @@ describe('workspace.save の入力検証（厳格）', () => {
   it.each<[string, unknown[]]>([
     ['引数なし', []],
     ['余分なキー', [{ ...valid, openTabs: [] }]],
-    ['未知の画面', [{ ...valid, lastRoute: '/projects' }]],
+    ['未知の画面', [{ ...valid, lastRoute: '/review' }]],
+    ['プロジェクトIDが不正', [{ ...valid, lastRoute: '/projects/not-a-uuid' }]],
+    ['プロジェクトIDが大文字', [{ ...valid, lastRoute: '/projects/6F1C2F8E-3C1D-4F0A-9B7E-2A6D1F3C9E10' }]],
+    ['プロジェクトの下位パス', [{ ...valid, lastRoute: '/projects/6f1c2f8e-3c1d-4f0a-9b7e-2a6d1f3c9e10/x' }]],
+    ['外部URL', [{ ...valid, lastRoute: 'https://example.com/projects/6f1c2f8e-3c1d-4f0a-9b7e-2a6d1f3c9e10' }]],
+    ['パストラバーサル', [{ ...valid, lastRoute: '/projects/../settings' }]],
     ['バージョン違い', [{ ...valid, version: 2 }]],
     ['サイドバー幅が最小未満', [{ ...valid, sidebarWidth: WORKSPACE_LIMITS.sidebarWidth.min - 1 }]],
     ['詳細幅が最大超過', [{ ...valid, detailWidth: WORKSPACE_LIMITS.detailWidth.max + 1 }]],
@@ -60,6 +65,33 @@ describe('保存値の読み取り時の正規化（フォールバック）', (
 
   it('正しい保存値はそのまま使う', () => {
     expect(normalizeWorkspaceSettings(JSON.stringify(valid))).toEqual({ settings: valid, source: 'saved' })
+  })
+
+  it('フェーズ3〜4で保存した設定（/inbox・/settings）をそのまま読み込める', () => {
+    for (const lastRoute of ['/inbox', '/settings'] as const) {
+      const raw = JSON.stringify({ ...valid, lastRoute })
+      expect(normalizeWorkspaceSettings(raw)).toEqual({ settings: { ...valid, lastRoute }, source: 'saved' })
+    }
+  })
+
+  it('Projectsの画面（/projects・/projects/<UUID>）を保存・復元できる', () => {
+    const projectRoute = '/projects/6f1c2f8e-3c1d-4f0a-9b7e-2a6d1f3c9e10' as const
+    for (const lastRoute of ['/projects', projectRoute] as const) {
+      expect(workspaceSaveArgsSchema.safeParse([{ ...valid, lastRoute }]).success).toBe(true)
+      const raw = JSON.stringify({ ...valid, lastRoute })
+      expect(normalizeWorkspaceSettings(raw)).toEqual({ settings: { ...valid, lastRoute }, source: 'saved' })
+    }
+  })
+
+  it.each([
+    ['/projects/not-a-uuid'],
+    ['/projects/6f1c2f8e-3c1d-4f0a-9b7e-2a6d1f3c9e10/tasks'],
+    ['https://example.com/'],
+    ['javascript:alert(1)'],
+    ['/projects/../settings']
+  ])('読み取り時: 不正なルート %j は /inbox に補正する（他の項目は保持）', (lastRoute) => {
+    const raw = JSON.stringify({ ...valid, lastRoute })
+    expect(normalizeWorkspaceSettings(raw)).toEqual({ settings: { ...valid, lastRoute: '/inbox' }, source: 'repaired' })
   })
 
   it('範囲外の幅は範囲内に丸め、型違い・未知の画面は項目ごとに既定値にする', () => {

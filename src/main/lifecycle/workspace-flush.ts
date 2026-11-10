@@ -85,6 +85,19 @@ export function createFlushRequester(deps: {
 }
 
 export type ExitKind = 'quit' | 'close'
+
+// 未保存ドラフトがある時の終了ダイアログの文言。対象が伝えられなかった場合はタスクのタイトルとして扱う（フェーズ4.1の文言）。
+export function unsavedDraftDialogText(draftKind: DraftKind | null, kind: ExitKind) {
+  const verb = kind === 'quit' ? '終了' : '閉じる'
+  const target = draftKind === 'project' ? 'プロジェクト名' : 'タスクのタイトル'
+  return {
+    buttons: [`保存して${verb}`, `保存せずに${verb}`, 'キャンセル'],
+    message: `${target}に未保存の変更があります`,
+    detail:
+      `「保存せずに」を選ぶと、${target}の変更だけを破棄します（ペイン幅などのUI設定は保存します）。\n` +
+      '保存できなかった場合は中断し、入力は残ります。'
+  }
+}
 // retry: 再試行 / save: ドラフトを保存して続行 / discard: 保存せずに続行 / cancel: 中断
 export type FailureChoice = 'retry' | 'save' | 'discard' | 'cancel'
 
@@ -125,7 +138,7 @@ export function createExitCoordinator(deps: {
       logger.info(`[exit] 保存の確認結果（${action}）: ${outcome}`)
       if (isFlushSuccessful(outcome)) return true
       if (outcome === 'draft-save-failed') {
-        logger.warn('[exit] タイトルを保存できないため、中断します（ドラフトは保持）')
+        logger.warn('[exit] 未保存の編集（タスクのタイトル・プロジェクト名）を保存できないため、中断します（ドラフトは保持）')
         return false
       }
       const choice = await deps.askOnFailure(outcome, pendingKind)

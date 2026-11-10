@@ -107,7 +107,7 @@ WAL使用中は、稼働中のDBファイルを単純コピーしてもバック
 | sidebarWidth | 180〜480（整数px） | 240 |
 | detailWidth | 220〜560（整数px） | 300 |
 | detailVisible | true / false | true |
-| lastRoute | `/inbox` / `/settings` | `/inbox` |
+| lastRoute | `/inbox` / `/settings` / `/projects` / `/projects/<小文字のUUID>`（5.1で追加） | `/inbox` |
 
 範囲は `src/shared/contracts/workspace.ts` の `WORKSPACE_LIMITS` に集約している。
 
@@ -115,6 +115,8 @@ WAL使用中は、稼働中のDBファイルを単純コピーしてもバック
 - 行なし、JSONとして読めない、バージョン違い → 既定値
 - 幅が範囲外 → 範囲内に丸める
 - 型が違う項目、未知の画面 → その項目だけ既定値
+  （`/projects/<不正なID>`、下位パス、外部URLなども未知の画面として `/inbox` にする）
+- フェーズ3〜4で保存した値（`/inbox`・`/settings`）はそのまま読める。保存形式のバージョンは1のまま
 - 読み取り時にDBは書き換えない（次にユーザーが操作した時の保存で置き換わる）
 
 保存時の扱い（`workspace.save`）:
@@ -137,6 +139,30 @@ WAL使用中は、稼働中のDBファイルを単純コピーしてもバック
 - 保存のタイミング: 境界線の操作の確定時（ポインターを離した時・キー操作時・ダブルクリック時）、
   詳細パネルの開閉時、画面遷移時。通常の終了・ウィンドウを閉じる前には、確定済みの最新値の保存完了を待つ
   （docs/architecture.md「終了・ウィンドウを閉じる時の保存」）。
+
+### projects（フェーズ5.1・0003_add_projects）
+
+`src/main/db/schema/projects.ts`
+
+| 列 | 型 | 内容 |
+|---|---|---|
+| id | TEXT PRIMARY KEY | `crypto.randomUUID()` によるUUID v4 |
+| name | TEXT NOT NULL | 前後空白を除去した名前（最大200文字、`PROJECT_NAME_MAX_LENGTH`）。同名を許可（一意制約なし） |
+| created_at / updated_at | TEXT NOT NULL | UTCのISO 8601文字列 |
+| completed_at | TEXT（NULL可） | 完了日時。5.1では常にNULL（完了操作は5.3） |
+
+- 名前変更は、前後空白を除いた名前が保存済みと同じなら更新しない（updated_atも変えない）。存在しないIDは NOT_FOUND。
+- DBからの取得順は作成日時・IDの昇順。画面の表示順（未完了 → 完了、名前順）はRendererで決める。
+- タスクとの関連（`tasks.project_id`、外部キー・索引）は5.2で追加する。
+- 0003は新しいテーブルの追加だけで、既存の tasks・app_settings は変更しない。
+  フェーズ4のスキーマ（0000〜0002）からの移行で、タスク（完了状態を含む）とWorkspace設定が保持されること、
+  再実行で何も適用されないことを結合テストで確認した（`tests/main/migration-upgrade.test.ts`）。
+- 2026-11-10時点の状態（ファイルのコピーを読み取って確認）:
+  - 通常利用DB（GTD）: 0003は未適用（マイグレーション3件）。パッケージ版の次回起動時に適用される。適用前に下記の手順でバックアップを取る。
+  - 開発DB（GTD-dev）: 0003は適用済み（マイグレーション4件、projects 0件、integrity_check ok）。
+    適用されたのはフェーズ5.1の再開前（ファイルの更新は2026-11-09）で、どの起動で適用されたかは記録がない。
+    0003適用前の専用バックアップはない（0002適用前の `before-phase4` が直近）。
+  - フェーズ5.1再開後の検証は一時DBだけで行い、上記2つのDBは変更していない。
 
 ## マイグレーション
 

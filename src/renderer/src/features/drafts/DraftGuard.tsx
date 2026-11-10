@@ -33,7 +33,9 @@ const DraftGuardContext = createContext<DraftGuardValue | null>(null)
 export function DraftGuardProvider({ children }: { children: ReactNode }) {
   // 登録中の編集欄（通常は画面に1つだけ。タスク詳細とプロジェクト見出しは同じ画面に同時には出ない）
   const handlesRef = useRef(new Set<DraftHandle>())
-  const [prompt, setPrompt] = useState<{ kind: DraftKind; resolve: (choice: Choice) => void } | null>(null)
+  const [prompt, setPrompt] = useState<{ resolve: (choice: Choice) => void } | null>(null)
+  // ダイアログの文言の対象。閉じるアニメーション中も直前の対象のまま表示する（prompt が null になっても既定値へ戻さない）
+  const [promptKind, setPromptKind] = useState<DraftKind>('task')
   const [saving, setSaving] = useState(false)
   // 確認ダイアログを重ねない
   const pendingRef = useRef<Promise<boolean> | null>(null)
@@ -58,7 +60,8 @@ export function DraftGuardProvider({ children }: { children: ReactNode }) {
     const run = async () => {
       // 方針上は1つだけ。万一複数あっても、1つずつ順番に確認する（ダイアログは重ねない）
       for (const handle of targets) {
-        const choice = await new Promise<Choice>((resolve) => setPrompt({ kind: handle.kind, resolve }))
+        setPromptKind(handle.kind)
+        const choice = await new Promise<Choice>((resolve) => setPrompt({ resolve }))
         if (choice === 'cancel') return false
         if (choice === 'discard') {
           handle.discard()
@@ -109,7 +112,7 @@ export function DraftGuardProvider({ children }: { children: ReactNode }) {
 
   const value = useMemo(() => ({ register, confirmLeave }), [register, confirmLeave])
   const choose = (choice: Choice) => prompt?.resolve(choice)
-  const label = DRAFT_LABELS[prompt?.kind ?? 'task']
+  const label = DRAFT_LABELS[promptKind]
 
   return (
     <DraftGuardContext.Provider value={value}>

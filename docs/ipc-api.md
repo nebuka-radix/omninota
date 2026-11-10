@@ -36,6 +36,9 @@ type IpcResult<T> = { ok: true; data: T } | { ok: false; error: { code: IpcError
 | `tasks.list()` | `tasks:list` | なし | `TaskDto[]` |
 | `tasks.updateTitle(input)` | `tasks:update-title` | `{ id, title }` | `TaskDto`（保存後） |
 | `tasks.setCompleted(input)` | `tasks:set-completed` | `{ id, completed }` | `TaskDto`（保存後） |
+| `projects.list()` | `projects:list` | なし | `ProjectDto[]` |
+| `projects.create(input)` | `projects:create` | `{ name }` | `ProjectDto` |
+| `projects.rename(input)` | `projects:rename` | `{ id, name }` | `ProjectDto`（保存後） |
 | `workspace.get()` | `workspace:get` | なし | `WorkspaceSettings` |
 | `workspace.save(settings)` | `workspace:save` | `WorkspaceSettings` | `WorkspaceSettings` |
 | `workspace.onFlushRequest(listener)` | `workspace:flush-request`（Main → Renderer） | `{ requestId, draftAction }` | 購読解除関数 |
@@ -74,6 +77,17 @@ type IpcResult<T> = { ok: true; data: T } | { ok: false; error: { code: IpcError
 type TaskDto = { id: string; title: string; createdAt: string; updatedAt: string; completedAt: string | null } // 日時はUTCのISO 8601
 ```
 
+### projects.list / projects.create / projects.rename（フェーズ5.1）
+
+- 名前: 前後空白を除去、空白のみは INVALID_INPUT、最大200文字（`PROJECT_NAME_MAX_LENGTH`）。同名を許可。
+- `create`: IDと日時はMain側で付与し、未完了（`completedAt: null`）で作成する。
+- `rename`: `id` はUUID。存在しないIDは NOT_FOUND（「対象のプロジェクトが見つかりません。」）。同じ名前なら更新しない。
+- 余分なキー（`completedAt` など）は拒否する。完了・取り消しのAPIは5.3で追加する。
+
+```ts
+type ProjectDto = { id: string; name: string; createdAt: string; updatedAt: string; completedAt: string | null }
+```
+
 ### workspace.get / workspace.save
 
 Workspace設定（画面枠のUI状態）専用。任意の設定キーは扱わない。
@@ -84,7 +98,7 @@ type WorkspaceSettings = {
   sidebarWidth: number // 180〜480の整数px
   detailWidth: number // 220〜560の整数px
   detailVisible: boolean
-  lastRoute: '/inbox' | '/settings'
+  lastRoute: '/inbox' | '/settings' | '/projects' | `/projects/${string}` // 小文字のUUIDだけ
 }
 ```
 
@@ -101,10 +115,12 @@ type WorkspaceSettings = {
 - Rendererは保存キューの `flush()` を待ってから `reportFlushResult` で応答する。
   - `outcome`: `saved`（保存できた）/ `nothing`（未保存の変更なし）/ `failed`（失敗）/ `disabled`（保存しない設定）
     / `unsaved-draft`（Workspace状態は問題ないが、詳細パネルに未保存のタイトル編集がある。フェーズ4）
-    / `draft-save-failed`（`save` でタイトルを保存できなかった。無効な入力を含む。フェーズ4.1）
+    / `draft-save-failed`（`save` でタイトル・プロジェクト名を保存できなかった。無効な入力を含む。フェーズ4.1、5.1で対象を追加）
   - `unsaved-draft` の場合、Mainは同じ終了フローのダイアログで「保存して終了 / 保存せずに終了 / キャンセル」を選んでもらう。
   - `draft-save-failed` の場合、Mainは終了・閉じる処理を中断する（ダイアログは重ねない）。
-- Main側の検証: 送信元検証に加え、`requestId` はUUID、`outcome` は上記4値、余分なキーは拒否。
+  - `draftKind`（任意、フェーズ5.1）: `task` / `project`。未保存ドラフトの対象で、終了時のダイアログの文言に使う。
+    `unsaved-draft` / `draft-save-failed` の時に付ける。省略時はタスクのタイトルとして扱う（フェーズ4.1までの応答との互換）。
+- Main側の検証: 送信元検証に加え、`requestId` はUUID、`outcome` は上記4値、`draftKind` は上記2値、余分なキーは拒否。
   未知・期限切れ（確認・破棄は3秒、保存は10秒）の `requestId` への応答は無視する。
 - Main側では、応答なしを `timeout`、ウィンドウ破棄済みを `unavailable` として扱う。
   `failed` と `timeout` は成功として扱わず、利用者に再試行・保存せずに続行・キャンセルを選んでもらう。

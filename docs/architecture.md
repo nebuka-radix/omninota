@@ -176,7 +176,7 @@ UI状態管理ライブラリは導入せず、React Context / Reducerで管理�
 | sidebarWidth | する | 左サイドバーの希望幅（px） |
 | detailWidth | する | 右詳細パネルの希望幅（px）。閉じても保持する |
 | detailVisible | する | 右詳細パネルの表示・非表示 |
-| lastRoute | する | 最後に表示した画面（`/inbox` / `/settings`）。次回起動用のスナップショット |
+| lastRoute | する | 最後に表示した画面（`/inbox` / `/settings` / `/projects` / `/projects/<UUID>`）。次回起動用のスナップショット |
 | selectedTaskId | しない | 詳細パネルに表示するタスク |
 | saveStatus | しない | 保存中・失敗の表示用 |
 
@@ -226,6 +226,31 @@ check → unsaved-draft → ダイアログ（保存して終了 / 保存せず�
   アプリ自身は呼んでいない。対応するには、Rendererの `beforeunload` と webContents の `will-prevent-unload` で
   閉じる操作を止めて ExitCoordinator へ回す設計が必要（開発時の再読み込みも止まるため、区別の方法を含めて別途設計する）。
 - 強制終了（SIGKILL、短時間に繰り返したSIGTERM）、クラッシュ、電源断。
+
+### Projects（フェーズ5.1）
+
+- ルート: `/projects`（未選択）、`/projects/$projectId`（選択中）。プロジェクトの選択はルートの変更として扱い、
+  未保存の編集があれば既存の `useBlocker` が遷移の前に確認する（キャンセル時は画面・選択を変えない）。
+- 左サイドバー: 作成欄とプロジェクト一覧（`features/projects/ProjectsSidebar.tsx`）。一覧の順序は `project-order.ts`。
+- メイン: 見出しでの名前編集（`ProjectNameEditor.tsx`）と、5.1の範囲の説明（タスク表示は5.2で追加予定）。
+- 表示の区別: 取得中 / 取得失敗（IPC・DBエラー）/ 存在しないID / 形式が不正なID。取得失敗を「見つかりません」と表示しない。
+  判定は `features/projects/project-route.ts` の `getProjectPageState`（DOMに依存しない純粋関数。単体テストあり）。
+- Query: `['projects', 'list']`（全件）だけ。詳細用のQueryは作らない。作成後は一覧を取り直し、名前変更は返却DTOで該当行を置き換える。
+- 起動時の復元: 保存済みのルートが `/projects/<UUID>` の場合、プロジェクト一覧を取得して存在を確かめる。
+  存在しなければ `/projects` へ移動する。取得に失敗した場合は判定せず、そのルートを開いて取得失敗として表示する
+  （`resolveStartupTarget`）。明示的なルート（`#/settings` など）で開いた場合は保存値より優先する。
+- 5.1の範囲外: プロジェクトのタスク表示・Inboxの未所属フィルター（5.2）、完了・取り消し（5.3）。
+- 作成欄の未送信の入力は、タスクの追加欄と同じく未保存確認の対象にしない（制約）。
+
+### 未保存の編集（DraftGuard、フェーズ5.1で一般化）
+
+- `features/drafts/DraftGuard.tsx`。対象はタスクのタイトルかプロジェクト名で、方針として同時に1つ。
+  編集欄は自分を `{ kind, targetId, isDirty, save, discard }` として登録する。
+- 確認ダイアログ（アプリ内）と終了時のダイアログ（Main側）は1つずつで、文言は対象に合わせる
+  （終了時は応答の `draftKind` で「タスクのタイトル」「プロジェクト名」を切り替える。Main側の文言は
+  `lifecycle/workspace-flush.ts` の `unsavedDraftDialogText`）。アプリ内のダイアログは、閉じるアニメーション中も直前の対象の文言を保つ。
+- 保存失敗時（Main側の拒否・DBエラー）はドラフトと理由を残し、画面遷移・終了を続行しない。
+- 別の編集を始める前（プロジェクト名の編集開始など）にも確認する。
 
 ### 画面枠（AppShell）
 

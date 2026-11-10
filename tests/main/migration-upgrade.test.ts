@@ -73,6 +73,41 @@ describe('既存データを保持したマイグレーション', () => {
     closeDatabase(restarted)
   })
 
+  it('フェーズ4（completed_atまで）→ 現在: projectsを追加し、タスク（完了状態含む）とWorkspace設定を保持する', () => {
+    const dbFile = join(temp.dir, 'gtd.sqlite')
+    const oldMigrations = join(temp.dir, 'migrations-phase4')
+    createPartialMigrations(oldMigrations, 3)
+    const workspaceValue = JSON.stringify({
+      version: 1,
+      sidebarWidth: 300,
+      detailWidth: 320,
+      detailVisible: true,
+      lastRoute: '/inbox'
+    })
+
+    const old = openDatabase(dbFile)
+    expect(runMigrations(old, oldMigrations)).toEqual({ appliedBefore: 0, appliedAfter: 3 })
+    insertOldTasks(old)
+    old.$client.prepare('UPDATE tasks SET completed_at = ? WHERE id = ?').run('2026-11-09T05:00:00.000Z', oldTasks[0]?.id)
+    createSettingsRepository(old).upsert({ key: 'workspace', value: workspaceValue, updatedAt: '2026-11-09T03:00:00.000Z' })
+    const before = createTaskRepository(old).listAll()
+    closeDatabase(old)
+
+    const upgraded = openDatabase(dbFile)
+    expect(runMigrations(upgraded, MIGRATIONS_DIR)).toEqual({ appliedBefore: 3, appliedAfter: MIGRATION_COUNT })
+    expect(createTaskRepository(upgraded).listAll()).toEqual(before)
+    expect(createSettingsRepository(upgraded).get('workspace')?.value).toBe(workspaceValue)
+    expect(upgraded.$client.prepare('SELECT COUNT(*) AS c FROM projects').get()).toEqual({ c: 0 })
+    closeDatabase(upgraded)
+
+    const restarted = openDatabase(dbFile)
+    expect(runMigrations(restarted, MIGRATIONS_DIR)).toEqual({
+      appliedBefore: MIGRATION_COUNT,
+      appliedAfter: MIGRATION_COUNT
+    })
+    closeDatabase(restarted)
+  })
+
   it('フェーズ3（tasks + app_settings）→ 現在: completed_atを追加し、タスクとWorkspace設定を保持する', () => {
     const dbFile = join(temp.dir, 'gtd.sqlite')
     const oldMigrations = join(temp.dir, 'migrations-phase3')

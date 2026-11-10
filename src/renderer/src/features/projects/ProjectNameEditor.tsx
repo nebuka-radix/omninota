@@ -67,7 +67,11 @@ export function ProjectNameEditor({ project }: { project: ProjectDto }) {
     if (!(await confirmLeave())) return
     setDraft(project.name)
     setEditing(true)
-    requestAnimationFrame(() => inputRef.current?.select())
+    // 入力欄へフォーカスを移し、名前全体を選択する（Enter・Escなどのキー操作が入力欄に届くように）
+    requestAnimationFrame(() => {
+      inputRef.current?.focus()
+      inputRef.current?.select()
+    })
   }
 
   const handleSubmit = (event: FormEvent) => {

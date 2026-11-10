@@ -61,6 +61,7 @@ better-sqlite3のNode-API対応、同梱バイナリ、Electron向け再ビル�
 | ドッキング | Dockviewは初期版で不採用 | 自由なタブ分割が必要になった時に再検討 |
 | UI状態保存 | app_settingsテーブル（フェーズ3で実装） | 分類ごとの行・バージョン付きJSON。詳細は docs/database.md |
 | UI状態管理 | React Context / Reducer | 状態管理ライブラリは導入しない |
+| プロジェクト（フェーズ5） | 新しい依存なし | 既存のDrizzle・Query・Router・MUIで実装。Inboxの暫定定義・完了ルールは docs/requirements.md |
 | Table v9 の選定 | 9.3.1（2026-08に安定版、latest） | パッケージ同梱の版対応ガイドと型定義に合わせて実装。v8（最終2025-04）のサンプルは使わない |
 | @tanstack/table-core | devDependencies に明示（react-tableが固定で依存する同じ版） | Reactを使わないテストで `storeReactivityBindings` を使うため |
 | 一覧の意味付け | listbox / option（1件選択） | 表（grid）とセル単位の操作は、必要になった時に再検討する |
