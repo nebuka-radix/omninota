@@ -33,6 +33,12 @@ export const WORKSPACE_LIMITS = {
   mainMinWidth: 320
 } as const
 
+// プロジェクト画面のマイルストンカードの並べ方（フェーズ5.9）。
+// - column: 縦長のカードを横に並べる（従来）。カードの列は横スクロール
+// - row: カードを上から下へ縦に並べる。各カードはメイン領域の横幅を使う
+export const MILESTONE_LAYOUTS = ['column', 'row'] as const
+export type MilestoneLayout = (typeof MILESTONE_LAYOUTS)[number]
+
 // 保存形式のバージョン。形式を変えるときに上げ、読み取り時に移行・検証する。
 export const WORKSPACE_SETTINGS_VERSION = 1
 
@@ -45,6 +51,9 @@ export type WorkspaceSettings = {
   // マイルストンカードの幅（px）。sidebarWidth・detailWidth とは独立した値（フェーズ5.5で追加。
   // 追加前の保存値にはないため、読み取り時は既定値で補う。形式の互換を保つためバージョンは上げない）
   milestoneCardWidth: number
+  // マイルストンカードの並べ方（フェーズ5.9で追加。追加前の保存値にはないため、読み取り時は既定値 column で補う。
+  // row の間も milestoneCardWidth は保持し、column へ戻した時に使う）
+  milestoneLayout: MilestoneLayout
 }
 
 export const DEFAULT_WORKSPACE_SETTINGS: WorkspaceSettings = {
@@ -53,7 +62,8 @@ export const DEFAULT_WORKSPACE_SETTINGS: WorkspaceSettings = {
   detailWidth: 300,
   detailVisible: true,
   lastRoute: '/inbox',
-  milestoneCardWidth: 320
+  milestoneCardWidth: 320,
+  milestoneLayout: 'column'
 }
 
 export function isWorkspaceRoute(value: unknown): value is WorkspaceRoute {

@@ -9,6 +9,7 @@ import { usePaneLayout } from '../../features/workspace/use-pane-layout'
 import { useWorkspace } from '../../features/workspace/WorkspaceContext'
 import { vscodeColors } from '../../theme'
 import { ShellSlotsProvider } from '../../components/ShellSlots'
+import { TaskDragProvider } from '../../features/tasks/TaskDragContext'
 import { DetailPanel } from './DetailPanel'
 import { MainPanel } from './MainPanel'
 import { NavigationPane } from './NavigationPane'
@@ -117,6 +118,8 @@ export function AppShell() {
 
   return (
     <ShellSlotsProvider>
+      {/* Inboxのタスク → 右サイドバーの紐付け先へのドラッグ（メイン・詳細パネルをまたぐため画面枠に置く。フェーズ5.9） */}
+      <TaskDragProvider>
       <Box
         sx={{
           height: '100%',
@@ -191,6 +194,7 @@ export function AppShell() {
 
         <StatusBar pathname={pathname} />
       </Box>
+      </TaskDragProvider>
     </ShellSlotsProvider>
   )
 }

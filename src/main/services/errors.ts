@@ -80,3 +80,24 @@ export function deletionScopeChanged(): BusinessError {
     kind: 'deletion-scope-changed'
   })
 }
+
+// --- フェーズ5.9: 一括操作・並べ替え ---
+
+// 一括操作の対象の一部が存在しない・非表示（削除済みなど）。何も変更しない
+export function someTasksNotFound(): BusinessError {
+  return new BusinessError('NOT_FOUND', '選択したタスクの一部が見つかりません（削除された可能性があります）。何も変更していません。')
+}
+
+// Inboxからの一括紐付けで、対象の一部が既にInboxにない（別の操作で所属が変わった）。何も変更しない
+export function tasksNotInInbox(): BusinessError {
+  return new BusinessError('CONFLICT', '選択したタスクの一部は、既にInboxにありません。何も変更していません。')
+}
+
+// 並べ替えの対象が、DBの表示中のタスク・マイルストンと一致しない（画面の表示が古い・一部だけの指定）。何も変更しない
+export function orderChanged(target: 'task' | 'milestone'): BusinessError {
+  return new BusinessError(
+    'CONFLICT',
+    `${target === 'task' ? 'タスク' : 'マイルストン'}の一覧が更新されたため、並べ替えを保存しませんでした。もう一度操作してください。`,
+    { kind: 'order-changed' }
+  )
+}

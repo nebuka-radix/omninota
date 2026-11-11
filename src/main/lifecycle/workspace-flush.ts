@@ -123,6 +123,9 @@ export function createExitCoordinator(deps: {
   // 確認後に処理を再開する
   continueQuit: () => void
   continueClose: () => void
+  // ウィンドウを閉じる要求（×）をアプリの終了要求として扱う（フェーズ5.9。ウィンドウは1つだけのため、
+  // 最後のウィンドウを閉じたら macOS でも終了する）。確認後は continueQuit で終了まで進める。ダイアログの文言も「終了」になる
+  closeQuitsApp?: boolean
   logger?: Pick<Console, 'info' | 'warn'>
 }): ExitCoordinator {
   const logger = deps.logger ?? console
@@ -187,7 +190,7 @@ export function createExitCoordinator(deps: {
     },
     onWindowCloseRequested(event) {
       if (closeAllowed) return
-      start(event, 'close')
+      start(event, deps.closeQuitsApp ? 'quit' : 'close')
     },
     resetForNewWindow() {
       if (!quitAllowed) closeAllowed = false

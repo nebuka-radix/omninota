@@ -14,7 +14,10 @@ const api: GtdApi = {
     updateTitle: (input) => ipcRenderer.invoke(IPC_CHANNELS.tasksUpdateTitle, input),
     setCompleted: (input) => ipcRenderer.invoke(IPC_CHANNELS.tasksSetCompleted, input),
     setAssignment: (input) => ipcRenderer.invoke(IPC_CHANNELS.tasksSetAssignment, input),
-    delete: (input) => ipcRenderer.invoke(IPC_CHANNELS.tasksDelete, input)
+    delete: (input) => ipcRenderer.invoke(IPC_CHANNELS.tasksDelete, input),
+    assignFromInbox: (input) => ipcRenderer.invoke(IPC_CHANNELS.tasksAssignFromInbox, input),
+    deleteMany: (input) => ipcRenderer.invoke(IPC_CHANNELS.tasksDeleteMany, input),
+    reorderInMilestone: (input) => ipcRenderer.invoke(IPC_CHANNELS.tasksReorderInMilestone, input)
   },
   projects: {
     list: () => ipcRenderer.invoke(IPC_CHANNELS.projectsList),
@@ -29,7 +32,8 @@ const api: GtdApi = {
     create: (input) => ipcRenderer.invoke(IPC_CHANNELS.milestonesCreate, input),
     rename: (input) => ipcRenderer.invoke(IPC_CHANNELS.milestonesRename, input),
     getDeletionSummary: (input) => ipcRenderer.invoke(IPC_CHANNELS.milestonesGetDeletionSummary, input),
-    delete: (input) => ipcRenderer.invoke(IPC_CHANNELS.milestonesDelete, input)
+    delete: (input) => ipcRenderer.invoke(IPC_CHANNELS.milestonesDelete, input),
+    reorder: (input) => ipcRenderer.invoke(IPC_CHANNELS.milestonesReorder, input)
   },
   workspace: {
     get: () => ipcRenderer.invoke(IPC_CHANNELS.workspaceGet),

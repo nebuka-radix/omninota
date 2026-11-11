@@ -15,7 +15,10 @@ Rendererからは `window.gtd` だけを使う。任意SQLや任意チャンネ�
 type IpcResult<T> = { ok: true; data: T } | { ok: false; error: { code: IpcErrorCode; message: string; details?: IpcErrorDetails } }
 
 // 業務エラーの型付きの補足（フェーズ5.3）。画面はメッセージ文字列を解析せず、この値を使う。SQLやスタックは含めない
-type IpcErrorDetails = { kind: 'project-has-open-tasks'; openTaskCount: number }
+type IpcErrorDetails =
+  | { kind: 'project-has-open-tasks'; openTaskCount: number }
+  | { kind: 'deletion-scope-changed' } // フェーズ5.6
+  | { kind: 'order-changed' } // フェーズ5.9: 並べ替えの対象が画面の表示と一致しない
 ```
 
 | code | 意味 | message |
@@ -42,6 +45,9 @@ type IpcErrorDetails = { kind: 'project-has-open-tasks'; openTaskCount: number }
 | `tasks.setCompleted(input)` | `tasks:set-completed` | `{ id, completed }` | `TaskDto`（保存後） |
 | `tasks.setAssignment(input)` | `tasks:set-assignment` | `{ id, projectId: string \| null, milestoneId: string \| null }` | `TaskDto`（保存後。フェーズ5.4。5.2の `tasks.setProject` を置き換え） |
 | `tasks.delete(input)` | `tasks:delete` | `{ id }` | `{ id }`（物理削除。フェーズ5.6） |
+| `tasks.assignFromInbox(input)` | `tasks:assign-from-inbox` | `{ ids: string[], projectId, milestoneId }` | `TaskDto[]`（ids の順。フェーズ5.9） |
+| `tasks.deleteMany(input)` | `tasks:delete-many` | `{ ids: string[] }` | `{ ids }`（物理削除。フェーズ5.9） |
+| `tasks.reorderInMilestone(input)` | `tasks:reorder-in-milestone` | `{ milestoneId, orderedIds: string[] }` | `TaskDto[]`（そのマイルストンの全件・新しい順。フェーズ5.9） |
 | `projects.list()` | `projects:list` | なし | `ProjectDto[]` |
 | `projects.create(input)` | `projects:create` | `{ name }` | `ProjectDto` |
 | `projects.rename(input)` | `projects:rename` | `{ id, name }` | `ProjectDto`（保存後） |
@@ -53,6 +59,7 @@ type IpcErrorDetails = { kind: 'project-has-open-tasks'; openTaskCount: number }
 | `milestones.rename(input)` | `milestones:rename` | `{ id, name }` | `MilestoneDto`（保存後） |
 | `milestones.getDeletionSummary(input)` | `milestones:get-deletion-summary` | `{ id }` | `MilestoneDeletionSummary`（フェーズ5.6） |
 | `milestones.delete(input)` | `milestones:delete` | `{ id, expectedTaskCount }` | `{ id, hiddenTaskCount }`（フェーズ5.6） |
+| `milestones.reorder(input)` | `milestones:reorder` | `{ projectId, orderedIds: string[] }` | `MilestoneDto[]`（そのプロジェクトの全件・新しい順。フェーズ5.9） |
 | `workspace.get()` | `workspace:get` | なし | `WorkspaceSettings` |
 | `workspace.save(settings)` | `workspace:save` | `WorkspaceSettings` | `WorkspaceSettings` |
 | `workspace.onFlushRequest(listener)` | `workspace:flush-request`（Main → Renderer） | `{ requestId, draftAction }` | 購読解除関数 |
@@ -171,6 +178,24 @@ type MilestoneDto = { id: string; projectId: string; name: string; createdAt: st
   4. 更新（updatedAt だけ更新。ID・タイトル・作成日時・完了日時は変えない）
 - 2〜4（作成では3〜4）は1つのトランザクションで行う。完了済みプロジェクトから外（未所属・別の未完了）への移動は許可する。
 
+### 一括紐付け・一括削除・並べ替え（フェーズ5.9）
+
+いずれも Main の1つのトランザクション（BEGIN IMMEDIATE）で、確認してから全件を更新する。1件でも条件を満たさなければ何も変更しない。
+Rendererから単体APIを件数分呼ぶ方式は使わない。
+
+- 入力（Zod）: ID一覧は1件以上・`TASK_BULK_MAX`（10,000）件以内・UUID・重複なし（重複は INVALID_INPUT）。余分なキーは拒否。
+- `tasks.assignFromInbox`: Inboxの複数タスクを1つのマイルストンへ紐付ける。移動先はプロジェクトとマイルストンの両方（Inboxへの移動は受け付けない）。
+  確認順: 全件が存在し表示中（NOT_FOUND「選択したタスクの一部が見つかりません…」）→ 全件が現在Inbox（CONFLICT「…既にInboxにありません…」）→
+  移動先（`setAssignment` と同じ: プロジェクトの存在・マイルストンの存在（削除済み・非表示は NOT_FOUND）・組み合わせ・未完了）。
+  ドラッグ開始後に移動先が削除・完了された場合も、この確認で拒否する。2回目の同じ要求（二重送信）は CONFLICT で何も変えない。
+  更新は所属と手動順（移動先に手動順があれば ids の順で末尾）と updated_at だけ。タイトル・完了状態・作成日時は変えない。
+- `tasks.deleteMany`: 表示中の複数タスクの物理削除。全件が存在し表示中でなければ NOT_FOUND で何も削除しない。
+- `tasks.reorderInMilestone`: `orderedIds` はそのマイルストンの表示中のタスク全件（完了済みを含む）の新しい順序。
+  DBの所属タスクと一致しない（一部だけ・別のタスク・存在しないID）場合は CONFLICT（`details: { kind: 'order-changed' }`）。
+  順位（`position`）だけを書き換え、created_at・completed_at・updated_at は変えない。
+- `milestones.reorder`: `orderedIds` はそのプロジェクトの表示中のマイルストン全件の新しい順序。一致しなければ CONFLICT（order-changed）。
+  名前・日時は変えない。完了済みプロジェクトでも並べ替えられる。
+
 ### TaskDto
 
 ```ts
@@ -182,7 +207,9 @@ type TaskDto = {
   completedAt: string | null
   projectId: string | null // 所属するプロジェクト。nullは未所属（フェーズ5.2）
   milestoneId: string | null // 所属するマイルストン。nullは未設定（フェーズ5.4）
+  position: number | null // マイルストン内の手動順（フェーズ5.9）。null は手動順なし（作成日時の古い順）
 } // 日時はUTCのISO 8601
+// MilestoneDto にも position: number | null（プロジェクト内のカードの手動順。フェーズ5.9）
 ```
 
 ### projects.list / projects.create / projects.rename（フェーズ5.1）

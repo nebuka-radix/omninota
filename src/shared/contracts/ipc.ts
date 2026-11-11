@@ -15,12 +15,17 @@ import type {
   DeleteMilestoneResult,
   MilestoneDeletionSummary,
   MilestoneDto,
-  RenameMilestoneInput
+  RenameMilestoneInput,
+  ReorderMilestonesInput
 } from './milestones'
 import type {
+  AssignInboxTasksInput,
   CreateTaskInput,
   DeleteTaskInput,
   DeleteTaskResult,
+  DeleteTasksInput,
+  DeleteTasksResult,
+  ReorderMilestoneTasksInput,
   SetTaskAssignmentInput,
   SetTaskCompletedInput,
   TaskDto,
@@ -36,6 +41,9 @@ export const IPC_CHANNELS = {
   tasksSetCompleted: 'tasks:set-completed',
   tasksSetAssignment: 'tasks:set-assignment',
   tasksDelete: 'tasks:delete',
+  tasksAssignFromInbox: 'tasks:assign-from-inbox',
+  tasksDeleteMany: 'tasks:delete-many',
+  tasksReorderInMilestone: 'tasks:reorder-in-milestone',
   projectsList: 'projects:list',
   projectsCreate: 'projects:create',
   projectsRename: 'projects:rename',
@@ -47,6 +55,7 @@ export const IPC_CHANNELS = {
   milestonesRename: 'milestones:rename',
   milestonesGetDeletionSummary: 'milestones:get-deletion-summary',
   milestonesDelete: 'milestones:delete',
+  milestonesReorder: 'milestones:reorder',
   workspaceGet: 'workspace:get',
   workspaceSave: 'workspace:save',
   // Main → Renderer: 終了・ウィンドウを閉じる前に、確定済みのWorkspace状態の保存完了を問い合わせる
@@ -92,9 +101,12 @@ export type IpcErrorCode = 'FORBIDDEN' | 'INVALID_INPUT' | 'NOT_FOUND' | 'CONFLI
 // - project-has-open-tasks: プロジェクトに未完了のタスクがあるため完了できない（CONFLICT）。件数はDBの所属タスク全体から数える
 // - deletion-scope-changed: 確認した後に削除の対象（配下の件数）が変わったため削除しなかった（CONFLICT。フェーズ5.6）。
 //   画面は確認内容を取り直して再確認する（無断で削除範囲を広げない）
+// - order-changed: 並べ替えの対象（マイルストンのタスク・プロジェクトのマイルストン）が画面の表示と一致しないため保存しなかった
+//   （CONFLICT。フェーズ5.9）。画面は一覧を取り直す（一部だけの順位で、表示していない対象の順位を壊さない）
 export type IpcErrorDetails =
   | { kind: 'project-has-open-tasks'; openTaskCount: number }
   | { kind: 'deletion-scope-changed' }
+  | { kind: 'order-changed' }
 
 export type IpcError = {
   code: IpcErrorCode
@@ -138,6 +150,12 @@ export type GtdApi = {
     setAssignment: (input: SetTaskAssignmentInput) => Promise<IpcResult<TaskDto>>
     // 表示中のタスクの物理削除（フェーズ5.6）。非表示・存在しないタスクは NOT_FOUND
     delete: (input: DeleteTaskInput) => Promise<IpcResult<DeleteTaskResult>>
+    // Inboxの複数タスクを1つのマイルストンへまとめて紐付ける（フェーズ5.9）。1つのトランザクションで、全件成功か全件不変
+    assignFromInbox: (input: AssignInboxTasksInput) => Promise<IpcResult<TaskDto[]>>
+    // 表示中の複数タスクの物理削除（フェーズ5.9）。1つのトランザクションで、全件削除か全件不変
+    deleteMany: (input: DeleteTasksInput) => Promise<IpcResult<DeleteTasksResult>>
+    // マイルストン内のタスクの手動順を保存する（フェーズ5.9）。そのマイルストンの表示中のタスク全件を返す
+    reorderInMilestone: (input: ReorderMilestoneTasksInput) => Promise<IpcResult<TaskDto[]>>
   }
   // 用途別のAPI（一覧・作成・名前変更はフェーズ5.1、完了・取り消しは5.3）
   projects: {
@@ -151,7 +169,7 @@ export type GtdApi = {
     getDeletionSummary: (input: { id: string }) => Promise<IpcResult<ProjectDeletionSummary>>
     delete: (input: DeleteProjectInput) => Promise<IpcResult<DeleteProjectResult>>
   }
-  // マイルストン（フェーズ5.4）。一覧は全プロジェクト分（少量）。完了・並べ替えはない
+  // マイルストン（フェーズ5.4）。一覧は全プロジェクト分（少量）。完了はない。並べ替えはフェーズ5.9から
   milestones: {
     list: () => Promise<IpcResult<MilestoneDto[]>>
     create: (input: CreateMilestoneInput) => Promise<IpcResult<MilestoneDto>>
@@ -159,6 +177,8 @@ export type GtdApi = {
     // 削除（フェーズ5.6）。所属タスクは削除せず、所属を外して非表示にする
     getDeletionSummary: (input: { id: string }) => Promise<IpcResult<MilestoneDeletionSummary>>
     delete: (input: DeleteMilestoneInput) => Promise<IpcResult<DeleteMilestoneResult>>
+    // カードの順序を保存する（フェーズ5.9）。そのプロジェクトの表示中のマイルストン全件を返す
+    reorder: (input: ReorderMilestonesInput) => Promise<IpcResult<MilestoneDto[]>>
   }
   // Workspace設定専用。任意の設定キーは扱わない。
   workspace: {

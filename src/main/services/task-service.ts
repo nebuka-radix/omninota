@@ -1,8 +1,12 @@
 import { randomUUID } from 'node:crypto'
 import type {
+  AssignInboxTasksInput,
   CreateTaskInput,
   DeleteTaskInput,
   DeleteTaskResult,
+  DeleteTasksInput,
+  DeleteTasksResult,
+  ReorderMilestoneTasksInput,
   SetTaskAssignmentInput,
   SetTaskCompletedInput,
   TaskDto,
@@ -14,11 +18,14 @@ import type { TaskRepository } from '../repositories/task-repository'
 import {
   milestoneProjectMismatch,
   milestoneRequired,
+  orderChanged,
   projectCompletedConflict,
+  someTasksNotFound,
   targetMilestoneNotFound,
   targetProjectNotFound,
   taskInCompletedProjectConflict,
-  taskNotFound
+  taskNotFound,
+  tasksNotInInbox
 } from './errors'
 
 // inputはIPC層でZod検証済み（前後空白の除去・空文字と長さ・IDの形式）であること。
@@ -40,6 +47,17 @@ export type TaskService = {
   setAssignment(input: SetTaskAssignmentInput): TaskDto
   // 表示中のタスクの物理削除（フェーズ5.6）。所属・完了状態によらず削除できる。プロジェクトの状態は変えない（自動で完了しない）
   delete(input: DeleteTaskInput): DeleteTaskResult
+  // --- フェーズ5.9 ---
+  // Inboxの複数タスクを1つのマイルストンへ紐付ける。1つのトランザクションで、確認してから全件を更新する。
+  // 確認: 全件が存在し表示中か（NOT_FOUND）→ 全件が現在Inboxか（CONFLICT）→ 移動先（assertAssignable と同じ）。
+  // 1件でも満たさなければ何も変更しない。ids の順に、移動先の手動順（ある場合）の末尾へ追加する。
+  // タイトル・完了状態・作成日時は変えない（updated_at は所属の変更として操作日時にする。setAssignment と同じ）
+  assignFromInbox(input: AssignInboxTasksInput): TaskDto[]
+  // 表示中の複数タスクの物理削除。全件が存在し表示中でなければ、何も削除しない（NOT_FOUND）
+  deleteMany(input: DeleteTasksInput): DeleteTasksResult
+  // マイルストン内のタスクの手動順を保存する。orderedIds がDBの表示中の所属タスク全件と一致しなければ CONFLICT（order-changed）。
+  // 順位だけを書き換え、updated_at などの日時は変えない。そのマイルストンの表示中のタスク全件（新しい順序）を返す
+  reorderInMilestone(input: ReorderMilestoneTasksInput): TaskDto[]
 }
 
 // DBの行型をそのまま画面へ渡さず、契約上のDTOへ詰め替える。
@@ -51,7 +69,8 @@ function toDto(row: TaskRow): TaskDto {
     updatedAt: row.updatedAt,
     completedAt: row.completedAt,
     projectId: row.projectId,
-    milestoneId: row.milestoneId
+    milestoneId: row.milestoneId,
+    position: row.position
   }
 }
 
@@ -94,6 +113,13 @@ export function createTaskService(deps: {
     if (project.completedAt !== null) throw projectCompletedConflict()
   }
 
+  // 移動先のマイルストンに追加する時の手動順（フェーズ5.9）。手動順がなければ null（作成日時の順に従う）、あれば末尾（最大値+1）
+  const nextPosition = (milestoneId: string | null): number | null => {
+    if (milestoneId === null) return null
+    const current = repository.maxPositionInMilestone(milestoneId)
+    return current === null ? null : current + 1
+  }
+
   return {
     create(input) {
       const projectId = input.projectId ?? null
@@ -109,7 +135,8 @@ export function createTaskService(deps: {
           completedAt: null,
           projectId,
           milestoneId,
-          hiddenAt: null
+          hiddenAt: null,
+          position: nextPosition(milestoneId)
         }
         repository.insert(row)
         return toDto(row)
@@ -150,7 +177,14 @@ export function createTaskService(deps: {
         assertAssignable(input.projectId, input.milestoneId)
         // プロジェクトとマイルストンを1回の更新で書き換える（旧プロジェクトのマイルストンを残さない）。
         // ID・作成日時・完了日時・タイトルは変えない
-        const updated = repository.updateAssignment(input.id, input.projectId, input.milestoneId, now().toISOString())
+        // 手動順のあるマイルストンへは末尾に追加し、Inboxへ戻す時は手動順を外す（フェーズ5.9）
+        const updated = repository.updateAssignment(
+          input.id,
+          input.projectId,
+          input.milestoneId,
+          nextPosition(input.milestoneId),
+          now().toISOString()
+        )
         if (!updated) throw taskNotFound()
         return toDto(updated)
       })
@@ -160,6 +194,48 @@ export function createTaskService(deps: {
         // 表示中のタスクだけを削除する（非表示・削除済みは NOT_FOUND。二重実行の2回目も NOT_FOUND）
         if (repository.deleteVisible(input.id) === 0) throw taskNotFound()
         return { id: input.id }
+      })
+    },
+    assignFromInbox(input) {
+      return transaction(() => {
+        const rows = new Map(repository.findManyByIds(input.ids).map((row) => [row.id, row]))
+        const current = input.ids.map((id) => rows.get(id))
+        if (current.some((row) => row === undefined || row.hiddenAt !== null)) throw someTasksNotFound()
+        if (current.some((row) => row!.projectId !== null || row!.milestoneId !== null)) throw tasksNotInInbox()
+        assertAssignable(input.projectId, input.milestoneId)
+        const timestamp = now().toISOString()
+        let position = repository.maxPositionInMilestone(input.milestoneId)
+        return input.ids.map((id) => {
+          if (position !== null) position += 1
+          const updated = repository.updateAssignment(id, input.projectId, input.milestoneId, position, timestamp)
+          // 確認後に変わることはない（同じトランザクション）。万一の場合は例外で全体を取り消す
+          if (!updated) throw someTasksNotFound()
+          return toDto(updated)
+        })
+      })
+    },
+    deleteMany(input) {
+      return transaction(() => {
+        const rows = repository.findManyByIds(input.ids)
+        if (rows.length !== input.ids.length || rows.some((row) => row.hiddenAt !== null)) throw someTasksNotFound()
+        if (repository.deleteVisibleMany(input.ids) !== input.ids.length) throw someTasksNotFound()
+        return { ids: [...input.ids] }
+      })
+    },
+    reorderInMilestone(input) {
+      return transaction(() => {
+        const milestone = deps.findMilestone(input.milestoneId)
+        if (!milestone || milestone.projectId === null) throw targetMilestoneNotFound()
+        const current = repository.listVisibleByMilestone(input.milestoneId)
+        const currentIds = new Set(current.map((row) => row.id))
+        // 一部だけ（絞り込み中の表示行など）・別のタスクを含む指定では、表示していないタスクの順位を壊さないよう保存しない
+        if (current.length !== input.orderedIds.length || input.orderedIds.some((id) => !currentIds.has(id))) {
+          throw orderChanged('task')
+        }
+        input.orderedIds.forEach((id, index) => {
+          if (repository.updatePosition(id, index) !== 1) throw orderChanged('task')
+        })
+        return repository.listVisibleByMilestone(input.milestoneId).map(toDto)
       })
     }
   }

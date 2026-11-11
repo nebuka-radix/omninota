@@ -3,7 +3,7 @@
 import { randomUUID } from 'node:crypto'
 import { join } from 'node:path'
 import { readFileSync } from 'node:fs'
-import { goToProject, assert, createDatabaseAt, firstMilestoneId, openDatabaseReadOnly, PROJECT_ROOT, requestQuit, sleep } from './lib.mjs'
+import { chooseProjectSort, goToProject, assert, clickRowShowDetail, keyWith, MOD, createDatabaseAt, firstMilestoneId, openDatabaseReadOnly, PROJECT_ROOT, requestQuit, sleep } from './lib.mjs'
 
 const collator = new Intl.Collator('ja', { numeric: true, sensitivity: 'base' })
 
@@ -53,7 +53,7 @@ export function taskProjectScenarios({ withApp, root }) {
     await c.enter()
   }
   const selectRow = async (c, taskId) => {
-    await c.click(`document.querySelector(${JSON.stringify(`[data-testid=task-list] [data-task-id="${taskId}"]`)})`)
+    await clickRowShowDetail(c, `document.querySelector(${JSON.stringify(`[data-testid=task-list] [data-task-id="${taskId}"]`)})`)
     await c.waitFor(`document.querySelector('[data-testid=task-editor]')`, 3000, '詳細の表示')
   }
   // 詳細パネルの所属の選択（5.4から値は "<プロジェクトID>:<マイルストンID>"。ここではそのプロジェクトの最初のマイルストン・未所属を選ぶ。
@@ -94,7 +94,7 @@ export function taskProjectScenarios({ withApp, root }) {
           await c.waitFor(`location.hash === ${JSON.stringify(`#/projects/${projectId}`)}`, 5000, '保存済みの画面（プロジェクト）を復元')
           const settings = await api(c, 'window.gtd.workspace.get()')
           // フェーズ5.5で追加したカード幅は、旧形式にはないため既定値（320px）で補う（他の項目は保持）
-          assert(JSON.stringify(settings) === JSON.stringify({ ...workspace, milestoneCardWidth: 320 }), 'Workspace設定を保持', settings)
+          assert(JSON.stringify(settings) === JSON.stringify({ ...workspace, milestoneCardWidth: 320, milestoneLayout: 'column' }), 'Workspace設定を保持（追加項目は既定値で補う）', settings)
           const tasks = await api(c, 'window.gtd.tasks.list()')
           assert(tasks.every((task) => task.projectId === null), '既存タスクは未所属', tasks)
           await c.waitFor(`document.querySelector('[data-testid=project-name]')?.textContent === '移行前のプロジェクト'`, 5000, 'プロジェクト名の表示')
@@ -173,7 +173,8 @@ export function taskProjectScenarios({ withApp, root }) {
           assert((await titleDraft(c)) === '受信したタスク（ドラフト）', '所属変更でタイトルのドラフトを上書きしない', await titleDraft(c))
           assert((await tasksById(c)).get(ids.inboxTask).title === '受信したタスク', 'ドラフトは保存されていない')
           assert(!(await listIds(c)).includes(ids.inboxTask), 'Inboxの一覧から外れる')
-          assert(await c.evaluate(`!!document.querySelector('[data-testid=selected-out-of-scope]') && !!document.querySelector('[data-testid=detail-out-of-scope]')`), '一覧の対象外であることを表示')
+          // フェーズ5.9: Inbox のメイン側には「選択中のタスクは、この一覧の対象外です」を出さない（詳細には対象外であることを示し、編集は続けられる）
+          assert(await c.evaluate(`!document.querySelector('[data-testid=selected-out-of-scope]') && !!document.querySelector('[data-testid=detail-out-of-scope]')`), '詳細には一覧の対象外であることを表示（メイン側の警告なし）')
           assert((await selectState(c)).value === ids.home, '詳細の所属は保存後の値')
 
           // タイトルを保存しても、所属を古い値で上書きしない
@@ -243,16 +244,17 @@ export function taskProjectScenarios({ withApp, root }) {
           await openProject(c, ids.work1)
           await c.setInput('input[aria-label="タイトルで絞り込み"]', '仕事1')
           await c.click(c.byText('button', 'すべて'))
-          await c.click(`document.querySelector('[aria-label^="タイトルで並べ替え"]')`)
+          // フェーズ5.9: プロジェクトの並べ替えはトップバーの選択式
+          await chooseProjectSort(c, 'title')
           await selectRow(c, ids.work1Task)
           await setTitleDraft(c, '切り替え前のドラフト')
-          const before = await c.evaluate(`({ search: document.querySelector('input[aria-label="タイトルで絞り込み"]').value, all: document.querySelector('button[value=all]').getAttribute('aria-pressed'), sort: document.querySelector('[aria-label^="タイトルで並べ替え"]').getAttribute('aria-pressed') })`)
+          const before = await c.evaluate(`({ search: document.querySelector('input[aria-label="タイトルで絞り込み"]').value, all: document.querySelector('button[value=all]').getAttribute('aria-pressed'), sort: document.querySelector('[data-testid=view-sort-select] input').value })`)
 
           await c.click(`[...document.querySelectorAll('[data-testid=project-list] [data-project-id]')].find((e) => e.dataset.projectId === ${JSON.stringify(ids.work2)})`)
           await c.waitFor(`document.querySelector('[role=dialog]')?.innerText.includes('タスクのタイトルの変更を保存しますか')`, 3000, 'ドラフトの確認')
           await c.click(c.byText('[role=dialog] button', 'キャンセル'))
           await sleep(300)
-          const cancelled = await c.evaluate(`({ hash: location.hash, search: document.querySelector('input[aria-label="タイトルで絞り込み"]').value, all: document.querySelector('button[value=all]').getAttribute('aria-pressed'), sort: document.querySelector('[aria-label^="タイトルで並べ替え"]').getAttribute('aria-pressed'), draft: document.querySelector('[data-testid=task-editor] input:not([type=hidden])')?.value })`)
+          const cancelled = await c.evaluate(`({ hash: location.hash, search: document.querySelector('input[aria-label="タイトルで絞り込み"]').value, all: document.querySelector('button[value=all]').getAttribute('aria-pressed'), sort: document.querySelector('[data-testid=view-sort-select] input').value, draft: document.querySelector('[data-testid=task-editor] input:not([type=hidden])')?.value })`)
           assert(
             cancelled.hash === `#/projects/${ids.work1}` && cancelled.search === before.search && cancelled.all === 'true' && cancelled.sort === before.sort && cancelled.draft === '切り替え前のドラフト',
             'キャンセルなら画面・検索・状態・ソート・選択・ドラフトを変えない',
@@ -264,8 +266,8 @@ export function taskProjectScenarios({ withApp, root }) {
           await c.click(c.byText('[role=dialog] button', '破棄'))
           await c.waitFor(`location.hash === ${JSON.stringify(`#/projects/${ids.work2}`)}`, 3000, '切り替え')
           await sleep(300)
-          const switched = await c.evaluate(`({ search: document.querySelector('input[aria-label="タイトルで絞り込み"]').value, open: document.querySelector('button[value=open]').getAttribute('aria-pressed'), sort: document.querySelector('[aria-label^="タイトルで並べ替え"]').getAttribute('aria-pressed'), editor: !!document.querySelector('[data-testid=task-editor]') })`)
-          assert(switched.search === '' && switched.open === 'true' && switched.sort === 'true' && !switched.editor, '検索リセット・未完了・ソート維持・選択解除', switched)
+          const switched = await c.evaluate(`({ search: document.querySelector('input[aria-label="タイトルで絞り込み"]').value, open: document.querySelector('button[value=open]').getAttribute('aria-pressed'), sort: document.querySelector('[data-testid=view-sort-select] input').value, editor: !!document.querySelector('[data-testid=task-editor]') })`)
+          assert(switched.search === '' && switched.open === 'true' && switched.sort === 'title' && !switched.editor, '検索リセット・未完了・ソート維持・選択解除', switched)
           assert((await tasksById(c)).get(ids.work1Task).title === '仕事1のタスク', '破棄したドラフトは保存しない')
           const quit = await requestQuit(app)
           assert(quit?.code === 0, '正常終了', quit)
@@ -346,8 +348,8 @@ export function taskProjectScenarios({ withApp, root }) {
           await c.waitFor(`document.querySelectorAll('[data-testid=task-list] [role=option]').length > 0`, 10000, 'プロジェクトAの一覧')
           await c.setInput('input[aria-label="タイトルで絞り込み"]', '報告')
           await c.click(c.byText('button', '完了'))
-          await c.click(`document.querySelector('[aria-label^="タイトルで並べ替え"]')`)
-          await sleep(400)
+          await chooseProjectSort(c, 'title')
+          await sleep(200)
           const filtered = expect(projectA, (row) => row.completedAt !== null && row.title.includes('報告')).sort((a, b) => collator.compare(a.title, b.title))
           assert((await countText(c)) === `${filtered.length} 件表示 / 全 ${expect(projectA, () => true).length} 件`, '組み合わせた件数', await countText(c))
           shown = await rendered()

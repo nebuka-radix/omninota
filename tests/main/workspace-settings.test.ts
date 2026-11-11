@@ -19,7 +19,8 @@ const valid: WorkspaceSettings = {
   detailWidth: 320,
   detailVisible: false,
   lastRoute: '/settings',
-  milestoneCardWidth: 400
+  milestoneCardWidth: 400,
+  milestoneLayout: 'row'
 }
 
 describe('workspace.save の入力検証（厳格）', () => {
@@ -44,6 +45,8 @@ describe('workspace.save の入力検証（厳格）', () => {
     ['カード幅が最大超過', [{ ...valid, milestoneCardWidth: WORKSPACE_LIMITS.milestoneCardWidth.max + 1 }]],
     ['カード幅が文字列', [{ ...valid, milestoneCardWidth: '320' }]],
     ['カード幅なし', [(({ milestoneCardWidth: _omit, ...rest }) => rest)(valid)]],
+    ['レイアウトが未知', [{ ...valid, milestoneLayout: 'grid' }]],
+    ['レイアウトなし', [(({ milestoneLayout: _omit, ...rest }) => rest)(valid)]],
     ['表示状態が文字列', [{ ...valid, detailVisible: 'true' }]],
     ['任意キー指定の試み', ['theme', 'dark']]
   ])('拒否する: %s', (_label, args) => {
@@ -128,7 +131,8 @@ describe('保存値の読み取り時の正規化（フォールバック）', (
         detailWidth: WORKSPACE_LIMITS.detailWidth.min,
         detailVisible: DEFAULT_WORKSPACE_SETTINGS.detailVisible,
         lastRoute: '/inbox',
-        milestoneCardWidth: WORKSPACE_LIMITS.milestoneCardWidth.max
+        milestoneCardWidth: WORKSPACE_LIMITS.milestoneCardWidth.max,
+        milestoneLayout: 'column'
       },
       source: 'repaired'
     })
@@ -155,6 +159,35 @@ describe('保存値の読み取り時の正規化（フォールバック）', (
     const result = normalizeWorkspaceSettings(raw)
     expect(result.settings).toEqual({ ...valid, milestoneCardWidth: expected })
     expect(result.source).toBe('repaired')
+  })
+})
+
+describe('カードのレイアウト（フェーズ5.9）', () => {
+  it('既定値は column。未設定の旧形式（5.9より前の保存値）は column で補い、補正扱いにしない（カード幅などは変えない）', () => {
+    expect(DEFAULT_WORKSPACE_SETTINGS.milestoneLayout).toBe('column')
+    const { milestoneLayout: _omit, ...legacy } = valid
+    expect(normalizeWorkspaceSettings(JSON.stringify(legacy))).toEqual({ settings: { ...legacy, milestoneLayout: 'column' }, source: 'saved' })
+    // 5.5より前（カード幅もない）の形式も、両方を既定値で補う
+    const { milestoneCardWidth: _w, ...older } = legacy
+    expect(normalizeWorkspaceSettings(JSON.stringify(older))).toEqual({
+      settings: { ...older, milestoneCardWidth: 320, milestoneLayout: 'column' },
+      source: 'saved'
+    })
+  })
+  it.each<[string, unknown]>([
+    ['未知の値', 'grid'],
+    ['数値', 1],
+    ['null', null]
+  ])('レイアウトが %s なら column に補正する（他の項目は保持）', (_label, milestoneLayout) => {
+    expect(normalizeWorkspaceSettings(JSON.stringify({ ...valid, milestoneLayout }))).toEqual({
+      settings: { ...valid, milestoneLayout: 'column' },
+      source: 'repaired'
+    })
+  })
+  it('row の保存値はそのまま読み込み、column 用のカード幅も保持する', () => {
+    expect(normalizeWorkspaceSettings(JSON.stringify(valid))).toEqual({ settings: valid, source: 'saved' })
+    expect(valid.milestoneLayout).toBe('row')
+    expect(valid.milestoneCardWidth).toBe(400)
   })
 })
 

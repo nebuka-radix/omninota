@@ -85,7 +85,9 @@ export function createProjectService(deps: {
           projectId: row.id,
           name: INITIAL_MILESTONE_NAME,
           createdAt: timestamp,
-          updatedAt: timestamp
+          updatedAt: timestamp,
+          // 新しいプロジェクトのカードには手動順がない（作成日時の順。フェーズ5.9）
+          position: null
         })
         return toDto(row)
       })

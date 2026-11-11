@@ -1,6 +1,6 @@
 // Zodスキーマ。Mainだけがimportする（Preload / Rendererへ持ち込まない）。
 import { z } from 'zod'
-import { TASK_TITLE_MAX_LENGTH } from '../contracts/tasks'
+import { TASK_BULK_MAX, TASK_TITLE_MAX_LENGTH } from '../contracts/tasks'
 
 const titleSchema = z
   .string({ error: 'タイトルは文字列で指定してください。' })
@@ -42,9 +42,34 @@ export const setTaskAssignmentInputSchema = z
 // 削除（フェーズ5.6）
 export const deleteTaskInputSchema = z.strictObject({ id: taskIdSchema })
 
+// 一括操作のID一覧（フェーズ5.9）: 1件以上・上限以内・重複なし（重複は入力の誤りとして拒否する）
+const taskIdListSchema = z
+  .array(taskIdSchema, { error: 'タスクIDの一覧を指定してください。' })
+  .min(1, { error: 'タスクを1件以上指定してください。' })
+  .max(TASK_BULK_MAX, { error: `一度に扱えるタスクは${TASK_BULK_MAX}件までです。` })
+  .refine((ids) => new Set(ids).size === ids.length, { error: '同じタスクが重複して指定されています。' })
+
+// Inboxからの一括紐付け: 移動先はプロジェクトとマイルストンの両方（Inboxへの移動・プロジェクトだけは受け付けない）
+export const assignInboxTasksInputSchema = z.strictObject({
+  ids: taskIdListSchema,
+  projectId: z.uuid({ error: 'プロジェクトIDが正しくありません。' }),
+  milestoneId: z.uuid({ error: 'マイルストンIDが正しくありません。' })
+})
+
+export const deleteTasksInputSchema = z.strictObject({ ids: taskIdListSchema })
+
+// 並べ替え: マイルストンのタスク全件の新しい順序（0件の並べ替えはない）
+export const reorderMilestoneTasksInputSchema = z.strictObject({
+  milestoneId: z.uuid({ error: 'マイルストンIDが正しくありません。' }),
+  orderedIds: taskIdListSchema
+})
+
 export const tasksCreateArgsSchema = z.tuple([createTaskInputSchema])
 export const tasksListArgsSchema = z.tuple([])
 export const tasksUpdateTitleArgsSchema = z.tuple([updateTaskTitleInputSchema])
 export const tasksSetCompletedArgsSchema = z.tuple([setTaskCompletedInputSchema])
 export const tasksSetAssignmentArgsSchema = z.tuple([setTaskAssignmentInputSchema])
 export const tasksDeleteArgsSchema = z.tuple([deleteTaskInputSchema])
+export const tasksAssignFromInboxArgsSchema = z.tuple([assignInboxTasksInputSchema])
+export const tasksDeleteManyArgsSchema = z.tuple([deleteTasksInputSchema])
+export const tasksReorderInMilestoneArgsSchema = z.tuple([reorderMilestoneTasksInputSchema])

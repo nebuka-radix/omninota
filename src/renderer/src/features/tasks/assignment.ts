@@ -49,11 +49,24 @@ export function disambiguatedNames<T extends { id: string; name: string; created
   return labels
 }
 
-// マイルストンの表示順（作成日時・IDの昇順。Mainの一覧と同じ）
+// 手動順（position）→ 作成日時の古い順 → IDの昇順で比べる（フェーズ5.9。Mainの一覧と同じ規則）。
+// position が null（手動順なし）は後ろ。同じ範囲（プロジェクト・マイルストン）では、全件に値があるか全件 null のどちらか
+export function compareManualOrder(
+  a: { position: number | null; createdAt: string; id: string },
+  b: { position: number | null; createdAt: string; id: string }
+): number {
+  if (a.position !== b.position) {
+    if (a.position === null) return 1
+    if (b.position === null) return -1
+    return a.position - b.position
+  }
+  if (a.createdAt !== b.createdAt) return a.createdAt < b.createdAt ? -1 : 1
+  return a.id < b.id ? -1 : a.id > b.id ? 1 : 0
+}
+
+// マイルストンの表示順（手動順 → 作成日時・IDの昇順。Mainの一覧と同じ。フェーズ5.9で手動順を追加）
 export function sortMilestones(milestones: readonly MilestoneDto[]): MilestoneDto[] {
-  return [...milestones].sort((a, b) =>
-    a.createdAt !== b.createdAt ? (a.createdAt < b.createdAt ? -1 : 1) : a.id < b.id ? -1 : a.id > b.id ? 1 : 0
-  )
+  return [...milestones].sort(compareManualOrder)
 }
 
 export function milestonesOf(milestones: readonly MilestoneDto[], projectId: string): MilestoneDto[] {
@@ -109,7 +122,7 @@ export function buildAssignmentOptions(
   }
 }
 
-// プロジェクト画面のグループ（マイルストン別。マイルストンは作成順）。
+// プロジェクト画面のグループ（マイルストン別。マイルストンは手動順 → 作成順）。
 // tasks は表示中のタスク（検索・状態・ソート済み）。空のマイルストンも表示する。
 // フェーズ5.5から、グループ1つをカード1枚として表示する（カードごとに別の仮想リスト。key はカードの安定したID）。
 // フェーズ5.6で「マイルストン未設定」のグループは廃止した（表示中のプロジェクトのタスクは必ずマイルストンに所属する）。

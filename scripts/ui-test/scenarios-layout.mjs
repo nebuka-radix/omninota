@@ -1,7 +1,7 @@
 // フェーズ5.7: Inbox・Project画面のメインパネルの簡素化（タイトル行・説明行・操作説明・マイルストン0件の案内文の削除）のUIシナリオ。
 // run.mjs から呼ぶ。専用の一時userData（root配下）だけを使う。準備はPreloadの用途別APIで行う。
 import { join } from 'node:path'
-import { goToProject, assert, firstMilestoneId, requestQuit, sleep } from './lib.mjs'
+import { goToProject, assert, clickRowShowDetail, keyWith, MOD, firstMilestoneId, requestQuit, sleep } from './lib.mjs'
 
 export function layoutScenarios({ withApp, root }) {
   const dir = join(root, 'userData-layout')
@@ -98,10 +98,11 @@ export function layoutScenarios({ withApp, root }) {
           // キーボード操作・行のメニュー（説明文を消しても操作は維持）
           await c.focus('[data-testid=task-list]')
           await c.key('Home', 36)
-          await c.key('Delete', 46)
-          await c.waitFor(`document.querySelector('[data-testid=task-delete-dialog] [role=dialog]')`, 3000, 'Delete キーで確認')
+          // フェーズ5.9: Delete は確認なしで削除するため、ここでは F2（インライン編集）→ Esc で操作の維持を確かめる
+          await c.key('F2', 113)
+          await c.waitFor(`document.activeElement === document.querySelector('[data-testid=inline-title-editor] input')`, 3000, 'F2 で名前の編集')
           await c.key('Escape', 27)
-          await c.waitFor(`!document.querySelector('[data-testid=task-delete-dialog]')`, 3000, 'Escで閉じる')
+          await c.waitFor(`!document.querySelector('[data-testid=inline-title-editor]')`, 3000, 'Escで閉じる')
           await c.focus('[data-testid=task-list]')
           await shiftF10(c)
           await c.waitFor(`document.querySelector('[data-testid=task-row-menu] [role=menu]')`, 3000, 'Shift+F10 でメニュー')

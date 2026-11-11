@@ -1,4 +1,4 @@
-import { and, count, desc, eq, isNull, sql } from 'drizzle-orm'
+import { and, asc, count, desc, eq, inArray, isNull, max, sql } from 'drizzle-orm'
 import type { AppDatabase } from '../db/client'
 import { tasks, type NewTaskRow, type TaskRow } from '../db/schema'
 
@@ -17,7 +17,14 @@ export type TaskRepository = {
   updateCompletedAt(id: string, completedAt: string | null, updatedAt: string): TaskRow | undefined
   // 所属（プロジェクト・マイルストン）の変更・解除を1回の更新で行う（フェーズ5.4）。
   // 存在・組み合わせ・完了状態の確認はServiceで行う（存在は外部キーでも保証される）
-  updateAssignment(id: string, projectId: string | null, milestoneId: string | null, updatedAt: string): TaskRow | undefined
+  // フェーズ5.9: 手動順（position）も同じ更新で書き換える（移動先の末尾、またはInboxへ戻す時のNULL）
+  updateAssignment(
+    id: string,
+    projectId: string | null,
+    milestoneId: string | null,
+    position: number | null,
+    updatedAt: string
+  ): TaskRow | undefined
   // プロジェクトに所属する、表示中の未完了タスクの件数（フェーズ5.3。プロジェクトの完了判定に使う。索引 tasks_project_id_idx）。
   // 削除由来の非表示タスクは数えない（フェーズ5.6）
   countOpenByProject(projectId: string): number
@@ -32,6 +39,17 @@ export type TaskRepository = {
   // プロジェクトの削除に伴う所属解除と非表示化（既に非表示のタスクも含めて project_id・milestone_id をNULLにする）。
   // hidden_at は未設定のものだけ設定する（最初に非表示になった日時を残す）。変更した件数を返す
   detachAndHideByProject(projectId: string, at: string): number
+  // --- フェーズ5.9: 一括操作・手動順 ---
+  // 指定したIDの行（非表示を含む。存在しないIDの行は返らない）。ServiceがIDごとに存在・表示・所属を確認する
+  findManyByIds(ids: readonly string[]): TaskRow[]
+  // 表示中のタスクの物理削除（複数）。削除した件数を返す
+  deleteVisibleMany(ids: readonly string[]): number
+  // マイルストンに所属する表示中のタスク（手動順 → 作成日時の古い順 → IDの昇順）
+  listVisibleByMilestone(milestoneId: string): TaskRow[]
+  // マイルストンに所属する表示中のタスクの手動順の最大値。手動順がなければ null
+  maxPositionInMilestone(milestoneId: string): number | null
+  // 手動順だけを書き換える（updated_at・created_at・completed_at は変えない）。表示中の行だけ。更新した件数を返す
+  updatePosition(id: string, position: number): number
 }
 
 export function createTaskRepository(db: AppDatabase): TaskRepository {
@@ -52,8 +70,8 @@ export function createTaskRepository(db: AppDatabase): TaskRepository {
     updateCompletedAt(id, completedAt, updatedAt) {
       return db.update(tasks).set({ completedAt, updatedAt }).where(visible(id)).returning().get()
     },
-    updateAssignment(id, projectId, milestoneId, updatedAt) {
-      return db.update(tasks).set({ projectId, milestoneId, updatedAt }).where(visible(id)).returning().get()
+    updateAssignment(id, projectId, milestoneId, position, updatedAt) {
+      return db.update(tasks).set({ projectId, milestoneId, position, updatedAt }).where(visible(id)).returning().get()
     },
     countOpenByProject(projectId) {
       const row = db
@@ -92,7 +110,33 @@ export function createTaskRepository(db: AppDatabase): TaskRepository {
         .set({ projectId: null, milestoneId: null, hiddenAt: sql`coalesce(${tasks.hiddenAt}, ${at})`, updatedAt: at })
         .where(eq(tasks.projectId, projectId))
         .run().changes
+    },
+    findManyByIds(ids) {
+      if (ids.length === 0) return []
+      return db.select().from(tasks).where(inArray(tasks.id, [...ids])).all()
+    },
+    deleteVisibleMany(ids) {
+      if (ids.length === 0) return 0
+      return db.delete(tasks).where(and(inArray(tasks.id, [...ids]), isNull(tasks.hiddenAt))).run().changes
+    },
+    listVisibleByMilestone(milestoneId) {
+      return db
+        .select()
+        .from(tasks)
+        .where(and(eq(tasks.milestoneId, milestoneId), isNull(tasks.hiddenAt)))
+        .orderBy(sql`${tasks.position} IS NULL`, asc(tasks.position), asc(tasks.createdAt), asc(tasks.id))
+        .all()
+    },
+    maxPositionInMilestone(milestoneId) {
+      const row = db
+        .select({ value: max(tasks.position) })
+        .from(tasks)
+        .where(and(eq(tasks.milestoneId, milestoneId), isNull(tasks.hiddenAt)))
+        .get()
+      return row?.value ?? null
+    },
+    updatePosition(id, position) {
+      return db.update(tasks).set({ position }).where(visible(id)).run().changes
     }
   }
 }
-

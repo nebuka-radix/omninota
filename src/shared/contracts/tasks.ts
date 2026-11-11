@@ -44,6 +44,35 @@ export type DeleteTaskResult = {
   id: string
 }
 
+// 一括操作で一度に扱えるタスク数の上限（フェーズ5.9）。入力検証（Main）で使う
+export const TASK_BULK_MAX = 10000
+
+// Inboxの複数タスクを、1つのマイルストンへまとめて紐付ける（フェーズ5.9）。
+// Main が1つのトランザクションで検証・更新する。1件でも条件を満たさなければ、何も変更しない。
+// 対象は表示中で、現在Inbox（未所属）のタスクだけ。移動先は未完了のプロジェクトとそのマイルストン。
+// ids の順序で、移動先の手動順（ある場合）の末尾へ追加する
+export type AssignInboxTasksInput = {
+  ids: string[]
+  projectId: string
+  milestoneId: string
+}
+
+// 表示中の複数タスクの物理削除（フェーズ5.9）。1件でも削除できなければ、何も削除しない
+export type DeleteTasksInput = {
+  ids: string[]
+}
+
+export type DeleteTasksResult = {
+  ids: string[]
+}
+
+// マイルストン内のタスクの手動順の保存（フェーズ5.9）。orderedIds はそのマイルストンの表示中のタスク全件
+// （完了済みを含む）を、新しい順序で並べたもの。DBの所属タスクと一致しなければ、何も変更しない（CONFLICT）
+export type ReorderMilestoneTasksInput = {
+  milestoneId: string
+  orderedIds: string[]
+}
+
 // 日時はUTCのISO 8601文字列（例: 2026-11-09T10:00:00.000Z）
 // 一覧・更新の対象は表示中のタスクだけ（削除由来の非表示タスクはAPIから返さない。フェーズ5.6）
 // completedAt: 未完了ならnull。完了状態はcompletedAtだけから導出する。
@@ -57,6 +86,9 @@ export type TaskDto = {
   projectId: string | null
   // 所属するマイルストンのID（フェーズ5.4）。表示中のタスクでは、projectId があれば必ずあり、projectId が null なら null
   milestoneId: string | null
+  // マイルストン内の手動順（フェーズ5.9。小さいほど上）。null は手動順がない（作成日時の古い順で表示する）。
+  // 同じマイルストンの表示中のタスクは、全件に値があるか、全件 null のどちらか（Mainが保つ）
+  position: number | null
 }
 
 export function isTaskCompleted(task: Pick<TaskDto, 'completedAt'>): boolean {

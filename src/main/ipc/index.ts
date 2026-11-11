@@ -6,7 +6,8 @@ import {
   milestonesDeleteArgsSchema,
   milestonesGetDeletionSummaryArgsSchema,
   milestonesListArgsSchema,
-  milestonesRenameArgsSchema
+  milestonesRenameArgsSchema,
+  milestonesReorderArgsSchema
 } from '../../shared/validation/milestones'
 import {
   projectsCreateArgsSchema,
@@ -17,8 +18,11 @@ import {
   projectsSetCompletedArgsSchema
 } from '../../shared/validation/projects'
 import {
+  tasksAssignFromInboxArgsSchema,
   tasksCreateArgsSchema,
   tasksDeleteArgsSchema,
+  tasksDeleteManyArgsSchema,
+  tasksReorderInMilestoneArgsSchema,
   tasksListArgsSchema,
   tasksSetCompletedArgsSchema,
   tasksSetAssignmentArgsSchema,
@@ -119,6 +123,37 @@ export function registerIpcHandlers(deps: {
     })
   )
 
+  // フェーズ5.9: 一括紐付け・一括削除・タスクの手動順（いずれも1つのトランザクション。入力はZodで検証）
+  ipcMain.handle(
+    IPC_CHANNELS.tasksAssignFromInbox,
+    createIpcHandler({
+      channel: IPC_CHANNELS.tasksAssignFromInbox,
+      argsSchema: tasksAssignFromInboxArgsSchema,
+      policy,
+      run: ([input]) => taskService.assignFromInbox(input)
+    })
+  )
+
+  ipcMain.handle(
+    IPC_CHANNELS.tasksDeleteMany,
+    createIpcHandler({
+      channel: IPC_CHANNELS.tasksDeleteMany,
+      argsSchema: tasksDeleteManyArgsSchema,
+      policy,
+      run: ([input]) => taskService.deleteMany(input)
+    })
+  )
+
+  ipcMain.handle(
+    IPC_CHANNELS.tasksReorderInMilestone,
+    createIpcHandler({
+      channel: IPC_CHANNELS.tasksReorderInMilestone,
+      argsSchema: tasksReorderInMilestoneArgsSchema,
+      policy,
+      run: ([input]) => taskService.reorderInMilestone(input)
+    })
+  )
+
   ipcMain.handle(
     IPC_CHANNELS.milestonesList,
     createIpcHandler({
@@ -166,6 +201,17 @@ export function registerIpcHandlers(deps: {
       argsSchema: milestonesDeleteArgsSchema,
       policy,
       run: ([input]) => milestoneService.delete(input)
+    })
+  )
+
+  // カードの順序（フェーズ5.9）
+  ipcMain.handle(
+    IPC_CHANNELS.milestonesReorder,
+    createIpcHandler({
+      channel: IPC_CHANNELS.milestonesReorder,
+      argsSchema: milestonesReorderArgsSchema,
+      policy,
+      run: ([input]) => milestoneService.reorder(input)
     })
   )
 

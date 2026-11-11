@@ -42,4 +42,14 @@ export type MilestoneDto = {
   name: string
   createdAt: string
   updatedAt: string
+  // プロジェクト内のカードの手動順（フェーズ5.9。小さいほど先）。null は手動順がない（作成日時の古い順）。
+  // 同じプロジェクトの表示中のマイルストンは、全件に値があるか、全件 null のどちらか（Mainが保つ）
+  position: number | null
+}
+
+// カード（マイルストン）の順序の保存（フェーズ5.9）。orderedIds はそのプロジェクトの表示中のマイルストン全件を新しい順序で並べたもの。
+// DBと一致しなければ、何も変更しない（CONFLICT）
+export type ReorderMilestonesInput = {
+  projectId: string
+  orderedIds: string[]
 }

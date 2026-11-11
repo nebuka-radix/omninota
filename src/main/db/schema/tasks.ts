@@ -1,4 +1,4 @@
-import { index, sqliteTable, text } from 'drizzle-orm/sqlite-core'
+import { index, integer, sqliteTable, text } from 'drizzle-orm/sqlite-core'
 import { milestones } from './milestones'
 import { projects } from './projects'
 
@@ -18,6 +18,10 @@ import { projects } from './projects'
 //   DBの外部キーはマイルストンの存在だけを保証する。「project_id があること」「同じプロジェクトのマイルストンであること」は
 //   Service（TaskService.setAssignment / create）がトランザクション内で保証する（既存テーブルにCHECK・複合外部キーを足すと
 //   SQLiteではテーブルの再作成が必要になるため）。
+// - position: マイルストン内の手動順（フェーズ5.9。0007で追加）。NULLは手動順なし（作成日時の古い順・IDの昇順で表示）。
+//   同じマイルストンの表示中のタスクは「全件に値がある」か「全件NULL」のどちらか（Serviceが保つ）。
+//   並べ替えで初めて値が入る。手動順のあるマイルストンへの追加・移動は末尾（最大値+1）、Inboxへ戻すとNULL。
+//   並べ替えでは created_at・completed_at・updated_at を変えない。
 export const tasks = sqliteTable(
   'tasks',
   {
@@ -28,7 +32,8 @@ export const tasks = sqliteTable(
     completedAt: text('completed_at'),
     projectId: text('project_id').references(() => projects.id),
     milestoneId: text('milestone_id').references(() => milestones.id),
-    hiddenAt: text('hidden_at')
+    hiddenAt: text('hidden_at'),
+    position: integer('position')
   },
   (table) => [
     index('tasks_created_at_id_idx').on(table.createdAt, table.id),

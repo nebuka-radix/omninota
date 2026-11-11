@@ -23,7 +23,8 @@ const milestone = (id: string, projectId: string, name: string, createdAt: strin
   projectId,
   name,
   createdAt,
-  updatedAt: createdAt
+  updatedAt: createdAt,
+  position: null
 })
 const task = (id: string, milestoneId: string | null, projectId: string | null = P): TaskDto => ({
   id,
@@ -32,7 +33,8 @@ const task = (id: string, milestoneId: string | null, projectId: string | null =
   updatedAt: '2026-11-10T00:00:00.000Z',
   completedAt: null,
   projectId,
-  milestoneId
+  milestoneId,
+  position: null
 })
 
 const m1 = milestone('11111111-0000-4000-8000-000000000001', P, 'M1', '2026-11-02T00:00:00.000Z')

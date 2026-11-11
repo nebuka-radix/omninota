@@ -13,13 +13,15 @@ import { disambiguatedNames, milestonesOf, type Assignment } from './assignment'
 // 2. そのプロジェクトのマイルストンを選ぶ（戻るも可）。フェーズ5.6で「このプロジェクトに紐付け（マイルストン未設定）」は廃止した
 // Esc・外側のクリックで閉じた場合は何も保存しない。最後に使った所属先への自動割り当てはしない。
 // キーボード: MUI の Menu（↑↓・Enter・Esc）。開いた時と段階が変わった時は先頭の項目にフォーカスする。
+// フェーズ5.9: 複数タスク（Inboxの選択中のタスク）をまとめて紐付けられる。対象件数をメニューの見出しに示す。
+//   マイルストンはカードと同じ順（手動順 → 作成順）
 export function AssignMenu({
-  task,
+  tasks,
   anchor,
   onChoose,
   onClose
 }: {
-  task: TaskDto
+  tasks: readonly TaskDto[]
   anchor: HTMLElement
   onChoose: (assignment: Assignment) => void
   onClose: () => void
@@ -54,7 +56,7 @@ export function AssignMenu({
   } else if (!chosenProject) {
     items = [
       <ListSubheader key="title" sx={{ lineHeight: '28px', fontSize: 11 }}>
-        紐付け先のプロジェクト
+        {tasks.length > 1 ? `選択した ${tasks.length} 件の紐付け先のプロジェクト` : '紐付け先のプロジェクト'}
       </ListSubheader>,
       ...(openProjects.length === 0
         ? [
@@ -123,7 +125,10 @@ export function AssignMenu({
       open
       anchorEl={anchor}
       onClose={onClose}
-      slotProps={{ list: { 'aria-label': `「${task.title}」の紐付け先`, dense: true }, paper: { sx: { maxHeight: 420, minWidth: 260 } } }}
+      slotProps={{
+        list: { 'aria-label': tasks.length > 1 ? `選択した ${tasks.length} 件のタスクの紐付け先` : `「${tasks[0]?.title ?? ''}」の紐付け先`, dense: true },
+        paper: { sx: { maxHeight: 420, minWidth: 260 } }
+      }}
       data-testid="assign-menu"
     >
       {items}

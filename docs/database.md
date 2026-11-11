@@ -287,6 +287,31 @@ WAL使用中は、稼働中のDBファイルを単純コピーしてもバック
 | 削除時の所属解除・非表示化・削除は全部成功するか何も変えない | Service（1つのトランザクション・BEGIN IMMEDIATE） |
 | 確認後に配下の件数が変わったら削除しない | Service（確認時の件数と比べて CONFLICT） |
 
+### 0007_task_and_milestone_order（フェーズ5.9）
+
+- 生成SQL（`db:generate --name task_and_milestone_order` の結果に説明のコメントを追記）:
+  `ALTER TABLE milestones ADD position integer`、`ALTER TABLE tasks ADD position integer`。テーブルの再作成はしない。
+  過去のマイグレーション（0000〜0006）は変更していない。
+- 既存の行はすべて NULL（手動順なし）。表示は従来どおり作成日時の古い順・IDの昇順で、初期順はこの2つから構成する。
+  既存の行のほかの列（日時・所属・非表示状態）は変えない（結合テストで 0006 → 0007 の移行を確認）。
+
+| 列 | 型 | 内容 |
+|---|---|---|
+| tasks.position | INTEGER NULL | マイルストン内の手動順（小さいほど上）。NULL は手動順なし |
+| milestones.position | INTEGER NULL | プロジェクト内のカードの手動順（小さいほど先）。NULL は手動順なし |
+
+| 規則（フェーズ5.9） | 保証する場所 |
+|---|---|
+| 同じマイルストンの表示中のタスク（同じプロジェクトの表示中のマイルストン）は、全件に順位があるか全件 NULL | Service（並べ替えは全件を指定した時だけ保存。追加・移動は末尾） |
+| 手動順のあるマイルストンへの追加・移動は末尾（最大値+1）。Inboxへ戻すと NULL | Service（create・setAssignment・assignFromInbox） |
+| 並べ替えは順位だけを変える（created_at・completed_at・updated_at は変えない） | Repository（position だけを更新） |
+| 一括紐付け・一括削除・並べ替えは全件成功か何も変えない | Service（1つのトランザクション） |
+| 削除由来の非表示タスク・非表示のマイルストンは、並べ替え・一括操作の対象にしない | Repository（hidden_at・project_id の条件）＋ Service |
+
+- 一覧の順序: `milestones.list` は position（NULL は後ろ）→ created_at → id。タスクの手動順は Renderer の Table が同じ規則で並べる。
+- **既存のDB（通常利用 GTD・開発 GTD-dev）は、次にアプリを通常起動した時に 0007 が適用される。** 起動前にバックアップを取ること。
+  今回の作業では両DBを起動・更新していない。
+
 ### 0005_add_milestones（フェーズ5.4）
 
 - 生成SQL: `CREATE TABLE milestones (...)`（project_id は projects.id への外部キー、NOT NULL）、索引 `milestones_project_id_idx`、

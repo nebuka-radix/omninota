@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
+import { watchParentProcess } from '../../src/main/lifecycle/parent-watch'
 import {
   createExitCoordinator,
   createFlushRequester,
@@ -100,14 +101,14 @@ describe('Rendererへの保存確認（FlushRequester）', () => {
 })
 
 describe('終了・ウィンドウを閉じる処理の調整（ExitCoordinator）', () => {
-  function setup(outcomes: FlushCheckOutcome[], choices: FailureChoice[] = []) {
+  function setup(outcomes: FlushCheckOutcome[], choices: FailureChoice[] = [], closeQuitsApp = false) {
     const requestFlush = vi.fn(async (_action: DraftExitAction): Promise<FlushCheckOutcome> => outcomes.shift() ?? 'saved')
     const askOnFailure = vi.fn(
       async (_outcome: FlushCheckOutcome, _kind: ExitKind): Promise<FailureChoice> => choices.shift() ?? 'cancel'
     )
     const continueQuit = vi.fn()
     const continueClose = vi.fn()
-    const coordinator = createExitCoordinator({ requestFlush, askOnFailure, continueQuit, continueClose, logger: silent })
+    const coordinator = createExitCoordinator({ requestFlush, askOnFailure, continueQuit, continueClose, closeQuitsApp, logger: silent })
     const event = () => ({ preventDefault: vi.fn() })
     return { coordinator, requestFlush, askOnFailure, continueQuit, continueClose, event }
   }
@@ -160,6 +161,69 @@ describe('終了・ウィンドウを閉じる処理の調整（ExitCoordinator�
     const close = t.event()
     t.coordinator.onWindowCloseRequested(close)
     expect(close.preventDefault).toHaveBeenCalled()
+  })
+
+  describe('×（最後のウィンドウを閉じる）でアプリを終了する（フェーズ5.9。closeQuitsApp）', () => {
+    it('閉じる要求を止めて保存を確認し、成功したら終了まで進める（ウィンドウだけ閉じる経路は使わない）', async () => {
+      const t = setup(['saved'], [], true)
+      const close = t.event()
+      t.coordinator.onWindowCloseRequested(close)
+      expect(close.preventDefault).toHaveBeenCalledTimes(1)
+      await tick()
+      expect(t.continueQuit).toHaveBeenCalledTimes(1)
+      expect(t.continueClose).not.toHaveBeenCalled()
+      // 終了の再開後に届く before-quit・ウィンドウの close は止めない（再入しない・無限ループにしない）
+      const quit = t.event()
+      t.coordinator.onQuitRequested(quit)
+      const closeAgain = t.event()
+      t.coordinator.onWindowCloseRequested(closeAgain)
+      expect(quit.preventDefault).not.toHaveBeenCalled()
+      expect(closeAgain.preventDefault).not.toHaveBeenCalled()
+      expect(t.requestFlush).toHaveBeenCalledTimes(1)
+    })
+
+    it('未保存の編集: ダイアログは「終了」の文言の種類（quit）で確認し、キャンセルならウィンドウもアプリも残す', async () => {
+      const t = setup(['unsaved-draft'], ['cancel'], true)
+      t.coordinator.onWindowCloseRequested(t.event())
+      await tick()
+      expect(t.askOnFailure).toHaveBeenCalledWith('unsaved-draft', 'quit')
+      expect(t.continueQuit).not.toHaveBeenCalled()
+      expect(t.continueClose).not.toHaveBeenCalled()
+      // キャンセル後の×は再び確認する
+      const again = t.event()
+      t.coordinator.onWindowCloseRequested(again)
+      expect(again.preventDefault).toHaveBeenCalled()
+    })
+
+    it('保存して終了: 保存に成功した後だけ終了する', async () => {
+      const t = setup(['unsaved-draft', 'saved'], ['save'], true)
+      t.coordinator.onWindowCloseRequested(t.event())
+      await tick()
+      expect(t.requestFlush.mock.calls.map(([action]) => action)).toEqual(['check', 'save'])
+      expect(t.continueQuit).toHaveBeenCalledTimes(1)
+    })
+
+    it('確認中に×・⌘Q（SIGINT）が重なっても、確認と終了は1回だけ', async () => {
+      let finish: (outcome: FlushCheckOutcome) => void = () => {}
+      const requestFlush = vi.fn(() => new Promise<FlushCheckOutcome>((resolve) => (finish = resolve)))
+      const continueQuit = vi.fn()
+      const coordinator = createExitCoordinator({
+        requestFlush,
+        askOnFailure: vi.fn(),
+        continueQuit,
+        continueClose: vi.fn(),
+        closeQuitsApp: true,
+        logger: silent
+      })
+      coordinator.onWindowCloseRequested({ preventDefault: vi.fn() })
+      coordinator.onWindowCloseRequested({ preventDefault: vi.fn() })
+      coordinator.onQuitRequested({ preventDefault: vi.fn() })
+      coordinator.onQuitRequested({ preventDefault: vi.fn() })
+      finish('saved')
+      await tick()
+      expect(requestFlush).toHaveBeenCalledTimes(1)
+      expect(continueQuit).toHaveBeenCalledTimes(1)
+    })
   })
 
   it('閉じる確認中に終了要求が来たら、確認後に終了まで進める', async () => {
@@ -356,5 +420,31 @@ describe('保存確認の応答（IPC入力）の検証', () => {
     expect(
       workspaceFlushResultArgsSchema.safeParse([{ requestId: id, outcome: 'unsaved-draft', draftKind: 'other' }]).success
     ).toBe(false)
+  })
+})
+
+describe('開発起動の親プロセスの監視（フェーズ5.9）', () => {
+  it('親プロセスが変わったら1回だけ通知し、監視を止める（強制終了はしない）', () => {
+    let ppid = 100
+    let callback: () => void = () => {}
+    const clearTimer = vi.fn()
+    const onOrphaned = vi.fn()
+    watchParentProcess({ getParentPid: () => ppid, onOrphaned, setTimer: (cb) => ((callback = cb), 'timer'), clearTimer })
+    callback()
+    expect(onOrphaned).not.toHaveBeenCalled()
+    ppid = 1
+    callback()
+    callback()
+    expect(onOrphaned).toHaveBeenCalledTimes(1)
+    expect(onOrphaned).toHaveBeenCalledWith({ initialParentPid: 100, currentParentPid: 1 })
+    expect(clearTimer).toHaveBeenCalledWith('timer')
+  })
+
+  it('stop() で監視を止める（終了時）。二重に止めても問題ない', () => {
+    const clearTimer = vi.fn()
+    const watcher = watchParentProcess({ getParentPid: () => 5, onOrphaned: vi.fn(), setTimer: () => 'timer', clearTimer })
+    watcher.stop()
+    watcher.stop()
+    expect(clearTimer).toHaveBeenCalledTimes(1)
   })
 })

@@ -19,7 +19,8 @@ const task = (id: string, title: string, createdAt: string, completedAt: string 
   updatedAt: createdAt,
   projectId: null,
   milestoneId: null,
-  completedAt
+  completedAt,
+  position: null
 })
 
 const data: TaskDto[] = [

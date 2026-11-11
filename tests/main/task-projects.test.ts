@@ -192,7 +192,7 @@ describe('タスクの所属（Service・一時DB）', () => {
 
   it('外部キー: 存在しないプロジェクトIDはDBでも保存できない', () => {
     const task = tasks.create({ title: 't' })
-    expect(() => createTaskRepository(db).updateAssignment(task.id, MISSING_ID, null, '2026-11-10T10:00:00.000Z')).toThrow(
+    expect(() => createTaskRepository(db).updateAssignment(task.id, MISSING_ID, null, null, '2026-11-10T10:00:00.000Z')).toThrow(
       /FOREIGN KEY/
     )
   })

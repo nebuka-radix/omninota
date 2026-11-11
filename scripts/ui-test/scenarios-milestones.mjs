@@ -3,7 +3,7 @@
 import { randomUUID } from 'node:crypto'
 import { writeFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { goToProject, assert, closeInlineCreate, createDatabaseAt, firstMilestoneId, openDatabaseReadOnly, requestQuit, sleep } from './lib.mjs'
+import { chooseProjectSort, goToProject, assert, clickRowShowDetail, keyWith, MOD, closeInlineCreate, createDatabaseAt, firstMilestoneId, openDatabaseReadOnly, requestQuit, sleep } from './lib.mjs'
 
 export function milestoneScenarios({ withApp, root }) {
   const dir = join(root, 'userData-milestones')
@@ -359,13 +359,14 @@ export function milestoneScenarios({ withApp, root }) {
           assert((await c.evaluate(`document.querySelector('[data-testid=task-count]').textContent`)) === `${open.length} 件表示 / 全 3000 件`, '件数')
           let cards = await cardRows(c)
           assert(cards.length === 6 && cards[0].key === `group:${milestoneIds[0]}` && cards.every((x) => x.tasks.length > 0 && x.tasks.length < 60), 'カードごとに一部だけ描画・先頭はM1', cards.map((x) => [x.key, x.tasks.length]))
-          const firstOfM1 = open.filter((r) => r.milestoneId === milestoneIds[0]).sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1))[0]
-          assert(cards[0].tasks[0] === firstOfM1.id, 'M1の中は作成日時の降順', cards[0].tasks.slice(0, 3))
+          // フェーズ5.9: プロジェクトの既定の並べ替えは手動順（手動順がなければ作成日時の古い順）
+          const firstOfM1 = open.filter((r) => r.milestoneId === milestoneIds[0]).sort((a, b) => (a.createdAt < b.createdAt ? -1 : 1))[0]
+          assert(cards[0].tasks[0] === firstOfM1.id, 'M1の中は作成日時の古い順（手動順なし）', cards[0].tasks.slice(0, 3))
           // 検索 × 状態（完了）× タイトル順 → 最後のカード（M6）の End は、その中の最後のタスク
           await c.setInput('input[aria-label="タイトルで絞り込み"]', '報告')
           await c.click(c.byText('button', '完了'))
-          await c.click(`document.querySelector('[aria-label^="タイトルで並べ替え"]')`)
-          await sleep(400)
+          await chooseProjectSort(c, 'title')
+          await sleep(200)
           const collator = new Intl.Collator('ja', { numeric: true, sensitivity: 'base' })
           const filtered = rows.filter((r) => r.completedAt !== null && r.title.includes('報告'))
           assert((await c.evaluate(`document.querySelector('[data-testid=task-count]').textContent`)) === `${filtered.length} 件表示 / 全 3000 件`, '組み合わせた件数')

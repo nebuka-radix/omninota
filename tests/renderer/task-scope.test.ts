@@ -25,7 +25,8 @@ const task = (id: string, title: string, projectId: string | null, completed = f
   updatedAt: createdAt,
   completedAt: completed ? '2026-11-10T01:00:00.000Z' : null,
   projectId,
-  milestoneId: null
+  milestoneId: null,
+  position: null
 })
 
 describe('表示範囲（Inbox / プロジェクト）', () => {
@@ -110,7 +111,8 @@ describe('詳細パネルの所属の選択肢（5.4でプロジェクト・マ�
     projectId,
     name: 'M',
     createdAt: '2026-11-06T00:00:00.000Z',
-    updatedAt: '2026-11-06T00:00:00.000Z'
+    updatedAt: '2026-11-06T00:00:00.000Z',
+    position: null
   })
   const mWork = milestoneOf(work1.id, 'ffffffff-0000-4000-8000-000000000011')
   const mHome = milestoneOf(home.id, 'ffffffff-0000-4000-8000-000000000012')

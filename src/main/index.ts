@@ -18,6 +18,7 @@ import {
   unsavedDraftDialogText
 } from './lifecycle/workspace-flush'
 import { createScriptedMessageBox, type MessageBoxAdapter } from './lifecycle/message-box'
+import { watchParentProcess, type ParentWatcher } from './lifecycle/parent-watch'
 import { createMilestoneRepository } from './repositories/milestone-repository'
 import { createProjectRepository } from './repositories/project-repository'
 import { createSettingsRepository } from './repositories/settings-repository'
@@ -66,6 +67,12 @@ if (testConfig) {
   console.info(`[test] テストモード: ${testConfig.mode}（userData: ${app.getPath('userData')}）`)
   // Dockに表示せず、起動時にアプリを前面化しない（ユーザーの作業中アプリからフォーカスを奪わない）
   if (process.platform === 'darwin') app.setActivationPolicy('accessory')
+  // 自動テストだけ: ウィンドウの×と同じ経路（BrowserWindow.close → close イベント）で閉じる要求を出す（フェーズ5.9）。
+  // 非表示のウィンドウには×ボタンを押せないため、テストの実行スクリプトがこのプロセスへ SIGUSR2 を送って使う。通常起動では登録しない
+  process.on('SIGUSR2', () => {
+    console.info('[test] ウィンドウを閉じる要求（×と同じ経路）')
+    if (mainWindow && !mainWindow.isDestroyed()) mainWindow.close()
+  })
 }
 
 // ネイティブダイアログ。テストモードでは画面に出さず、指定した回答を使う。
@@ -136,14 +143,47 @@ async function askOnFlushFailure(outcome: FlushCheckOutcome, kind: ExitKind): Pr
   return response === 0 ? 'retry' : response === 1 ? 'discard' : 'cancel'
 }
 
+// フェーズ5.9: ウィンドウは1つだけのため、×（最後のウィンドウを閉じる）は macOS でもアプリの終了要求として扱う。
+// ×・⌘Q・SIGINT/SIGHUP/SIGTERM（開発起動の Ctrl+C など。handleShutdownSignals で app.quit() として扱う）は、すべて同じ保存確認を通ってから終了する。
+// 確認でキャンセルした場合は、ウィンドウもアプリ（開発起動では開発サーバーも）そのまま残る。
 const exitCoordinator = createExitCoordinator({
   requestFlush: (draftAction) => flushRequester.request(draftAction),
   askOnFailure: askOnFlushFailure,
   continueQuit: () => app.quit(),
   continueClose: () => {
     if (mainWindow && !mainWindow.isDestroyed()) mainWindow.close()
-  }
+  },
+  closeQuitsApp: true
 })
+
+// 開発起動（electron-vite の開発サーバーを使う未パッケージの起動）だけ、親プロセス（electron-vite）の終了を監視する。
+// 親が先に終了した（強制終了など）場合も、通常の終了フロー（保存確認）を通って終了し、Electron を取り残さない。
+// Ctrl+C（SIGINT）・端末を閉じた時（SIGHUP）・SIGTERM を、即終了せずに通常の終了要求（app.quit → 保存確認）として扱う（フェーズ5.9）。
+// Electron（Chromium）の既定の処理は、1回目で終了を始め、2回目を受けると確認を待たずに即時終了する。開発起動の Ctrl+C では
+// 端末からの SIGINT と electron-vite が転送する SIGINT の2回が届くため、保存確認・DBを閉じる処理を通らずに終了していた。
+// Chromium が自分の処理を登録した後（ready 後）に登録し直して置き換える。何回届いても ExitCoordinator が確認を1回にまとめる。
+// 確認でキャンセルされればアプリ（と開発環境）は残る。
+function handleShutdownSignals(): void {
+  for (const signal of ['SIGINT', 'SIGHUP', 'SIGTERM'] as const) {
+    process.on(signal, () => {
+      console.info(`[exit] ${signal} を受け取りました。終了の確認を行います`)
+      app.quit()
+    })
+  }
+}
+
+let parentWatcher: ParentWatcher | null = null
+function startParentWatch(): void {
+  if (app.isPackaged || !process.env['ELECTRON_RENDERER_URL']) return
+  parentWatcher = watchParentProcess({
+    getParentPid: () => process.ppid,
+    onOrphaned: ({ initialParentPid, currentParentPid }) => {
+      console.warn(`[exit] 開発起動の親プロセス（${initialParentPid}）が終了したため、アプリを終了します（現在の親: ${currentParentPid}）`)
+      app.quit()
+    }
+  })
+  console.info(`[exit] 開発起動の親プロセス（${process.ppid}）の終了を監視します`)
+}
 
 function showMainWindow(): void {
   if (!mainWindow || mainWindow.isDestroyed()) {
@@ -155,8 +195,7 @@ function showMainWindow(): void {
       win.on('show', () => console.info(`[test] window-show bounds=${JSON.stringify(win.getBounds())}`))
       win.on('focus', () => console.info('[test] window-focus'))
     }
-    // macOSでは、ウィンドウを閉じてもアプリは終了しない（既存方針）。
-    // どちらの場合も、閉じる前に保存完了を確認する。
+    // ×で閉じる要求は、保存完了を確認してからアプリの終了として扱う（フェーズ5.9。以前は macOS ではアプリを残していた）
     mainWindow.on('close', (event) => exitCoordinator.onWindowCloseRequested(event))
     mainWindow.on('closed', () => {
       mainWindow = null
@@ -321,6 +360,8 @@ if (!app.requestSingleInstanceLock()) {
       flushRequester
     })
     showMainWindow()
+    startParentWatch()
+    handleShutdownSignals()
 
     app.on('activate', () => {
       if (BrowserWindow.getAllWindows().length === 0) showMainWindow()
@@ -330,11 +371,12 @@ if (!app.requestSingleInstanceLock()) {
   // ⌘Q・メニューからの終了・app.quit()。保存完了の確認後に終了を再開する。
   app.on('before-quit', (event) => exitCoordinator.onQuitRequested(event))
 
-  app.on('window-all-closed', () => {
-    if (process.platform !== 'darwin') app.quit()
-  })
+  // 最後のウィンドウが閉じたら、macOS でも終了する（フェーズ5.9。保存確認は閉じる前に済んでいる）
+  app.on('window-all-closed', () => app.quit())
 
   app.on('will-quit', () => {
+    parentWatcher?.stop()
+    parentWatcher = null
     if (database) {
       closeDatabase(database)
       database = null

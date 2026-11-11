@@ -307,7 +307,7 @@ describe('削除・非表示（Service・一時DB）', () => {
       expect(() => tasks.setAssignment({ id: t.id, projectId: null, milestoneId: null })).toThrow(/対象のタスクが見つかりません/)
       expect(() => tasks.setAssignment({ id: t.id, ...at(p.id, m2.id) })).toThrow(/対象のタスクが見つかりません/)
       // Repository の更新も hidden_at IS NULL を条件にしている（遅れて届いた更新が直接届いても変えない）
-      expect(createTaskRepository(db).updateAssignment(t.id, p.id, m2.id, 'z')).toBeUndefined()
+      expect(createTaskRepository(db).updateAssignment(t.id, p.id, m2.id, null, 'z')).toBeUndefined()
       expect(rawTask(t.id)).toEqual(hidden)
     })
   })
@@ -526,8 +526,11 @@ describe('移行（0005 → 0006）: プロジェクトだけに所属するタ�
     expect(runMigrations(upgraded, MIGRATIONS_DIR)).toEqual({ appliedBefore: 6, appliedAfter: MIGRATION_COUNT })
     const after = upgraded.$client.prepare('SELECT * FROM tasks ORDER BY id').all()
     // 残すタスクは全列（updated_at を含む）そのまま。hidden_at はNULL（表示対象）
-    expect(after).toEqual(before.filter((t) => t.id !== T(1) && t.id !== T(2)).map((t) => ({ ...t, hidden_at: null })))
-    expect(upgraded.$client.prepare('SELECT * FROM milestones').all()).toEqual(beforeMilestones)
+    expect(after).toEqual(before.filter((t) => t.id !== T(1) && t.id !== T(2)).map((t) => ({ ...t, hidden_at: null, position: null })))
+    // 0007（フェーズ5.9）で手動順の列が加わる（既存の行はNULL）。それ以外の列は変えない
+    expect(upgraded.$client.prepare('SELECT * FROM milestones').all()).toEqual(
+      (beforeMilestones as Record<string, unknown>[]).map((m) => ({ ...m, position: null }))
+    )
     expect(upgraded.$client.prepare('SELECT * FROM projects').all()).toEqual(beforeProjects)
     // milestones.project_id はNULL可。外部キー（tasks → milestones・milestones → projects）と索引は維持
     const columns = upgraded.$client.prepare('PRAGMA table_info(milestones)').all() as { name: string; notnull: number }[]
@@ -544,7 +547,7 @@ describe('移行（0005 → 0006）: プロジェクトだけに所属するタ�
     expect(upgraded.$client.prepare('PRAGMA foreign_key_check').all()).toEqual([])
     expect(upgraded.$client.prepare("SELECT name FROM sqlite_master WHERE name LIKE '\\_\\_%' ESCAPE '\\' AND name != '__drizzle_migrations'").all()).toEqual([])
     // 外部キーは有効なまま（存在しないマイルストンは保存できない）
-    expect(() => createTaskRepository(upgraded).updateAssignment(T(4), pid, MISSING_ID, 'x')).toThrow(/FOREIGN KEY/)
+    expect(() => createTaskRepository(upgraded).updateAssignment(T(4), pid, MISSING_ID, null, 'x')).toThrow(/FOREIGN KEY/)
 
     // 移行後に（マイルストンの削除で）非表示になったタスクは、再起動しても物理削除しない（一度限りの移行）
     const milestonesService = createMilestoneService({ ...milestoneServiceDeps(upgraded) })

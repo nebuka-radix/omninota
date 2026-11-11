@@ -32,6 +32,16 @@ export function TaskEditor({ task }: { task: TaskDto }) {
   const [lastSaved, setLastSaved] = useState<Pick<TaskDto, 'title' | 'updatedAt'> | null>(null)
   const savedTitle = lastSaved && lastSaved.updatedAt > task.updatedAt ? lastSaved.title : task.title
 
+  // 保存済みのタイトルが他の経路（一覧のインライン編集など。フェーズ5.9）で変わった時、こちらで編集していなければ新しい値に合わせる。
+  // 編集中（未保存）の入力は変えない（新しい入力を古い値で巻き戻さない・上書きしない）
+  const previousSavedRef = useRef(savedTitle)
+  useEffect(() => {
+    const previous = previousSavedRef.current
+    previousSavedRef.current = savedTitle
+    if (previous === savedTitle) return
+    setDraft((current) => (current.trim() === previous ? savedTitle : current))
+  }, [savedTitle])
+
   const busy = pendingTaskIds.has(task.id)
   const dirty = draft.trim() !== savedTitle
   const blank = draft.trim().length === 0

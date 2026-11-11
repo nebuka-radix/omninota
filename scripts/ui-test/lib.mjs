@@ -15,7 +15,7 @@ const electronBinary = require('electron')
 export const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
 
 // ループバックで空いているポートを1つ得る
-async function freePort() {
+export async function freePort() {
   return new Promise((resolve, reject) => {
     const server = createServer()
     server.once('error', reject)
@@ -48,7 +48,7 @@ function frontmostPid() {
   }
 }
 
-function processTree(rootPid) {
+export function processTree(rootPid) {
   try {
     const out = execFileSync('ps', ['-Ao', 'pid=,ppid='], { encoding: 'utf8' })
     const pairs = out.trim().split('\n').map((line) => line.trim().split(/\s+/).map(Number))
@@ -142,7 +142,7 @@ export async function launchApp({ mode, userDataDir, dialogAnswers = [], display
   for (;;) {
     if (exitInfo !== null) return app
     try {
-      const targets = await (await fetch(`http://127.0.0.1:${port}/json/list`)).json()
+      const targets = await (await fetch(`http://127.0.0.1:${port}/json/list`, { signal: AbortSignal.timeout(2000) })).json()
       const page = targets.find((target) => target.type === 'page')
       if (page) {
         app.cdp = await connectCdp(page.webSocketDebuggerUrl)
@@ -326,4 +326,81 @@ export async function goToProject(c, projectId) {
   // 未完了なのにサイドバーにない場合は失敗にする（ルートで開いて隠さない）
   if (!completed) throw new TestFailure(`未完了のプロジェクトがサイドバーにありません: ${projectId}`)
   await c.evaluate(`location.hash = ${JSON.stringify(`#/projects/${projectId}`)}`)
+}
+
+// --- フェーズ5.9: ドラッグ・修飾キー（対象ページへのCDPの入力だけ。OSのカーソル・キー入力は使わない） ---
+// 修飾キー（CDP）: Alt=1, Ctrl=2, Meta(⌘)=4, Shift=8
+export const MOD = { alt: 1, ctrl: 2, meta: 4, shift: 8 }
+
+// 要素の中心（または相対位置 rx, ry）の座標。見つからなければ失敗
+export async function pointOf(c, selectorExpr, { rx = 0.5, ry = 0.5, scroll = true } = {}) {
+  const pos = await c.evaluate(
+    `(() => { const e = ${selectorExpr}; if (!e) return null; ${scroll ? "e.scrollIntoView({ block: 'nearest', inline: 'nearest' });" : ''} const r = e.getBoundingClientRect(); return { x: r.left + r.width * ${rx}, y: r.top + r.height * ${ry} } })()`
+  )
+  if (!pos) throw new TestFailure(`要素が見つかりません: ${selectorExpr}`)
+  return pos
+}
+
+// 修飾キー付きのクリック（⌘+クリック・Shift+クリック）
+export async function clickWith(c, selectorExpr, modifiers = 0) {
+  const { x, y } = await pointOf(c, selectorExpr)
+  for (const type of ['mouseMoved', 'mousePressed', 'mouseReleased']) {
+    await c.send('Input.dispatchMouseEvent', { type, x, y, button: type === 'mouseMoved' ? 'none' : 'left', buttons: type === 'mousePressed' ? 1 : 0, clickCount: 1, modifiers })
+  }
+  await sleep(120)
+}
+
+export async function doubleClick(c, selectorExpr) {
+  const { x, y } = await pointOf(c, selectorExpr)
+  await c.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x, y })
+  for (const clickCount of [1, 2]) {
+    await c.send('Input.dispatchMouseEvent', { type: 'mousePressed', x, y, button: 'left', buttons: 1, clickCount })
+    await c.send('Input.dispatchMouseEvent', { type: 'mouseReleased', x, y, button: 'left', buttons: 0, clickCount })
+  }
+  await sleep(150)
+}
+
+// ボタンを押したまま動かす（ドラッグ）。points を順に通る。release: false なら押したまま返す（途中の確認用）
+export async function mouseDown(c, point) {
+  await c.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: point.x, y: point.y, button: 'none', buttons: 0 })
+  await c.send('Input.dispatchMouseEvent', { type: 'mousePressed', x: point.x, y: point.y, button: 'left', buttons: 1, clickCount: 1 })
+}
+export async function mouseMoveTo(c, from, to, steps = 8) {
+  for (let i = 1; i <= steps; i++) {
+    const x = from.x + ((to.x - from.x) * i) / steps
+    const y = from.y + ((to.y - from.y) * i) / steps
+    await c.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x, y, button: 'left', buttons: 1 })
+    await sleep(16)
+  }
+}
+export async function mouseUp(c, point) {
+  await c.send('Input.dispatchMouseEvent', { type: 'mouseReleased', x: point.x, y: point.y, button: 'left', buttons: 0, clickCount: 1 })
+  await sleep(150)
+}
+
+// 修飾キー付きのキー入力
+export async function keyWith(c, key, keyCode, modifiers = 0, code = key) {
+  await c.send('Input.dispatchKeyEvent', { type: 'rawKeyDown', key, code, windowsVirtualKeyCode: keyCode, modifiers })
+  await c.send('Input.dispatchKeyEvent', { type: 'keyUp', key, code, windowsVirtualKeyCode: keyCode, modifiers })
+  await sleep(60)
+}
+
+// 行をクリックして、その詳細を表示する（フェーズ5.9）。Inboxでは行の選択だけでは右サイドバーが「紐付け先」のままのため、
+// 明示的な操作（「タスク詳細」タブ）で詳細へ切り替える。プロジェクトの画面では従来どおりクリックで詳細を表示する
+export async function clickRowShowDetail(c, selectorExpr) {
+  await c.click(selectorExpr)
+  if (await c.evaluate(`!!document.querySelector('[data-inbox-panel=targets]')`)) {
+    await c.click(`document.querySelector('[data-testid=inbox-panel-tab-detail]')`)
+    await c.waitFor(`document.querySelector('[data-inbox-panel=detail]')`, 3000, '右サイドバーをタスク詳細に切り替え')
+  }
+}
+
+// プロジェクト画面の並べ替えを選ぶ（フェーズ5.9からトップバーの選択式: manual / created-asc / created-desc / title）
+export async function chooseProjectSort(c, key) {
+  await c.click(`document.querySelector('[data-testid=view-sort-select] [role=combobox]')`)
+  await c.waitFor(`document.querySelector('[data-sort-key=${key}]')`, 3000, '並べ替えの選択肢')
+  await sleep(150)
+  await c.click(`document.querySelector('[data-sort-key=${key}]')`)
+  await c.waitFor(`!document.querySelector('[data-sort-key=${key}]')`, 3000, '選択肢を閉じる')
+  await sleep(200)
 }

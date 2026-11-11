@@ -1,7 +1,10 @@
 import { queryOptions, useMutation, useMutationState, useQueryClient, type QueryClient } from '@tanstack/react-query'
 import type {
+  AssignInboxTasksInput,
   CreateTaskInput,
   DeleteTaskInput,
+  DeleteTasksInput,
+  ReorderMilestoneTasksInput,
   SetTaskAssignmentInput,
   SetTaskCompletedInput,
   TaskDto,
@@ -20,7 +23,11 @@ export const taskMutationKeys = {
   updateTitle: [...taskKeys.all, 'update-title'] as const,
   setCompleted: [...taskKeys.all, 'set-completed'] as const,
   setAssignment: [...taskKeys.all, 'set-assignment'] as const,
-  delete: [...taskKeys.all, 'delete'] as const
+  delete: [...taskKeys.all, 'delete'] as const,
+  // フェーズ5.9: 一括操作・並べ替え（variables は ids / orderedIds を持つ）
+  assignFromInbox: [...taskKeys.all, 'assign-from-inbox'] as const,
+  deleteMany: [...taskKeys.all, 'delete-many'] as const,
+  reorder: [...taskKeys.all, 'reorder'] as const
 }
 
 // タスク一覧の正本はこのQuery（全件）。Inbox・プロジェクトの一覧、詳細、件数はすべてここから導出する。
@@ -100,27 +107,84 @@ export function useDeleteTaskMutation() {
   })
 }
 
-// 更新中（タイトル・完了状態・所属・削除）のタスクID。同じタスクへの重複操作を制限するために使う。
+// 一括操作の保存後に、返されたタスクで一覧キャッシュの該当行を置き換える（他の行・スクロール位置は変えない）
+function replaceTasksInList(queryClient: QueryClient, saved: readonly TaskDto[]): void {
+  const byId = new Map(saved.map((task) => [task.id, task]))
+  queryClient.setQueryData<TaskDto[]>(taskKeys.list(), (tasks) => tasks?.map((task) => byId.get(task.id) ?? task))
+  if (queryClient.isFetching({ queryKey: taskKeys.list() }) > 0) {
+    void queryClient.invalidateQueries({ queryKey: taskKeys.list() })
+  }
+}
+
+// Inboxの複数タスクを1つのマイルストンへ一括で紐付ける（フェーズ5.9）。Main が1つのトランザクションで全件を検証・更新する。
+// 対象タスクの進行中の更新（タイトルなど）が終わってから送る。成功した時だけキャッシュを更新する（Inboxから消える）。
+// 失敗時はキャッシュを変えない（行・選択を残し、理由を表示する）。
+export function useAssignInboxTasksMutation() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationKey: taskMutationKeys.assignFromInbox,
+    mutationFn: (input: AssignInboxTasksInput) =>
+      taskSaveQueue.runMany(input.ids, () => unwrapIpc(window.gtd.tasks.assignFromInbox(input))),
+    onSuccess: (saved) => replaceTasksInList(queryClient, saved)
+  })
+}
+
+// 表示中の複数タスクの物理削除（フェーズ5.9。確認ダイアログなし）。対象の進行中の更新の後に実行する。
+// 成功したら一覧キャッシュから除き、DBから取り直す。失敗時はキャッシュを変えない
+export function useDeleteTasksMutation() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationKey: taskMutationKeys.deleteMany,
+    mutationFn: (input: DeleteTasksInput) => taskSaveQueue.runMany(input.ids, () => unwrapIpc(window.gtd.tasks.deleteMany(input))),
+    onSuccess: (result) => {
+      const removed = new Set(result.ids)
+      queryClient.setQueryData<TaskDto[]>(taskKeys.list(), (tasks) => tasks?.filter((task) => !removed.has(task.id)))
+      void queryClient.invalidateQueries({ queryKey: taskKeys.list() })
+    }
+  })
+}
+
+// マイルストン内のタスクの手動順の保存（フェーズ5.9）。画面の順序は保存に成功した応答で切り替える
+// （先に画面だけを並べ替えない。失敗時は元の順のまま理由を表示する）。順序が古い（CONFLICT）場合は一覧を取り直す
+export function useReorderMilestoneTasksMutation() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationKey: taskMutationKeys.reorder,
+    mutationFn: (input: ReorderMilestoneTasksInput) =>
+      taskSaveQueue.runMany(input.orderedIds, () => unwrapIpc(window.gtd.tasks.reorderInMilestone(input))),
+    onSuccess: (saved) => replaceTasksInList(queryClient, saved),
+    onError: () => queryClient.invalidateQueries({ queryKey: taskKeys.list() })
+  })
+}
+
+// 更新中（タイトル・完了状態・所属・削除・一括操作）のタスクID。同じタスクへの重複操作を制限するために使う。
 export function usePendingTaskIds(): ReadonlySet<string> {
   const ids = useMutationState({
     filters: { status: 'pending', predicate: (mutation) => isTaskUpdateKey(mutation.options.mutationKey) },
-    select: (mutation) => {
-      const variables = mutation.state.variables
-      return typeof variables === 'object' && variables !== null && 'id' in variables && typeof variables.id === 'string'
-        ? variables.id
-        : null
-    }
+    select: (mutation) => variableTaskIds(mutation.state.variables)
   })
   const set = new Set<string>()
-  for (const id of ids) if (id) set.add(id)
+  for (const list of ids) for (const id of list) set.add(id)
   return set
+}
+
+// 更新の入力に含まれるタスクID（単体は id、一括は ids、並べ替えは orderedIds）
+function variableTaskIds(variables: unknown): string[] {
+  if (typeof variables !== 'object' || variables === null) return []
+  const record = variables as Record<string, unknown>
+  if (typeof record['id'] === 'string') return [record['id']]
+  const list = record['ids'] ?? record['orderedIds']
+  return Array.isArray(list) ? list.filter((value): value is string => typeof value === 'string') : []
 }
 
 const TASK_UPDATE_KEYS: readonly unknown[] = [
   taskMutationKeys.updateTitle[1],
   taskMutationKeys.setCompleted[1],
   taskMutationKeys.setAssignment[1],
-  taskMutationKeys.delete[1]
+  taskMutationKeys.delete[1],
+  taskMutationKeys.assignFromInbox[1],
+  taskMutationKeys.deleteMany[1],
+  taskMutationKeys.reorder[1]
 ]
 
 function isTaskUpdateKey(key: readonly unknown[] | undefined): boolean {

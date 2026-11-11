@@ -4,7 +4,8 @@ import type {
   DeleteMilestoneInput,
   MilestoneDeletionSummary,
   MilestoneDto,
-  RenameMilestoneInput
+  RenameMilestoneInput,
+  ReorderMilestonesInput
 } from '../../../../shared/contracts/milestones'
 import { unwrapIpc } from '../../lib/ipc'
 import { taskKeys } from '../tasks/task-queries'
@@ -18,7 +19,8 @@ export const milestoneKeys = {
 export const milestoneMutationKeys = {
   create: [...milestoneKeys.all, 'create'] as const,
   rename: [...milestoneKeys.all, 'rename'] as const,
-  delete: [...milestoneKeys.all, 'delete'] as const
+  delete: [...milestoneKeys.all, 'delete'] as const,
+  reorder: [...milestoneKeys.all, 'reorder'] as const
 }
 
 // マイルストン一覧（全プロジェクト分・少量）。プロジェクト画面・Inboxの紐付け・詳細パネルで共通に使う（フェーズ5.4）。
@@ -74,5 +76,24 @@ export function useDeleteMilestoneMutation() {
         queryClient.invalidateQueries({ queryKey: taskKeys.list() })
       ])
     }
+  })
+}
+
+// カードの順序の保存（フェーズ5.9）。同じプロジェクトの並べ替えは順番に送る（キー "milestone-order:<プロジェクトID>"）。
+// 成功した応答（全件・新しい順）でキャッシュを置き換える。失敗時は一覧を取り直す（画面は元の順のまま）
+export function useReorderMilestonesMutation() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationKey: milestoneMutationKeys.reorder,
+    mutationFn: (input: ReorderMilestonesInput) =>
+      taskSaveQueue.run(`milestone-order:${input.projectId}`, () => unwrapIpc(window.gtd.milestones.reorder(input))),
+    onSuccess: (saved: MilestoneDto[]) => {
+      const byId = new Map(saved.map((item) => [item.id, item]))
+      queryClient.setQueryData<MilestoneDto[]>(milestoneKeys.list(), (items) => items?.map((item) => byId.get(item.id) ?? item))
+      if (queryClient.isFetching({ queryKey: milestoneKeys.list() }) > 0) {
+        void queryClient.invalidateQueries({ queryKey: milestoneKeys.list() })
+      }
+    },
+    onError: () => queryClient.invalidateQueries({ queryKey: milestoneKeys.list() })
   })
 }

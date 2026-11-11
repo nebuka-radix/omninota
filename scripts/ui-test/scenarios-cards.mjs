@@ -6,7 +6,7 @@ import { randomUUID } from 'node:crypto'
 import { writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { createRequire } from 'node:module'
-import { goToProject, assert, closeInlineCreate, createDatabaseAt, firstMilestoneId, openDatabaseReadOnly, PROJECT_ROOT, requestQuit, sleep } from './lib.mjs'
+import { chooseProjectSort, goToProject, assert, clickRowShowDetail, keyWith, MOD, closeInlineCreate, createDatabaseAt, firstMilestoneId, openDatabaseReadOnly, PROJECT_ROOT, requestQuit, sleep } from './lib.mjs'
 
 const require = createRequire(join(PROJECT_ROOT, 'package.json'))
 
@@ -369,7 +369,8 @@ export function cardScenarios({ withApp, root }) {
             'マイルストンの作成順（作成時の「新しいマイルストン」が先頭）・空のM2も表示・未設定のカードはない',
             list
           )
-          assert(JSON.stringify(list[1].tasks) === JSON.stringify([ids.c2, ids.c1]) && JSON.stringify(list[0].tasks) === JSON.stringify([ids.c3]), 'カード内に所属タスクを表示（作成日時の降順）', list)
+          // フェーズ5.9: プロジェクトの既定の並べ替えは手動順（手動順がなければ作成日時の古い順）
+          assert(JSON.stringify(list[1].tasks) === JSON.stringify([ids.c1, ids.c2]) && JSON.stringify(list[0].tasks) === JSON.stringify([ids.c3]), 'カード内に所属タスクを表示（作成日時の古い順）', list)
           const placement = await c.evaluate(`(() => {
             const cardsEl = [...document.querySelectorAll('[data-testid=milestone-card]')]
             const nm = document.querySelector('[data-testid=new-milestone]')
@@ -464,13 +465,14 @@ export function cardScenarios({ withApp, root }) {
           await sleep(300)
           list = await cards(c)
           assert(list.length === 4 && list[1].tasks.length === 2 && list.filter((_, i) => i !== 1).every((x) => x.tasks.length === 0), '検索は全カード共通・0件のカードも残す', list.map((x) => [x.label, x.tasks.length]))
-          await c.click(`document.querySelector('[aria-label^="タイトルで並べ替え"]')`)
-          await sleep(300)
+          // フェーズ5.9: 並べ替えはトップバーの選択式
+          await chooseProjectSort(c, 'title')
           list = await cards(c)
           assert(JSON.stringify(list[1].tasks) === JSON.stringify([ids.c2, ids.c1]), 'タイトル順（a → b）', list[1].tasks)
-          await c.click(`document.querySelector('[aria-label^="タイトルで並べ替え"]')`)
-          await sleep(300)
-          assert(JSON.stringify((await cards(c))[1].tasks) === JSON.stringify([ids.c1, ids.c2]), 'タイトル降順（b → a）')
+          await chooseProjectSort(c, 'created-desc')
+          assert(JSON.stringify((await cards(c))[1].tasks) === JSON.stringify([ids.c2, ids.c1]), '作成日時が新しい順')
+          await chooseProjectSort(c, 'manual')
+          assert(JSON.stringify((await cards(c))[1].tasks) === JSON.stringify([ids.c1, ids.c2]), '手動順（手動順なし＝作成日時の古い順）')
           await c.setInput('input[aria-label="タイトルで絞り込み"]', '')
           await api(c, `window.gtd.tasks.setCompleted({ id: ${JSON.stringify(ids.c3)}, completed: true })`)
           await reload(c)
@@ -482,9 +484,9 @@ export function cardScenarios({ withApp, root }) {
           await c.click(c.byText('button', 'すべて'))
 
           // 完了切り替え（Space）・選択（Enter）・詳細の表示（カードの一覧で）
-          // M1 の並びは作成日時の降順（a-M1, b-M1）。End で b-M1（c1）を現在行にする
+          // M1 の並びは作成日時の古い順（b-M1, a-M1。フェーズ5.9）。Home で b-M1（c1）を現在行にする
           await c.focus(`[data-card-list="group:${ids.m1}"]`)
-          await c.key('End', 35)
+          await c.key('Home', 36)
           await c.space()
           await c.waitFor(`(async () => (await window.gtd.tasks.list()).data.find((t) => t.id === ${JSON.stringify(ids.c1)}).completedAt !== null)()`, 5000, 'Spaceで完了')
           await c.enter()
@@ -675,7 +677,8 @@ export function cardScenarios({ withApp, root }) {
           await c.key('End', 35)
           await sleep(400)
           let info = await activeInfo()
-          const lastOfM1 = rows.filter((r) => r.milestoneId === milestoneIds[0]).sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1)).at(-1)
+          // フェーズ5.9: 既定は手動順（なければ作成日時の古い順）。最後の行は最も新しいタスク
+          const lastOfM1 = rows.filter((r) => r.milestoneId === milestoneIds[0]).sort((a, b) => (a.createdAt < b.createdAt ? -1 : 1)).at(-1)
           assert(info.card === `group:${milestoneIds[0]}` && info.exists && info.taskId === lastOfM1.id, 'End で最後の行（描画済みの要素を参照）', info)
           await c.key('ArrowRight', 39)
           await sleep(300)

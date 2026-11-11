@@ -4,7 +4,7 @@
 import { randomUUID } from 'node:crypto'
 import { join } from 'node:path'
 import { createRequire } from 'node:module'
-import { goToProject, assert, createDatabaseAt, firstMilestoneId, openDatabaseReadOnly, PROJECT_ROOT, requestQuit, sleep } from './lib.mjs'
+import { goToProject, assert, clickRowShowDetail, keyWith, MOD, createDatabaseAt, firstMilestoneId, openDatabaseReadOnly, PROJECT_ROOT, requestQuit, sleep } from './lib.mjs'
 
 const require = createRequire(join(PROJECT_ROOT, 'package.json'))
 
@@ -88,34 +88,31 @@ export function deletionScenarios({ withApp, root }) {
 
   return [
     [
-      'タスクの削除（Inbox）: 行のメニュー・右クリック・Shift+F10・Delete キー、対象を示す確認、取消、失敗時は行を残す、二重実行なし、他のタスクの未保存入力を保持、保存中の削除と遅延更新',
+      'タスクの削除（Inbox）: 行のメニュー・右クリック・Shift+F10・Delete キー（フェーズ5.9から確認なし）、失敗時は行を残す、二重実行なし、他のタスクの未保存入力を保持、保存中の削除と遅延更新',
       () =>
         withApp({ label: 'delete-tasks', userDataDir: dir }, async (app) => {
           const c = app.cdp
           const t = {}
-          for (const name of ['削除A', '削除B', '削除C', '削除D', '削除E']) t[name] = await createTask(c, name)
+          for (const name of ['削除A', '削除B', '削除C', '削除D', '削除E', '削除F']) t[name] = await createTask(c, name)
           await reload(c)
           await openInbox(c)
-          assert((await badge(c)) === '5', 'バッジ5件', await badge(c))
+          assert((await badge(c)) === '6', 'バッジ6件', await badge(c))
+          // 削除の操作の間、確認ダイアログが一度も出ないことを記録する
+          await c.evaluate(`(() => { window.__dialogSeen = false; new MutationObserver(() => { if (document.querySelector('[role=dialog]')) window.__dialogSeen = true }).observe(document.body, { childList: true, subtree: true }) })()`)
           const structure = await c.evaluate(`({
             inOption: document.querySelectorAll('[role=option] button, [role=option] [role=button], [role=option] [tabindex="0"]').length,
             menuButtons: document.querySelectorAll('[data-row-menu-task-id]').length,
             menuTab: [...document.querySelectorAll('[data-row-menu-task-id]')].every((b) => b.tabIndex === -1 && !b.closest('[role=listbox]'))
           })`)
-          assert(structure.inOption === 0 && structure.menuButtons === 5 && structure.menuTab, 'option の中に操作要素を置かない（「…」は一覧の外・Tab移動の対象外）', structure)
+          assert(structure.inOption === 0 && structure.menuButtons === 6 && structure.menuTab, 'option の中に操作要素を置かない（「…」は一覧の外・Tab移動の対象外）', structure)
 
-          // マウス: 「…」→ メニュー（紐付け・削除）→ 削除 → 確認 → キャンセルでは何も変えない
-          await openRowMenu(c, t['削除A'])
+          // マウス: 「…」→ メニュー（詳細・名前の変更・紐付け・削除）→ 削除（確認なし）
+          await openRowMenu(c, t['削除F'])
           const items = await c.evaluate(`[...document.querySelectorAll('[data-testid=task-row-menu] [role=menuitem]')].map((e) => e.textContent)`)
-          assert(JSON.stringify(items) === JSON.stringify(['紐付け…', 'タスクを削除…']), 'Inboxの行のメニュー', items)
+          assert(JSON.stringify(items) === JSON.stringify(['詳細を表示', '名前を変更（F2）', '紐付け…', 'タスクを削除']), 'Inboxの行のメニュー', items)
           await c.click(`document.querySelector('[data-testid=task-row-menu-delete]')`)
-          await waitDialog(c, 'task-delete-dialog', '確認ダイアログ')
-          const confirmText = await dialogText(c, 'task-delete-dialog')
-          const focusCancel = await c.evaluate(`document.activeElement === document.querySelector('[data-testid=task-delete-dialog-cancel]')`)
-          assert(confirmText.includes('「削除A」') && confirmText.includes('元に戻せません') && focusCancel, '対象のタスク名を示し、既定のフォーカスはキャンセル', { confirmText, focusCancel })
-          await c.click(`document.querySelector('[data-testid=task-delete-dialog-cancel]')`)
-          await waitDialogClosed(c, 'task-delete-dialog', 'キャンセルで閉じる')
-          assert(rawTask(t['削除A']) && (await listIds(c)).includes(t['削除A']), 'キャンセルでは変えない')
+          await c.waitFor(`!document.querySelector('[data-testid=task-list] [data-task-id="${t['削除F']}"]')`, 5000, '確認なしで一覧から消える')
+          assert(rawTask(t['削除F']) === undefined, 'DBから物理削除')
 
           // 右クリック → メニュー
           await c.evaluate(`document.querySelector('[data-testid=task-list] [data-task-id="${t['削除B']}"]').dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }))`)
@@ -123,88 +120,70 @@ export function deletionScenarios({ withApp, root }) {
           await c.key('Escape', 27)
           await c.waitFor(`!document.querySelector('[data-testid=task-row-menu]')`, 3000, 'メニューを閉じる')
 
-          // キーボード: 一覧で Delete → 確認（Escでキャンセル）、Shift+F10 → メニュー（↓・Enter）→ 確認 → 削除
+          // キーボード: Shift+F10 → メニュー（末尾の削除）→ 削除、Delete キー → 削除（どちらも確認なし）
           await c.focus('[data-testid=task-list]')
           await c.key('Home', 36)
           const first = await c.evaluate(`document.getElementById(document.querySelector('[data-testid=task-list]').getAttribute('aria-activedescendant'))?.dataset.taskId`)
           assert(first === t['削除E'], '先頭（新しい順）が現在行', first)
-          await c.key('Delete', 46)
-          await waitDialog(c, 'task-delete-dialog', 'Delete キーで確認')
-          assert((await dialogText(c, 'task-delete-dialog')).includes('「削除E」'), '現在行が対象')
-          await c.key('Escape', 27)
-          await waitDialogClosed(c, 'task-delete-dialog', 'Esc でキャンセル')
-          assert(rawTask(t['削除E']), 'Esc では削除しない')
-          await c.focus('[data-testid=task-list]')
           await shiftF10(c)
-          await c.waitFor(`document.querySelector('[data-testid=task-row-menu] [role=menu]')`, 3000, 'Shift+F10 でメニュー')
+          await c.waitFor(`document.querySelector('[data-testid=task-row-menu] [role=menu]')?.contains(document.activeElement)`, 3000, 'Shift+F10 でメニュー')
           await sleep(200)
           const menuFocus = await c.evaluate(`document.activeElement?.textContent`)
-          assert(menuFocus === '紐付け…', 'メニューの先頭にフォーカス', menuFocus)
-          await c.key('ArrowDown', 40)
+          assert(menuFocus === '詳細を表示', 'メニューの先頭にフォーカス', menuFocus)
+          await c.key('End', 35)
           await c.enter()
-          await waitDialog(c, 'task-delete-dialog', 'メニューから確認')
-          await c.click(`document.querySelector('[data-testid=task-delete-dialog-confirm]')`)
-          await waitDialogClosed(c, 'task-delete-dialog', '削除して閉じる')
           await c.waitFor(`!document.querySelector('[data-testid=task-list] [data-task-id="${t['削除E']}"]')`, 5000, '一覧から消える')
           assert(rawTask(t['削除E']) === undefined, 'DBから物理削除', rawTask(t['削除E']))
           assert((await announcement(c)).includes('「削除E」を削除しました'), '結果を読み上げる', await announcement(c))
           await c.waitFor(`document.querySelector('[data-testid=nav-inbox-badge]').textContent === '4'`, 3000, 'バッジの更新')
 
-          // 他のタスクの未保存の入力を失わない: Cを選択してタイトルを編集中に、Bを削除 → Cのドラフトは残る
-          await c.click(`document.querySelector('[data-testid=task-list] [data-task-id="${t['削除C']}"]')`)
+          // 他のタスクの未保存の入力を失わない: Cの詳細でタイトルを編集中に、Bを削除 → Cのドラフトは残る
+          await clickRowShowDetail(c, `document.querySelector('[data-testid=task-list] [data-task-id="${t['削除C']}"]')`)
           await c.waitFor(`document.querySelector('[data-testid=task-editor]')`, 3000, 'Cの詳細')
           await c.setInput('[data-testid=task-editor] input:not([type=hidden])', '削除Cのドラフト')
           await openRowMenu(c, t['削除B'])
           await c.click(`document.querySelector('[data-testid=task-row-menu-delete]')`)
-          await waitDialog(c, 'task-delete-dialog', 'Bの確認')
-          assert(!(await c.evaluate(`!!document.querySelector('[data-testid=task-delete-dialog-draft]')`)), '他のタスクのドラフトは対象外')
-          await c.click(`document.querySelector('[data-testid=task-delete-dialog-confirm]')`)
-          await waitDialogClosed(c, 'task-delete-dialog', 'Bを削除')
+          await c.waitFor(`!document.querySelector('[data-testid=task-list] [data-task-id="${t['削除B']}"]')`, 5000, 'Bを削除')
           assert(rawTask(t['削除B']) === undefined, 'Bを削除')
           const keptDraft = await c.evaluate(`({ value: document.querySelector('[data-testid=task-editor] input:not([type=hidden])')?.value, selected: document.querySelector('[data-testid=task-list] [aria-selected=true]')?.dataset.taskId })`)
           assert(keptDraft.value === '削除Cのドラフト' && keptDraft.selected === t['削除C'], '他のタスクの未保存入力・選択を保持', keptDraft)
 
-          // 選択中・未保存のタスク自身の削除: 確認に「未保存の変更も失われる」→ 削除後は詳細を空に戻し、移動時の確認も出ない
+          // 選択中・未保存のタスク自身の削除: 確認なしで削除し、詳細を空に戻す。移動時の未保存の確認も出ない
           await openRowMenu(c, t['削除C'])
           await c.click(`document.querySelector('[data-testid=task-row-menu-delete]')`)
-          await waitDialog(c, 'task-delete-dialog', 'Cの確認')
-          assert(await c.evaluate(`!!document.querySelector('[data-testid=task-delete-dialog-draft]')`), '対象の未保存の変更が失われることを示す')
-          await c.click(`document.querySelector('[data-testid=task-delete-dialog-confirm]')`)
-          await waitDialogClosed(c, 'task-delete-dialog', 'Cを削除')
-          await c.waitFor(`!document.querySelector('[data-testid=task-editor]')`, 3000, '詳細を閉じる（選択解除）')
+          await c.waitFor(`!document.querySelector('[data-testid=task-editor]')`, 5000, '詳細を閉じる（選択解除）')
+          assert(rawTask(t['削除C']) === undefined, 'Cを削除')
           assert((await c.evaluate(`document.querySelector('#detail-panel').innerText`)).includes('タスクを選択すると'), '詳細パネルを空の表示に戻す')
           await c.click(`document.querySelector('nav button[aria-label="Project"]')`)
           await sleep(300)
           assert((await anyDialog(c)) === null, '削除したタスクの未保存の確認は出ない', await anyDialog(c))
           await openInbox(c)
 
-          // 失敗: DBをロックした状態で削除 → ダイアログに理由、行・DBは残る
+          // 失敗: DBをロックした状態で削除 → 一覧の上に理由、行・DBは残る
           const release = lockDb()
           try {
             await openRowMenu(c, t['削除A'])
             await c.click(`document.querySelector('[data-testid=task-row-menu-delete]')`)
-            await waitDialog(c, 'task-delete-dialog', 'Aの確認（失敗）')
-            await c.click(`document.querySelector('[data-testid=task-delete-dialog-confirm]')`)
-            await c.waitFor(`document.querySelector('[data-testid=task-delete-dialog-error]')`, 15000, '失敗の表示（ロックの待ち時間を含む）')
+            await c.waitFor(`document.querySelector('[data-testid=task-delete-error]')`, 15000, '失敗の表示（ロックの待ち時間を含む）')
           } finally {
             release()
           }
-          const failed = await c.evaluate(`({ error: document.querySelector('[data-testid=task-delete-dialog-error]').textContent, row: !!document.querySelector('[data-testid=task-list] [data-task-id="${t['削除A']}"]') })`)
+          const failed = await c.evaluate(`({ error: document.querySelector('[data-testid=task-delete-error]').textContent, row: !!document.querySelector('[data-testid=task-list] [data-task-id="${t['削除A']}"]') })`)
           assert(failed.error.startsWith('削除できませんでした') && failed.row && rawTask(t['削除A']), '失敗時は行を残し、理由を表示', failed)
-          // 二重実行なし: 同じ確認ボタンを続けて2回押しても1回だけ（2回目の NOT_FOUND を出さない）
-          await c.evaluate(`(() => { const b = document.querySelector('[data-testid=task-delete-dialog-confirm]'); b.click(); b.click() })()`)
-          await waitDialogClosed(c, 'task-delete-dialog', '再試行で削除')
+          // 二重実行なし: Delete キーを続けて2回押しても1回だけ（2回目の NOT_FOUND を出さない）
+          await c.click(`document.querySelector('[data-testid=task-delete-error] button')`)
+          await c.click(`document.querySelector('[data-testid=task-list] [data-task-id="${t['削除A']}"]')`)
+          await c.focus('[data-testid=task-list]')
+          await c.evaluate(`(() => { const l = document.querySelector('[data-testid=task-list]'); for (let i = 0; i < 2; i++) l.dispatchEvent(new KeyboardEvent('keydown', { key: 'Delete', bubbles: true })) })()`)
+          await c.waitFor(`!document.querySelector('[data-testid=task-list] [data-task-id="${t['削除A']}"]')`, 5000, '削除')
           await sleep(300)
-          assert(rawTask(t['削除A']) === undefined && !(await c.evaluate(`!!document.querySelector('[data-testid=task-delete-dialog-error], [data-testid=assign-error]')`)), '1回だけ削除（エラーなし）')
+          assert(rawTask(t['削除A']) === undefined && !(await c.evaluate(`!!document.querySelector('[data-testid=task-delete-error], [data-testid=assign-error]')`)), '1回だけ削除（エラーなし）')
 
-          // 保存中の削除: タイトルの保存（IPCの往復中）と同じ処理の中で削除を要求する → 保存が終わってから確認を出す
-          // （テスト用DBのロックでは、タイトルの保存が待たずに失敗するため、保存中の状態は同じタスク内での要求で作る）
-          await c.click(`document.querySelector('[data-testid=task-list] [data-task-id="${t['削除D']}"]')`)
+          // 保存中の削除: タイトルの保存（IPCの往復中）と同じ処理の中で削除を要求する → 保存が終わってから削除する（復活しない）
+          await clickRowShowDetail(c, `document.querySelector('[data-testid=task-list] [data-task-id="${t['削除D']}"]')`)
           await c.waitFor(`document.querySelector('[data-testid=task-editor]')`, 3000, 'Dの詳細')
           await c.setInput('[data-testid=task-editor] input:not([type=hidden])', '削除D（保存中）')
           await sleep(300)
-          // マイクロタスクだけを待つ（Reactの描画は進むが、IPCの応答（別のタスク）はまだ届かない）。
-          // 要求の時点ではタイトルは未保存（編集欄は dirty）。削除の確認が保存の完了を待たなければ「未保存の変更も失われます」が出る
           const requested = await c.evaluate(`(async () => {
             const flush = async () => { for (let i = 0; i < 10; i++) await Promise.resolve() }
             const helper = () => document.querySelector('[data-testid=task-editor] .MuiFormHelperText-root')?.textContent
@@ -218,13 +197,10 @@ export function deletionScenarios({ withApp, root }) {
             return { menuItem: !!item, dirtyAtRequest }
           })()`)
           assert(requested.menuItem && requested.dirtyAtRequest, '保存の応答より前（未保存の表示のまま）に削除を要求した', requested)
-          await waitDialog(c, 'task-delete-dialog', '保存の完了後に確認')
-          const atDialog = { title: rawTask(t['削除D'])?.title, draft: await c.evaluate(`!!document.querySelector('[data-testid=task-delete-dialog-draft]')`) }
-          assert(atDialog.title === '削除D（保存中）' && !atDialog.draft, '先に始めた保存が終わってから確認する（保存済みなので未保存の警告なし）', atDialog)
-          await c.click(`document.querySelector('[data-testid=task-delete-dialog-confirm]')`)
-          await waitDialogClosed(c, 'task-delete-dialog', 'Dを削除')
+          await c.waitFor(`!document.querySelector('[data-testid=task-list] [data-task-id="${t['削除D']}"]')`, 5000, '保存の後に削除')
           await sleep(500)
           assert(rawTask(t['削除D']) === undefined, '削除後に対象が復活しない')
+          assert((await c.evaluate('window.__dialogSeen')) === false, '削除で確認ダイアログを一度も出さない')
 
           // 遅延更新: 削除と更新が同時に届いても、削除後の更新は NOT_FOUND（行を作り直さない）
           const late = await createTask(c, '遅延更新')
@@ -235,7 +211,7 @@ export function deletionScenarios({ withApp, root }) {
         })
     ],
     [
-      'タスクの削除（プロジェクトのカード）: 行のメニュー・Delete キー、最後の未完了タスクを削除してもプロジェクトは自動で完了しない',
+      'タスクの削除（プロジェクトのカード）: 行のメニュー・Delete キー（確認なし）、最後の未完了タスクを削除してもプロジェクトは自動で完了しない',
       () =>
         withApp({ label: 'delete-card-tasks', userDataDir: dir }, async (app) => {
           const c = app.cdp
@@ -249,20 +225,15 @@ export function deletionScenarios({ withApp, root }) {
           await openProject(c, ids.p)
           await openRowMenu(c, open)
           const items = await c.evaluate(`[...document.querySelectorAll('[data-testid=task-row-menu] [role=menuitem]')].map((e) => e.textContent)`)
-          assert(JSON.stringify(items) === JSON.stringify(['タスクを削除…']), 'カードの行のメニューは削除だけ', items)
+          assert(JSON.stringify(items) === JSON.stringify(['名前を変更（F2）', 'タスクを削除']), 'カードの行のメニューは名前の変更と削除', items)
           await c.click(`document.querySelector('[data-testid=task-row-menu-delete]')`)
-          await waitDialog(c, 'task-delete-dialog', '確認')
-          await c.click(`document.querySelector('[data-testid=task-delete-dialog-confirm]')`)
-          await waitDialogClosed(c, 'task-delete-dialog', '削除')
-          assert(rawTask(open) === undefined, 'カードから削除')
-          // Delete キー（カードの一覧）
+          await c.waitFor(`!document.querySelector('[data-testid=task-list] [data-task-id="${open}"]')`, 5000, '確認なしで削除')
+          assert(rawTask(open) === undefined && (await anyDialog(c)) === null, 'カードから削除（確認なし）')
+          // Delete キー（カードの一覧。既定の並べ替えは手動順＝作成日時の古い順のため、「キーで削除」は末尾）
           await c.focus(`[data-card-list="group:${m}"]`)
-          await c.key('Home', 36)
+          await c.key('End', 35)
           await c.key('Delete', 46)
-          await waitDialog(c, 'task-delete-dialog', 'Delete キーで確認')
-          assert((await dialogText(c, 'task-delete-dialog')).includes('「キーで削除」'), 'カードの現在行が対象')
-          await c.click(`document.querySelector('[data-testid=task-delete-dialog-confirm]')`)
-          await waitDialogClosed(c, 'task-delete-dialog', '削除')
+          await c.waitFor(`!document.querySelector('[data-testid=task-list] [data-task-id="${other}"]')`, 5000, 'Delete キーで削除')
           assert(rawTask(other) === undefined, 'キーボードで削除')
           await sleep(300)
           const status = await c.evaluate(`document.querySelector('#detail-panel [data-testid=project-status]')?.textContent`)
@@ -364,7 +335,7 @@ export function deletionScenarios({ withApp, root }) {
           await c.key('Escape', 27)
           await c.waitFor(`!document.querySelector('[role=menu]')`, 3000, 'メニューを閉じる')
           // 詳細パネルの所属の選択肢も選べない
-          await c.click(`document.querySelector('[data-testid=task-list] [role=option]')`)
+          await clickRowShowDetail(c, `document.querySelector('[data-testid=task-list] [role=option]')`)
           await c.waitFor(`document.querySelector('[data-testid=task-project-select]')`, 3000, '詳細')
           const option = await c.evaluate(`[...document.querySelector('[data-testid=task-project-select]').options].filter((o) => o.textContent.startsWith('マイルストンの削除')).map((o) => ({ disabled: o.disabled, text: o.textContent }))`)
           assert(option.length === 1 && option[0].disabled && option[0].text.includes('マイルストンがありません'), '詳細の所属でも選べない', option)
@@ -504,7 +475,8 @@ export function deletionScenarios({ withApp, root }) {
         old.close()
         await withApp({ label: 'migration-56', userDataDir: migrationDir }, async (app) => {
           const c = app.cdp
-          assert(app.logs.some((line) => line.includes('migrations applied: 6 -> 7')), '0006だけを適用する', app.logs.filter((l) => l.includes('[db]')))
+          // フェーズ5.9で 0007（手動順の列）が加わったため、0006 と 0007 を適用する
+          assert(app.logs.some((line) => line.includes('migrations applied: 6 -> 8')), '0006・0007を適用する', app.logs.filter((l) => l.includes('[db]')))
           const visible = (await tasks(c)).map((t) => t.id).sort()
           assert(JSON.stringify(visible) === JSON.stringify([T[2], T[3], T[4]].sort()), '残したタスクだけを表示', visible)
           await openProject(c, p)
@@ -516,7 +488,7 @@ export function deletionScenarios({ withApp, root }) {
         readDb(file, (db) => {
           assert(!db.prepare('SELECT 1 FROM tasks WHERE id IN (?, ?)').get(T[0], T[1]), 'プロジェクトだけに所属するタスクを削除（完了済みを含む）')
           const kept = db.prepare('SELECT * FROM tasks WHERE id IN (?, ?, ?) ORDER BY id').all(T[2], T[3], T[4])
-          assert(JSON.stringify(kept) === JSON.stringify(keep.map((row) => ({ ...row, hidden_at: null }))), 'Inbox・マイルストン所属済みは全列そのまま', kept)
+          assert(JSON.stringify(kept) === JSON.stringify(keep.map((row) => ({ ...row, hidden_at: null, position: null }))), 'Inbox・マイルストン所属済みは全列そのまま（0007の手動順はNULL）', kept)
           assert(db.prepare('SELECT COUNT(*) AS c FROM milestones').get().c === 1 && db.prepare('SELECT COUNT(*) AS c FROM projects').get().c === 1, 'プロジェクト・マイルストンは保持')
         })
       }

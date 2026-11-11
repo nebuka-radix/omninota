@@ -8,6 +8,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import {
   assert,
+  clickRowShowDetail,
   forceStop,
   launchApp,
   listeningAddresses,
@@ -23,6 +24,9 @@ import { milestoneScenarios } from './scenarios-milestones.mjs'
 import { projectCompletionScenarios } from './scenarios-project-completion.mjs'
 import { taskProjectScenarios } from './scenarios-task-projects.mjs'
 import { topBarScenarios } from './scenarios-topbar.mjs'
+import { inboxOpsScenarios } from './scenarios-inbox-ops.mjs'
+import { orderScenarios } from './scenarios-order.mjs'
+import { exitScenarios } from './scenarios-exit.mjs'
 
 const args = process.argv.slice(2)
 const mode = args[0]
@@ -130,7 +134,8 @@ const scenarios = [
         await c.waitFor(`document.querySelectorAll('[data-testid=task-list] [role=option]').length === 1`, 5000, '一覧に追加')
         const [task] = await tasks()
         assert(task?.title === 'UIテストのタスク' && task.completedAt === null, '追加', task)
-        await c.click(`document.querySelector('[data-testid=task-list] [role=option]')`)
+        // フェーズ5.9: Inboxでは行の選択だけでは詳細へ切り替えない（タブで切り替える）
+        await clickRowShowDetail(c, `document.querySelector('[data-testid=task-list] [role=option]')`)
         await c.waitFor(`document.querySelector('[data-testid=task-editor] input')`, 3000, '詳細の表示')
         await c.setInput('[data-testid=task-editor] input', 'UIテストのタスク（編集）')
         await c.focus('[data-testid=task-editor] input')
@@ -282,6 +287,11 @@ scenarios.push(...deletionScenarios({ withApp, root }))
 scenarios.push(...layoutScenarios({ withApp, root }))
 // フェーズ5.8: トップバー・ステータスバー・サイドバー・カードの最小幅
 scenarios.push(...topBarScenarios({ withApp, root }))
+// フェーズ5.9: Inboxの紐付け先・複数選択・DnD・確認なしの削除・インライン編集、タスク・カードの順序とレイアウト、終了処理と開発起動の後始末
+// （開発起動のシナリオは out/main・out/preload を作り直すため最後に置き、終了時に本番用のビルドへ戻す）
+scenarios.push(...inboxOpsScenarios({ withApp, root }))
+scenarios.push(...orderScenarios({ withApp, root }))
+scenarios.push(...exitScenarios({ withApp, root }))
 
 console.log(`UIテスト（${mode}${displayId ? `、表示先 ${displayId}` : ''}）一時ディレクトリ: ${root}`)
 let failed = 0

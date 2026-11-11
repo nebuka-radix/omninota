@@ -1,7 +1,7 @@
 // フェーズ5.3: プロジェクトの完了ルールのUIシナリオ。run.mjs から呼ぶ。専用の一時userData（root配下）だけを使う。
 // 完了・取り消しは、画面の操作（見出しのボタン）と、Preloadが公開する用途別API（projects.setCompleted）で行う。DBは直接変更しない。
 import { join } from 'node:path'
-import { goToProject, assert, closeInlineCreate, firstMilestoneId, requestQuit, sleep } from './lib.mjs'
+import { goToProject, assert, clickRowShowDetail, keyWith, MOD, closeInlineCreate, firstMilestoneId, requestQuit, sleep } from './lib.mjs'
 
 export function projectCompletionScenarios({ withApp, root }) {
   const dir = join(root, 'userData-completion')

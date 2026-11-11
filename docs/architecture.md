@@ -203,7 +203,7 @@ UI状態管理ライブラリは導入せず、React Context / Reducerで管理�
 - `src/main/lifecycle/workspace-flush.ts`（electronに依存しない）と `src/main/index.ts` で実装。
 - 確認中に届いた終了・閉じる要求は止めるだけで、問い合わせやダイアログを重ねない。
   閉じる確認中に終了要求が来た場合は、確認後に終了まで進める。
-- macOSではウィンドウを閉じてもアプリは終了しない（既存方針）。閉じる前にも同じ確認を行う。
+- フェーズ5.9から、最後のウィンドウを閉じたら macOS でもアプリを終了する（以前はウィンドウを閉じてもアプリは残していた）。×は終了要求として同じ確認を行う。
 - 破棄済みのウィンドウ・Rendererには問い合わせない（unavailable として終了を妨げない）。
 - 起動時の読み込みに失敗した場合は保存しない方針のため、Rendererは disabled を返す。
 - 保証するのは通常の終了操作での保存。強制終了・OSクラッシュ・電源断は対象外。
@@ -425,6 +425,50 @@ check → unsaved-draft → ダイアログ（保存して終了 / 保存せず�
   ウィンドウ最小幅（`MIN_WINDOW_WIDTH`）はサイドバーの最小幅から計算していたが、従来の752pxのまま固定した（ウィンドウの最小サイズは変えない）。
   狭いサイドバーでは項目名・プロジェクト名を省略表示し、バッジ・折りたたみボタンは縮めない。カードの行は高さ固定・1行の省略表示のため、
   幅を変えても仮想化の計測は変わらない。
+
+### Inboxの一括操作・インライン編集・順序・レイアウト・終了処理（フェーズ5.9）
+
+- 右サイドバー（Inbox）: `DetailPanel` の Inbox 用の表示を「紐付け先」（`features/tasks/AssignTargetTree.tsx`）と「タスク詳細」のタブにした
+  （右パネルは従来の1つ。幅の変更・保存も従来どおり）。表示中のタブは `WorkspaceContext.inboxPanel`（保存しない）。Inboxに入ると
+  `enterTaskScope('inbox')` で紐付け先に戻す。詳細から紐付け先へ切り替える時は、表示中のタスクの未保存タイトルを既存の確認に通す。
+- 複数選択（`features/tasks/selection.ts`。DOMに依存しない純粋関数）: 選択集合と範囲選択の基準行は `TaskScopeView`、現在行は `TaskList` が持つ。
+  データのIDで持つため仮想化で行がアンマウントされても失わない。表示中のIDの集合が変わると `pruneSelection` で外れたIDを除く。
+  操作の対象は `operationTargets`（起点の行が選択に含まれれば表示中の選択、含まれなければその行だけ）。
+- ドラッグ＆ドロップ（`features/tasks/TaskDragContext.tsx`）: 依存を追加せず Pointer Events で実装した（HTML5 DnD は使わない）。
+  メイン（一覧）と右パネル（ツリー）をまたぐため、`AppShell` に置く。行の押下から5px動いたら開始し、`document.elementFromPoint` で
+  `data-drop-milestone-id`（ドロップ先）・`data-drop-blocked`（不可と理由）を判定する。`data-drag-autoscroll` の領域の上下端で自動スクロールする。
+  Esc・ウィンドウのフォーカス喪失・ポインターの取り消し・ドロップ先以外では保存しない。保存は呼び出し側（一括API）。
+- 一括API: `tasks.assignFromInbox`・`tasks.deleteMany`・`tasks.reorderInMilestone`・`milestones.reorder`（docs/ipc-api.md）。
+  Renderer では `taskSaveQueue.runMany`（対象すべての進行中の更新の後に1回だけ実行し、その間に届いた更新は後ろに並べる）で送る。
+  `usePendingTaskIds` は一括操作の `ids`・`orderedIds` も保存中として扱い、行を薄く表示して重ねて操作できないようにする。
+- 削除（`TaskDeletion.tsx`）: 確認ダイアログを廃止。進行中の保存を待ってから削除し、成功したら対象の未保存の編集だけを破棄する（`discard`）。
+  失敗時は一覧の上に理由を出し、行・選択・入力を残す。マイルストン・プロジェクトの削除（確認あり）は変えていない。
+- インライン編集（`features/tasks/inline-title-edit.tsx`）: 状態（対象・入力・エラー・保存中）は `TaskScopeView` の `useInlineTitleEdit` が持ち、
+  DraftGuard に `kind: task` で登録する（終了・遷移の確認に乗る）。保存は既存の `useUpdateTaskTitleMutation`（同じタスクの保存キュー）。
+  入力欄は listbox の外側の重ね合わせ層に、編集中の行の位置で描画する（option の中に textbox を置かない）。仮想化の `rangeExtractor` で
+  編集中の行を常に描画し、スクロールで入力欄をアンマウントしない。入力欄のキーは一覧のショートカットへ伝えない。
+  詳細パネルの `TaskEditor` は、保存済みのタイトルが他の経路で変わった時、未編集なら新しい値に合わせ、編集中の入力は変えない（巻き戻さない）。
+- タスクの手動順: Table の非表示列 `manual`（`compareManualOrder`: position → 作成日時の古い順 → ID）。プロジェクトの既定の並べ替えは手動順
+  （`DEFAULT_PROJECT_SORTING`。並べ替えの状態は従来どおり ProjectPage が持ち、保存しない）。ハンドル・Alt+↑↓ でカードの表示順を組み替え、
+  そのカードの全タスクの順序を保存する。絞り込み中（検索あり・状態が「すべて」以外）は無効（一部の行だけで順位を保存しない）。
+  手動順以外の並べ替えで操作した場合は、表示していた順序を保存し、保存に成功したら並べ替えを手動順へ切り替える（その旨を表示する）。
+  画面は保存に成功した応答で並べ替える（先に画面だけを動かさない）。
+- カードの順序: `MilestoneBoard` の見出しのハンドル（`CardMoveHandle`）。ドラッグはカードの中央を基準に挿入位置を決め、column は左右・row は上下。
+  キーボードは ←↑／→↓／Home／End。順序は `sortMilestones`（position → 作成日時）で、Main の一覧と同じ規則。
+- レイアウト: Workspace設定 `milestoneLayout`（`column` / `row`。既定 column。旧形式は column で補い、補正扱いにしない）。
+  row ではカードを縦に並べてメイン領域の横幅を使い、カード内の一覧は最大8行分の高さで仮想化を維持する。幅のハンドルは出さず、`milestoneCardWidth` は保持する。
+- 終了処理: `ExitCoordinator` の `closeQuitsApp`（×＝ウィンドウの close をアプリの終了要求として扱う）と、`window-all-closed` での `app.quit()`。
+  ×・⌘Q・SIGINT/SIGHUP/SIGTERM は同じ保存確認（Rendererへの問い合わせ・ダイアログ）を通る。再入は従来の状態管理で防ぐ。
+  シグナルは ready 後に `handleShutdownSignals` が `process.on` で登録し、`app.quit()` を呼ぶ（Electron（Chromium）の既定の処理は
+  2回目のシグナルで確認を待たずに即時終了するため置き換えた。何回届いても確認は1回）。
+  開発起動（未パッケージで `ELECTRON_RENDERER_URL` がある時）だけ、`lifecycle/parent-watch.ts` が親プロセス（electron-vite）の消失を
+  `process.ppid` の変化で検知し、1回だけ `app.quit()` を呼ぶ（強制終了はしない。終了時に監視を止める）。
+- 開発起動のプロセス構成（調査結果）: `npm run dev` → `electron-vite dev`（Node。Viteの開発サーバーとビルドを同じプロセス内で動かす）→ Electron（とその
+  ヘルパー）。electron-vite は Electron の終了（close）で自身も `process.exit` し、SIGINT・SIGTERM・SIGHUP を Electron へ転送する。
+  以前は macOS で最後のウィンドウを閉じても Electron が終了しない方針だったため、Electron が残り、それを待つ electron-vite（開発サーバー）と npm も残っていた。
+  また Ctrl+C では、端末からの SIGINT と electron-vite が転送する SIGINT の2回が Electron に届き、Chromium の既定の処理が2回目で即時終了していた
+  （保存確認・DBを閉じる処理を通らない）。上記の置き換えで、2回届いても保存確認を通って終了する（自動検証で確認）。
+  開発サーバーのポートは `GTD_DEV_RENDERER_PORT`（自動検証用。通常は未設定）で固定できる。
 
 ### タスク一覧の表示範囲と所属（フェーズ5.2）
 

@@ -5,12 +5,19 @@ import type {
   DeleteMilestoneResult,
   MilestoneDeletionSummary,
   MilestoneDto,
-  RenameMilestoneInput
+  RenameMilestoneInput,
+  ReorderMilestonesInput
 } from '../../shared/contracts/milestones'
 import type { MilestoneRow, ProjectRow } from '../db/schema'
 import type { RunInTransaction } from '../db/transaction'
 import type { MilestoneRepository } from '../repositories/milestone-repository'
-import { deletionScopeChanged, milestoneInCompletedProjectConflict, milestoneNotFound, targetProjectNotFound } from './errors'
+import {
+  deletionScopeChanged,
+  milestoneInCompletedProjectConflict,
+  milestoneNotFound,
+  orderChanged,
+  targetProjectNotFound
+} from './errors'
 
 // inputはIPC層でZod検証済み（前後空白の除去・空白のみの拒否・長さ・IDの形式）であること。
 // フェーズ5.6: プロジェクトの削除で非表示になったマイルストン（project_id がNULL）は、存在しないものとして扱う（NOT_FOUND）。
@@ -27,6 +34,9 @@ export type MilestoneService = {
   // 確認時の件数（expectedTaskCount）とDBの件数が違えば、何も変えずに CONFLICT（deletion-scope-changed）。
   // 完了済みプロジェクトのマイルストンも削除できる（完了状態は変えない）。
   delete(input: DeleteMilestoneInput): DeleteMilestoneResult
+  // カードの順序の保存（フェーズ5.9）。orderedIds がDBの表示中のマイルストン全件と一致しなければ CONFLICT（order-changed）。
+  // 順位だけを書き換え、名前・日時は変えない。完了済みプロジェクトでも並べ替えられる。全件（新しい順序）を返す
+  reorder(input: ReorderMilestonesInput): MilestoneDto[]
 }
 
 // project_id があるもの（表示中）だけをDTOにする
@@ -34,7 +44,14 @@ type VisibleMilestoneRow = MilestoneRow & { projectId: string }
 const isVisible = (row: MilestoneRow | undefined): row is VisibleMilestoneRow => row !== undefined && row.projectId !== null
 
 function toDto(row: VisibleMilestoneRow): MilestoneDto {
-  return { id: row.id, projectId: row.projectId, name: row.name, createdAt: row.createdAt, updatedAt: row.updatedAt }
+  return {
+    id: row.id,
+    projectId: row.projectId,
+    name: row.name,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+    position: row.position
+  }
 }
 
 export function createMilestoneService(deps: {
@@ -67,12 +84,15 @@ export function createMilestoneService(deps: {
         if (!project) throw targetProjectNotFound()
         if (project.completedAt !== null) throw milestoneInCompletedProjectConflict()
         const timestamp = now().toISOString()
+        // カードに手動順があれば末尾（最大値+1）、なければ null（作成日時の順で末尾になる。フェーズ5.9）
+        const maxPosition = repository.maxPositionInProject(input.projectId)
         const row: VisibleMilestoneRow = {
           id: generateId(),
           projectId: input.projectId,
           name: input.name,
           createdAt: timestamp,
-          updatedAt: timestamp
+          updatedAt: timestamp,
+          position: maxPosition === null ? null : maxPosition + 1
         }
         repository.insert(row)
         return toDto(row)
@@ -100,6 +120,20 @@ export function createMilestoneService(deps: {
         const hiddenTaskCount = deps.hideTasks(input.id, now().toISOString())
         if (repository.deleteVisible(input.id) === 0) throw milestoneNotFound()
         return { id: input.id, hiddenTaskCount }
+      })
+    },
+    reorder(input) {
+      return deps.transaction(() => {
+        if (!deps.findProject(input.projectId)) throw targetProjectNotFound()
+        const current = repository.listVisibleByProject(input.projectId)
+        const currentIds = new Set(current.map((row) => row.id))
+        if (current.length !== input.orderedIds.length || input.orderedIds.some((id) => !currentIds.has(id))) {
+          throw orderChanged('milestone')
+        }
+        input.orderedIds.forEach((id, index) => {
+          if (repository.updatePosition(id, index) !== 1) throw orderChanged('milestone')
+        })
+        return repository.listVisibleByProject(input.projectId).filter(isVisible).map(toDto)
       })
     }
   }

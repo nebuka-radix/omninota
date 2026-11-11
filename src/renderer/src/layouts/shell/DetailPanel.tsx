@@ -1,5 +1,5 @@
 import type { ReactNode, Ref } from 'react'
-import { Box, Button, IconButton, Tooltip, Typography } from '@mui/material'
+import { Box, Button, IconButton, Tab, Tabs, Tooltip, Typography } from '@mui/material'
 import { useQuery } from '@tanstack/react-query'
 import { ArrowLeft, X } from 'lucide-react'
 import { useDraftGuard } from '../../features/drafts/DraftGuard'
@@ -8,11 +8,12 @@ import { ProjectCompletionControl } from '../../features/projects/ProjectComplet
 import { ProjectDeleteControl } from '../../features/projects/ProjectDeleteControl'
 import { projectListQueryOptions } from '../../features/projects/project-queries'
 import { formatTaskDateTime } from '../../features/tasks/TaskList'
+import { AssignTargetTree } from '../../features/tasks/AssignTargetTree'
 import { TaskEditor } from '../../features/tasks/TaskEditor'
 import { taskListQueryOptions } from '../../features/tasks/task-queries'
 import { INBOX_SCOPE, isTaskInScope, type TaskScope } from '../../features/tasks/task-scope'
 import { projectIdFromRoute } from '../../../../shared/contracts/workspace'
-import { useWorkspace } from '../../features/workspace/WorkspaceContext'
+import { useWorkspace, type InboxPanel } from '../../features/workspace/WorkspaceContext'
 import { PaneHeader } from './PaneHeader'
 
 function EmptyMessage({ children }: { children: ReactNode }) {
@@ -109,6 +110,37 @@ function BackToProject({ taskId }: { taskId: string }) {
   )
 }
 
+// Inboxの右サイドバー（フェーズ5.9）: 「紐付け先」（Project > Milestone のツリー。タスクのドロップ先）と「タスク詳細」を切り替える。
+// Inboxに入った時は紐付け先。行の選択だけでは切り替えない（Enter・行のメニューの「詳細を表示」・このタブで切り替える）。
+// 詳細から紐付け先へ切り替える時、表示中のタスクに未保存のタイトルがあれば既存の確認を通す（黙って失わない）。
+function InboxPanelBody() {
+  const { selectedTaskId, inboxPanel, setInboxPanel } = useWorkspace()
+  const { confirmLeave } = useDraftGuard()
+  const change = async (next: InboxPanel) => {
+    if (next === inboxPanel) return
+    if (inboxPanel === 'detail' && selectedTaskId && !(await confirmLeave({ target: { kind: 'task', id: selectedTaskId } }))) return
+    setInboxPanel(next)
+  }
+  return (
+    <>
+      <Tabs
+        value={inboxPanel}
+        onChange={(_event, value: InboxPanel) => void change(value)}
+        aria-label="右サイドバーの表示"
+        variant="fullWidth"
+        sx={{ minHeight: 30, px: 2, borderBottom: '1px solid', borderColor: 'divider', '& .MuiTab-root': { minHeight: 30, py: 0, fontSize: 12 } }}
+        data-testid="inbox-panel-tabs"
+      >
+        <Tab value="targets" label="紐付け先" id="inbox-panel-tab-targets" aria-controls="inbox-panel-content" data-testid="inbox-panel-tab-targets" />
+        <Tab value="detail" label="タスク詳細" id="inbox-panel-tab-detail" aria-controls="inbox-panel-content" data-testid="inbox-panel-tab-detail" />
+      </Tabs>
+      <Box role="tabpanel" id="inbox-panel-content" aria-labelledby={`inbox-panel-tab-${inboxPanel}`} data-inbox-panel={inboxPanel}>
+        {inboxPanel === 'targets' ? <AssignTargetTree /> : <TaskDetail taskId={selectedTaskId} scope={INBOX_SCOPE} />}
+      </Box>
+    </>
+  )
+}
+
 function DetailBody({ pathname }: { pathname: string }) {
   const { selectedTaskId } = useWorkspace()
   if (pathname === NEW_PROJECT_PATH) {
@@ -126,7 +158,7 @@ function DetailBody({ pathname }: { pathname: string }) {
       </>
     )
   }
-  return <TaskDetail taskId={selectedTaskId} scope={scope} />
+  return <InboxPanelBody />
 }
 
 export function DetailPanel({
@@ -157,7 +189,8 @@ export function DetailPanel({
           </Tooltip>
         }
       />
-      <Box sx={{ flex: 1, minHeight: 0, overflowY: 'auto', overflowX: 'hidden' }}>
+      {/* Inboxのタスクを紐付け先へドラッグしている間は、上下端で自動スクロールする（フェーズ5.9） */}
+      <Box data-drag-autoscroll="" sx={{ flex: 1, minHeight: 0, overflowY: 'auto', overflowX: 'hidden' }}>
         <DetailBody pathname={pathname} />
       </Box>
     </Box>

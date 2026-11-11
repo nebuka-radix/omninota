@@ -2,19 +2,20 @@ import { useEffect, useRef, useState, type KeyboardEvent, type PointerEvent } fr
 import { Alert, Box, IconButton, Menu, MenuItem, Tooltip, Typography } from '@mui/material'
 import { useQuery } from '@tanstack/react-query'
 import type { SortingState } from '@tanstack/react-table'
-import { MoreHorizontal, Pencil, Trash2 } from 'lucide-react'
+import { GripVertical, MoreHorizontal, Pencil, Trash2 } from 'lucide-react'
 import { MILESTONE_NAME_MAX_LENGTH, type MilestoneDeletionSummary } from '../../../../shared/contracts/milestones'
 import type { ProjectDto } from '../../../../shared/contracts/projects'
 import { TASK_TITLE_MAX_LENGTH, type TaskDto } from '../../../../shared/contracts/tasks'
-import { clampWidth, WORKSPACE_LIMITS } from '../../../../shared/contracts/workspace'
+import { clampWidth, WORKSPACE_LIMITS, type MilestoneLayout } from '../../../../shared/contracts/workspace'
 import { ConfirmDeleteDialog } from '../../components/ConfirmDeleteDialog'
 import { InlineCreate } from '../../components/InlineCreate'
 import { IpcCallError } from '../../lib/ipc'
 import { vscodeColors } from '../../theme'
 import { useDraftGuard, type DraftTarget } from '../drafts/DraftGuard'
 import type { TaskGroup } from '../tasks/assignment'
-import { taskListQueryOptions, useCreateTaskMutation } from '../tasks/task-queries'
+import { taskListQueryOptions, useCreateTaskMutation, useReorderMilestoneTasksMutation } from '../tasks/task-queries'
 import type { TaskSortColumn } from '../tasks/task-table'
+import type { InlineTitleEditController } from '../tasks/inline-title-edit'
 import { TaskList } from '../tasks/TaskList'
 import { useWorkspace } from '../workspace/WorkspaceContext'
 import { MilestoneNameEditor } from './MilestoneForms'
@@ -22,7 +23,8 @@ import {
   fetchMilestoneDeletionSummary,
   milestoneListQueryOptions,
   useCreateMilestoneMutation,
-  useDeleteMilestoneMutation
+  useDeleteMilestoneMutation,
+  useReorderMilestonesMutation
 } from './milestone-queries'
 
 const LIMITS = WORKSPACE_LIMITS.milestoneCardWidth
@@ -363,19 +365,91 @@ function CardMenu({
   )
 }
 
+// カードの並べ替えのハンドル（フェーズ5.9。カードの見出しの左端）。
+// - ドラッグ: column は左右、row は上下に動かし、離した位置へ移す（Esc・ポインターの取り消しでは保存しない）。
+//   カードの列の端に近づくと、列を自動でスクロールする。
+// - キーボード: ←↑ で前へ、→↓ で後ろへ、Home で先頭、End で末尾（押すたびに保存する）。
+// - NEW MILESTONE は並べ替えの対象にしない（常に末尾）。幅のハンドル・名前の編集・メニューとは別の要素。
+function CardMoveHandle({
+  label,
+  milestoneId,
+  layout,
+  disabled,
+  onKeyMove,
+  onDragStart
+}: {
+  label: string
+  milestoneId: string
+  layout: MilestoneLayout
+  disabled: boolean
+  onKeyMove: (target: 'prev' | 'next' | 'first' | 'last') => void
+  onDragStart: (event: PointerEvent<HTMLButtonElement>) => void
+}) {
+  const handleKeyDown = (event: KeyboardEvent<HTMLButtonElement>) => {
+    const map: Record<string, 'prev' | 'next' | 'first' | 'last'> = {
+      ArrowLeft: 'prev',
+      ArrowUp: 'prev',
+      ArrowRight: 'next',
+      ArrowDown: 'next',
+      Home: 'first',
+      End: 'last'
+    }
+    const target = map[event.key]
+    if (!target || event.metaKey || event.ctrlKey || event.altKey) return
+    event.preventDefault()
+    event.stopPropagation()
+    if (!disabled) onKeyMove(target)
+  }
+  const keys = layout === 'column' ? '← →' : '↑ ↓'
+  return (
+    <Tooltip title={`ドラッグ、または ${keys} キーでカードを移動`}>
+      <IconButton
+        aria-label={`マイルストン「${label}」を移動（${keys} キー・Home・End）`}
+        aria-roledescription="並べ替えハンドル"
+        aria-disabled={disabled || undefined}
+        data-card-move={milestoneId}
+        onKeyDown={handleKeyDown}
+        onPointerDown={(event) => {
+          if (!disabled) onDragStart(event)
+        }}
+        sx={{ color: 'text.secondary', flexShrink: 0, cursor: disabled ? 'default' : 'grab', touchAction: 'none', ml: -0.5 }}
+      >
+        <GripVertical size={14} aria-hidden />
+      </IconButton>
+    </Tooltip>
+  )
+}
+
+// row レイアウトでカードに表示する最大の行数（それ以上はカードの中でスクロールする。仮想化は維持する）
+const ROW_LAYOUT_VISIBLE_ROWS = 8
+const BOARD_AUTOSCROLL_EDGE = 40
+const BOARD_AUTOSCROLL_STEP = 16
+
+// カード内のタスクの並べ替えの設定（フェーズ5.9。TaskScopeView から）
+export type TaskReorderSettings = {
+  disabledReason: string | null
+  manual: boolean
+  onSwitchToManual: () => void
+}
+
 // プロジェクト画面のマイルストン別カード（フェーズ5.5）。
-// - マイルストン1件につき縦長のカード1枚（マイルストンの作成順）、その後に NEW MILESTONE。
-//   フェーズ5.6で「マイルストン未設定」のカードは廃止した。マイルストンが0件なら、カード列の左端に NEW MILESTONE だけを表示する
-//   （案内文は出さない。フェーズ5.7。マイルストンを作成するまでタスクは追加できない）。
-// - 見出しのメニュー（…）から名前の変更・マイルストンの削除（フェーズ5.6）。
-// - カードはメイン領域の中で横に並べ、収まらない分はカードの列だけを横スクロールする（ウィンドウ・左右のペインは横スクロールさせない）。
-// - カードの高さは利用できる高さに合わせ、タスクはカードの中で縦スクロールする。カードごとに別の仮想リスト（大量タスクでも全件は描画しない）。
+// - マイルストン1件につきカード1枚（手動順 → 作成順。フェーズ5.9）、その後に NEW MILESTONE（常に末尾。並べ替えの対象外）。
+//   マイルストンが0件なら、カード列の先頭に NEW MILESTONE だけを表示する。
+// - 見出しのメニュー（…）から名前の変更・マイルストンの削除（フェーズ5.6）。見出しの左端のハンドルでカードの並べ替え（フェーズ5.9）。
+// - レイアウト（フェーズ5.9。トップバーで切り替え・保存）:
+//   column: 縦長のカードを横に並べ、収まらない分はカードの列だけを横スクロールする。カードの高さは利用できる高さに合わせる。
+//   row: カードを上から下へ並べ、各カードはメイン領域の横幅を使う。カードの列は縦スクロール。カードの高さは最大8行分で、
+//   それ以上はカードの中でスクロールする（全タスクを描画しない。仮想化は維持する）。幅のハンドルは表示しない（保存済みの幅は保持する）。
+// - カードごとに別の仮想リスト（大量タスクでも全件は描画しない）。
 // - 検索・状態・ソートは全カード共通（groups は絞り込み・ソート済み）。絞り込みで0件になってもカードは残す。
 // - 幅は全カード共通・アプリ全体の設定（Workspace設定の milestoneCardWidth）。ウィンドウが狭くても保存値は書き換えない。
+// - カード内のタスクの並べ替え（フェーズ5.9）: 行の先頭のハンドル（ドラッグ）か Alt+↑↓。同じマイルストンの中だけ。
+//   絞り込み中は無効（理由を示す）。手動順以外の並べ替えで行うと、保存後に手動順へ切り替える（その旨を示す）。
 // - キーボード: Tab で各カードの見出しの操作・一覧・NEW TASK・幅のハンドル・NEW MILESTONE へ。一覧の中では ← → で隣のカードへ。
 export function MilestoneBoard({
   project,
   groups,
+  layout,
   selectedTaskId,
   pendingTaskIds,
   sorting,
@@ -385,10 +459,13 @@ export function MilestoneBoard({
   onToggleCompleted,
   onRequestRowMenu,
   onRequestDelete,
-  onAnnounce
+  onAnnounce,
+  inlineEdit,
+  taskReorder
 }: {
   project: ProjectDto
   groups: readonly TaskGroup[]
+  layout: MilestoneLayout
   selectedTaskId: string | null
   pendingTaskIds: ReadonlySet<string>
   sorting: SortingState
@@ -400,6 +477,8 @@ export function MilestoneBoard({
   onRequestRowMenu: (task: TaskDto, anchor: HTMLElement) => void
   onRequestDelete: (task: TaskDto) => void
   onAnnounce: (message: string) => void
+  inlineEdit: InlineTitleEditController
+  taskReorder: TaskReorderSettings
 }) {
   const { settings, setMilestoneCardWidth } = useWorkspace()
   const deletion = useMilestoneDeletion(onAnnounce)
@@ -413,9 +492,18 @@ export function MilestoneBoard({
   const editingMilestone = milestones.data?.find((item) => item.id === editingMilestoneId && item.projectId === project.id)
   const createTask = useCreateTaskMutation()
   const createMilestone = useCreateMilestoneMutation()
+  const reorderMilestones = useReorderMilestonesMutation()
+  const reorderTasks = useReorderMilestoneTasksMutation()
+  const [orderError, setOrderError] = useState<string | null>(null)
+  const [reorderNotice, setReorderNotice] = useState<string | null>(null)
   const boardRef = useRef<HTMLDivElement>(null)
   const completed = project.completedAt !== null
   const disabledReason = completed ? `「${project.name}」は完了済みのため、追加できません。` : undefined
+  const row = layout === 'row'
+  // カードのドラッグ中の状態（挿入位置 0..カード数）
+  const [cardDrag, setCardDrag] = useState<{ milestoneId: string; fromIndex: number; insertIndex: number } | null>(null)
+  const cardDragCleanupRef = useRef<(() => void) | null>(null)
+  useEffect(() => () => cardDragCleanupRef.current?.(), [])
 
   const openMilestoneEditor = async (milestoneId: string) => {
     if (milestoneId === editingMilestoneId) return
@@ -427,7 +515,10 @@ export function MilestoneBoard({
   // マイルストンが0件になったら（最後のマイルストンの削除を含む）、カード列を先頭までスクロールし、NEW MILESTONE を最初から見せる
   const empty = groups.length === 0
   useEffect(() => {
-    if (empty && boardRef.current) boardRef.current.scrollLeft = 0
+    if (empty && boardRef.current) {
+      boardRef.current.scrollLeft = 0
+      boardRef.current.scrollTop = 0
+    }
   }, [empty])
 
   const focusCard = (index: number) => {
@@ -436,11 +527,158 @@ export function MilestoneBoard({
     boardRef.current?.querySelector<HTMLElement>(`[data-card-list="${CSS.escape(group.key)}"]`)?.focus()
   }
 
+  // --- カードの並べ替え（フェーズ5.9） ---
+  const saveCardOrder = (milestoneId: string, toIndex: number) => {
+    const ids = groups.map((group) => group.milestoneId)
+    const from = ids.indexOf(milestoneId)
+    const target = Math.max(0, Math.min(ids.length - 1, toIndex))
+    if (from < 0 || from === target || reorderMilestones.isPending) return
+    ids.splice(from, 1)
+    ids.splice(target, 0, milestoneId)
+    setOrderError(null)
+    const name = groups[from]?.label ?? ''
+    reorderMilestones.mutate(
+      { projectId: project.id, orderedIds: ids },
+      {
+        onSuccess: () => {
+          onAnnounce(`マイルストン「${name}」を ${target + 1} 番目へ移動しました`)
+          // キーボードで移動した場合は、移動後のカードのハンドルにフォーカスを残す
+          requestAnimationFrame(() => {
+            if (document.activeElement === document.body || document.activeElement?.closest('[data-card-move]')) {
+              boardRef.current?.querySelector<HTMLElement>(`[data-card-move="${CSS.escape(milestoneId)}"]`)?.focus()
+            }
+          })
+        },
+        onError: (error) => setOrderError(`カードの順序を保存できませんでした: ${error.message}`)
+      }
+    )
+  }
+
+  const moveCardByKey = (milestoneId: string, target: 'prev' | 'next' | 'first' | 'last') => {
+    const from = groups.findIndex((group) => group.milestoneId === milestoneId)
+    if (from < 0) return
+    const to = target === 'prev' ? from - 1 : target === 'next' ? from + 1 : target === 'first' ? 0 : groups.length - 1
+    saveCardOrder(milestoneId, to)
+  }
+
+  const cardInsertIndexAt = (clientX: number, clientY: number) => {
+    const cards = [...(boardRef.current?.querySelectorAll<HTMLElement>('[data-testid=milestone-card]') ?? [])]
+    let index = 0
+    for (const card of cards) {
+      const rect = card.getBoundingClientRect()
+      const middle = row ? rect.top + rect.height / 2 : rect.left + rect.width / 2
+      if ((row ? clientY : clientX) > middle) index++
+    }
+    return index
+  }
+
+  const startCardDrag = (event: PointerEvent<HTMLButtonElement>, milestoneId: string, fromIndex: number) => {
+    if (event.button !== 0 || cardDrag || reorderMilestones.isPending) return
+    event.preventDefault()
+    event.stopPropagation()
+    let point = { x: event.clientX, y: event.clientY }
+    let state = { milestoneId, fromIndex, insertIndex: fromIndex }
+    setCardDrag(state)
+    const update = () => {
+      const insertIndex = cardInsertIndexAt(point.x, point.y)
+      if (insertIndex !== state.insertIndex) {
+        state = { ...state, insertIndex }
+        setCardDrag(state)
+      }
+    }
+    let frame = 0
+    const tick = () => {
+      const board = boardRef.current
+      if (board) {
+        const rect = board.getBoundingClientRect()
+        const position = row ? point.y : point.x
+        const start = row ? rect.top : rect.left
+        const end = row ? rect.bottom : rect.right
+        const delta = position < start + BOARD_AUTOSCROLL_EDGE ? -BOARD_AUTOSCROLL_STEP : position > end - BOARD_AUTOSCROLL_EDGE ? BOARD_AUTOSCROLL_STEP : 0
+        if (delta !== 0) {
+          if (row) board.scrollTop += delta
+          else board.scrollLeft += delta
+          update()
+        }
+      }
+      frame = requestAnimationFrame(tick)
+    }
+    frame = requestAnimationFrame(tick)
+    const onMove = (move: globalThis.PointerEvent) => {
+      point = { x: move.clientX, y: move.clientY }
+      update()
+    }
+    const finish = (commit: boolean) => {
+      cancelAnimationFrame(frame)
+      window.removeEventListener('pointermove', onMove)
+      window.removeEventListener('pointerup', onUp)
+      window.removeEventListener('pointercancel', onCancel)
+      window.removeEventListener('keydown', onKey, true)
+      window.removeEventListener('blur', onCancel)
+      cardDragCleanupRef.current = null
+      setCardDrag(null)
+      if (!commit) return
+      const target = state.insertIndex > state.fromIndex ? state.insertIndex - 1 : state.insertIndex
+      saveCardOrder(state.milestoneId, target)
+    }
+    const onUp = () => finish(true)
+    const onCancel = () => finish(false)
+    const onKey = (key: globalThis.KeyboardEvent) => {
+      if (key.key !== 'Escape') return
+      key.preventDefault()
+      key.stopPropagation()
+      finish(false)
+    }
+    window.addEventListener('pointermove', onMove)
+    window.addEventListener('pointerup', onUp)
+    window.addEventListener('pointercancel', onCancel)
+    window.addEventListener('keydown', onKey, true)
+    window.addEventListener('blur', onCancel)
+    cardDragCleanupRef.current = () => finish(false)
+  }
+
+  // --- カード内のタスクの並べ替え（フェーズ5.9） ---
+  const moveTasks = (milestoneId: string, orderedIds: string[], movedTaskId: string) => {
+    if (reorderTasks.isPending) return
+    setOrderError(null)
+    const switching = !taskReorder.manual
+    if (switching) setReorderNotice('並べ替えを保存すると、表示順は「手動順」に切り替わります。')
+    reorderTasks.mutate(
+      { milestoneId, orderedIds },
+      {
+        onSuccess: () => {
+          if (switching) {
+            taskReorder.onSwitchToManual()
+            setReorderNotice('並べ替えを「手動順」に切り替えました。')
+          }
+          const position = orderedIds.indexOf(movedTaskId) + 1
+          onAnnounce(`タスクを ${position} 番目へ移動しました${switching ? '（並べ替え: 手動順）' : ''}`)
+        },
+        onError: (error) => {
+          if (switching) setReorderNotice(null)
+          setOrderError(`タスクの順序を保存できませんでした: ${error.message}`)
+        }
+      }
+    )
+  }
+
+  const insertBefore = cardDrag ? cardDrag.insertIndex : -1
+
   return (
     <>
       {deletion.boardError && (
         <Alert severity="error" variant="outlined" sx={{ mb: 2, flexShrink: 0 }} onClose={deletion.clearBoardError} data-testid="milestone-delete-error">
           {deletion.boardError}
+        </Alert>
+      )}
+      {orderError && (
+        <Alert severity="error" variant="outlined" sx={{ mb: 2, flexShrink: 0 }} onClose={() => setOrderError(null)} data-testid="order-error">
+          {orderError}
+        </Alert>
+      )}
+      {reorderNotice && (
+        <Alert severity="info" variant="outlined" sx={{ mb: 2, py: 0, flexShrink: 0 }} onClose={() => setReorderNotice(null)} data-testid="reorder-notice">
+          {reorderNotice}
         </Alert>
       )}
       {deletion.dialog}
@@ -449,15 +687,17 @@ export function MilestoneBoard({
         role="group"
         aria-label="マイルストン別のタスク"
         data-testid="milestone-board"
+        data-layout={layout}
         sx={{
           flex: 1,
           minHeight: 0,
           minWidth: 0,
           display: 'flex',
+          flexDirection: row ? 'column' : 'row',
           alignItems: 'stretch',
           gap: 3,
-          overflowX: 'auto',
-          overflowY: 'hidden',
+          overflowX: row ? 'hidden' : 'auto',
+          overflowY: row ? 'auto' : 'hidden',
           pb: 1,
           pr: 2
         }}
@@ -466,6 +706,20 @@ export function MilestoneBoard({
           const editing = editingMilestone?.id === group.milestoneId
           const cardName = `マイルストン「${group.label}」`
           const deleting = deletion.busyId === group.milestoneId
+          const dragged = cardDrag?.milestoneId === group.milestoneId
+          // 挿入位置の線（このカードの前、最後のカードの後）
+          const lineBefore = insertBefore === index && cardDrag !== null
+          const lineAfter = insertBefore === groups.length && index === groups.length - 1 && cardDrag !== null
+          const lineColor = vscodeColors.focusBorder
+          const insertShadow = lineBefore
+            ? row
+              ? `0 -3px 0 0 ${lineColor}`
+              : `-3px 0 0 0 ${lineColor}`
+            : lineAfter
+              ? row
+                ? `0 3px 0 0 ${lineColor}`
+                : `3px 0 0 0 ${lineColor}`
+              : 'none'
           return (
             <Box
               key={group.key}
@@ -474,17 +728,21 @@ export function MilestoneBoard({
               data-testid="milestone-card"
               data-card-key={group.key}
               data-milestone-id={group.milestoneId}
+              data-insert-before={lineBefore || undefined}
+              data-insert-after={lineAfter || undefined}
               aria-busy={deleting}
               sx={{
                 flex: '0 0 auto',
-                width,
+                width: row ? '100%' : width,
                 minHeight: 0,
                 position: 'relative',
                 display: 'flex',
                 flexDirection: 'column',
                 bgcolor: vscodeColors.sideBarBackground,
                 border: `1px solid ${vscodeColors.border}`,
-                borderRadius: 1
+                borderRadius: 1,
+                opacity: dragged ? 0.6 : 1,
+                boxShadow: insertShadow
               }}
             >
               <Box sx={{ px: 2, py: 1, borderBottom: `1px solid ${vscodeColors.border}`, flexShrink: 0 }}>
@@ -492,6 +750,14 @@ export function MilestoneBoard({
                   <MilestoneNameEditor key={editingMilestone.id} milestone={editingMilestone} onClose={() => setEditingMilestoneId(null)} />
                 ) : (
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minHeight: 28 }}>
+                    <CardMoveHandle
+                      label={group.label}
+                      milestoneId={group.milestoneId}
+                      layout={layout}
+                      disabled={deleting || reorderMilestones.isPending}
+                      onKeyMove={(target) => moveCardByKey(group.milestoneId, target)}
+                      onDragStart={(event) => startCardDrag(event, group.milestoneId, index)}
+                    />
                     <Typography
                       component="h2"
                       noWrap
@@ -537,6 +803,7 @@ export function MilestoneBoard({
                 emptyLabel="タスクはありません"
                 tasks={group.tasks}
                 totalCount={group.tasks.length}
+                maxVisibleRows={row ? ROW_LAYOUT_VISIBLE_ROWS : undefined}
                 selectedTaskId={selectedTaskId}
                 pendingTaskIds={pendingTaskIds}
                 sorting={sorting}
@@ -547,6 +814,16 @@ export function MilestoneBoard({
                 onNavigateCard={(direction) => focusCard(index + direction)}
                 onRequestRowMenu={onRequestRowMenu}
                 onRequestDelete={onRequestDelete}
+                inlineEdit={inlineEdit}
+                reorder={{
+                  disabledReason: taskReorder.disabledReason,
+                  manual: taskReorder.manual,
+                  onMove: (orderedIds, movedTaskId) => moveTasks(group.milestoneId, orderedIds, movedTaskId),
+                  onBlocked: (reason) => {
+                    setReorderNotice(reason)
+                    onAnnounce(reason)
+                  }
+                }}
               />
               <Box sx={{ px: 1, py: 1, borderTop: `1px solid ${vscodeColors.border}`, flexShrink: 0 }}>
                 {/* 登録先はこのカードに固定する（projectId と、このカードのマイルストンの milestoneId） */}
@@ -561,11 +838,13 @@ export function MilestoneBoard({
                   onCreate={(title) => createTask.mutateAsync({ title, projectId: project.id, milestoneId: group.milestoneId })}
                 />
               </Box>
-              <CardResizeHandle width={width} onPreview={setPreviewWidth} onCommit={setMilestoneCardWidth} />
+              {/* 幅のハンドルは column だけ（row ではカードがメイン領域の横幅を使う。保存済みの幅は保持する） */}
+              {!row && <CardResizeHandle width={width} onPreview={setPreviewWidth} onCommit={setMilestoneCardWidth} />}
             </Box>
           )
         })}
-        <Box sx={{ flex: '0 0 auto', width: 220, pt: 0.5 }}>
+        {/* NEW MILESTONE は常に末尾（並べ替えの対象外） */}
+        <Box sx={{ flex: '0 0 auto', width: 220, pt: row ? 0 : 0.5 }}>
           <InlineCreate
             buttonLabel="NEW MILESTONE"
             inputLabel="新しいマイルストンの名前"

@@ -33,7 +33,8 @@ export function createWorkspaceSettingsService(deps: {
         detailWidth: input.detailWidth,
         detailVisible: input.detailVisible,
         lastRoute: input.lastRoute,
-        milestoneCardWidth: input.milestoneCardWidth
+        milestoneCardWidth: input.milestoneCardWidth,
+        milestoneLayout: input.milestoneLayout
       }
       deps.repository.upsert({
         key: SETTINGS_KEYS.workspace,

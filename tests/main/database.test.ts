@@ -67,7 +67,8 @@ describe('DB・マイグレーション・Repository（ホストNode.js）', () 
       milestoneId: null,
       createdAt: '2026-11-09T01:02:03.004Z',
       updatedAt: '2026-11-09T01:02:03.004Z',
-      completedAt: null
+      completedAt: null,
+      position: null
     })
     closeDatabase(db)
 

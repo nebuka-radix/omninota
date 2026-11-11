@@ -3,7 +3,7 @@
 // run.mjs から呼ぶ。専用の一時userData（root配下）だけを使う。準備はPreloadの用途別APIと、起動前の一時DBへの直接書き込みで行う。
 import { randomUUID } from 'node:crypto'
 import { join } from 'node:path'
-import { goToProject, assert, createDatabaseAt, firstMilestoneId, openDatabaseReadOnly, requestQuit, sleep } from './lib.mjs'
+import { goToProject, assert, clickRowShowDetail, keyWith, MOD, createDatabaseAt, firstMilestoneId, openDatabaseReadOnly, requestQuit, sleep } from './lib.mjs'
 
 // 変更前後の値（報告・検証用）
 const TOP_BAR_HEIGHT = 40
@@ -248,9 +248,8 @@ export function topBarScenarios({ withApp, root }) {
           await c.space()
           await waitCount(c, '2 件表示 / 全 4 件', '完了の変更')
           await c.click(row('報告 A'))
+          // フェーズ5.9: 削除は確認なし
           await c.key('Delete', 46)
-          await c.waitFor(`document.querySelector('[data-testid=task-delete-dialog] [role=dialog]')`, 3000, '削除の確認')
-          await c.click(c.byText('[data-testid=task-delete-dialog] button', '削除'))
           await waitCount(c, '1 件表示 / 全 3 件', '削除')
           await c.click(row('連絡 B'))
           await c.key('m', 77, { code: 'KeyM', text: 'm' })
@@ -285,17 +284,26 @@ export function topBarScenarios({ withApp, root }) {
           assert(JSON.stringify(perCard) === JSON.stringify([1, 1]), '検索はプロジェクト内の全カードに共通に適用', perCard)
           await c.setInput('input[aria-label="タイトルで絞り込み"]', '')
           await waitCount(c, '4 件表示 / 全 5 件', '検索のクリア')
-          // トップバーの並べ替え（全カード共通）: タイトル順 → もう一度で逆順
+          // トップバーの並べ替え（全カード共通）: フェーズ5.9から選択式（手動順・作成日時が古い順・新しい順・タイトル順）
           const m2Titles = () => c.evaluate(`[...document.querySelectorAll('[data-milestone-id="${ids.m2}"] [role=option]')].map((e) => e.getAttribute('aria-label').split('、')[0])`)
           const collate = (list) => [...list].sort(new Intl.Collator('ja', { numeric: true, sensitivity: 'base' }).compare)
-          await c.click(`document.querySelector('[data-testid=top-bar] [aria-label^="タイトルで並べ替え"]')`)
-          await sleep(200)
+          const chooseSort = async (key) => {
+            await c.click(`document.querySelector('[data-testid=top-bar] [data-testid=view-sort-select] [role=combobox]')`)
+            await c.waitFor(`document.querySelector('[data-sort-key=${key}]')`, 3000, '並べ替えの選択肢')
+            await sleep(150)
+            await c.click(`document.querySelector('[data-sort-key=${key}]')`)
+            await c.waitFor(`!document.querySelector('[data-sort-key=${key}]')`, 3000, '選択肢を閉じる')
+            await sleep(200)
+          }
+          await chooseSort('title')
           let order = await m2Titles()
-          assert(order.length === 2 && JSON.stringify(order) === JSON.stringify(collate(order)), 'トップバーの並べ替えをカードに適用（昇順）', order)
-          await c.click(`document.querySelector('[data-testid=top-bar] [aria-label^="タイトルで並べ替え"]')`)
-          await sleep(200)
+          assert(order.length === 2 && JSON.stringify(order) === JSON.stringify(collate(order)), 'トップバーの並べ替えをカードに適用（タイトル順）', order)
+          await chooseSort('created-asc')
+          const ascending = await m2Titles()
+          await chooseSort('created-desc')
           order = await m2Titles()
-          assert(JSON.stringify(order) === JSON.stringify(collate(order).reverse()), '降順', order)
+          assert(JSON.stringify(order) === JSON.stringify([...ascending].reverse()), '作成日時が新しい順は古い順の逆', { ascending, order })
+          await chooseSort('manual')
           await c.click(`document.querySelector('[data-testid=top-bar] button[value=completed]')`)
           await waitCount(c, '1 件表示 / 全 5 件', 'Projectの完了')
           await c.setInput('input[aria-label="タイトルで絞り込み"]', '報告')

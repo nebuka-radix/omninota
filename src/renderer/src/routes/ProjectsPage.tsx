@@ -10,7 +10,7 @@ import { projectListQueryOptions } from '../features/projects/project-queries'
 import { getProjectPageState } from '../features/projects/project-route'
 import { TaskScopeView } from '../features/tasks/TaskScopeView'
 import { initialStatusForProject } from '../features/tasks/task-rules'
-import { DEFAULT_TASK_SORTING } from '../features/tasks/task-table'
+import { DEFAULT_PROJECT_SORTING } from '../features/tasks/task-table'
 import { useWorkspace } from '../features/workspace/WorkspaceContext'
 import { vscodeColors } from '../theme'
 
@@ -83,7 +83,8 @@ export function NewProjectPage() {
 export function ProjectPage({ projectId }: { projectId: string }) {
   const projects = useQuery(projectListQueryOptions)
   const state = getProjectPageState(projectId, projects)
-  const [sorting, setSorting] = useState<SortingState>(DEFAULT_TASK_SORTING)
+  // 既定は手動順（手動順のないマイルストンは作成日時の古い順。フェーズ5.9）
+  const [sorting, setSorting] = useState<SortingState>(DEFAULT_PROJECT_SORTING)
   // 「未完了のタスクを表示」の要求回数（TaskScopeView は表示した後に増えた時だけ反応する）
   const { revealOpenRequest } = useWorkspace()
 
