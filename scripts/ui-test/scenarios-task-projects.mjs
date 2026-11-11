@@ -3,7 +3,7 @@
 import { randomUUID } from 'node:crypto'
 import { join } from 'node:path'
 import { readFileSync } from 'node:fs'
-import { assert, createDatabaseAt, firstMilestoneId, openDatabaseReadOnly, PROJECT_ROOT, requestQuit, sleep } from './lib.mjs'
+import { goToProject, assert, createDatabaseAt, firstMilestoneId, openDatabaseReadOnly, PROJECT_ROOT, requestQuit, sleep } from './lib.mjs'
 
 const collator = new Intl.Collator('ja', { numeric: true, sensitivity: 'base' })
 
@@ -18,11 +18,13 @@ export function taskProjectScenarios({ withApp, root }) {
   const apiRaw = (c, expression) => c.evaluate(expression)
   const tasksById = async (c) => new Map((await api(c, 'window.gtd.tasks.list()')).map((task) => [task.id, task]))
   const openProject = async (c, projectId) => {
-    if (!(await c.evaluate(`!!document.querySelector('[data-testid=project-list]')`))) {
+    // 一覧（未完了が0件なら「ありません」の表示。フェーズ5.8）が出ていなければ、Project を開く
+    const listShown = `document.querySelector('[data-testid=project-list], [data-testid=project-list-empty]')`
+    if (!(await c.evaluate(`!!${listShown}`))) {
       await c.click(`document.querySelector('nav button[aria-label="Project"]')`)
-      await c.waitFor(`document.querySelector('[data-testid=project-list]')`, 5000, 'プロジェクト一覧')
+      await c.waitFor(listShown, 5000, 'プロジェクト一覧')
     }
-    await c.click(`[...document.querySelectorAll('[data-testid=project-list] [data-project-id]')].find((e) => e.dataset.projectId === ${JSON.stringify(projectId)})`)
+    await goToProject(c, projectId)
     await c.waitFor(`location.hash === ${JSON.stringify(`#/projects/${projectId}`)}`, 5000, 'プロジェクトを開く')
   }
   const openInbox = async (c) => {
@@ -277,8 +279,9 @@ export function taskProjectScenarios({ withApp, root }) {
           await openProject(c, ids.home)
           const target = await c.evaluate(`({ notice: document.querySelector('[data-testid=project-completed-notice]')?.textContent ?? '', disabled: document.querySelector('[data-testid=milestone-card] [data-testid^=new-task-][data-testid$=-button]').disabled })`)
           assert(target.disabled && target.notice.includes('完了済みのプロジェクトには、マイルストン・タスクを追加できません'), '追加を無効にして理由を表示', target)
-          const sidebar = await c.evaluate(`[...document.querySelectorAll('[data-testid=project-list] [data-project-id]')].find((e) => e.dataset.projectId === ${JSON.stringify(ids.home)}).textContent`)
-          assert(sidebar.includes('完了済み'), 'サイドバーで完了済みを区別', sidebar)
+          // フェーズ5.8: 完了済みのプロジェクトはサイドバーに表示しない（画面は開ける・データは残る）
+          const sidebar = await c.evaluate(`!!document.querySelector('[data-testid=navigation] [data-project-id="${ids.home}"]')`)
+          assert(sidebar === false, '完了済みのプロジェクトはサイドバーに表示しない', sidebar)
           await selectRow(c, ids.homeTask)
           const current = await selectState(c)
           assert(current.value === ids.home && current.label.startsWith('家（完了済み）'), '完了済みの所属を現在値として表示（空欄・未所属に見せない）', current)

@@ -1,7 +1,7 @@
 // フェーズ5.7: Inbox・Project画面のメインパネルの簡素化（タイトル行・説明行・操作説明・マイルストン0件の案内文の削除）のUIシナリオ。
 // run.mjs から呼ぶ。専用の一時userData（root配下）だけを使う。準備はPreloadの用途別APIで行う。
 import { join } from 'node:path'
-import { assert, firstMilestoneId, requestQuit, sleep } from './lib.mjs'
+import { goToProject, assert, firstMilestoneId, requestQuit, sleep } from './lib.mjs'
 
 export function layoutScenarios({ withApp, root }) {
   const dir = join(root, 'userData-layout')
@@ -14,7 +14,7 @@ export function layoutScenarios({ withApp, root }) {
     await sleep(500)
   }
   const openProject = async (c, projectId) => {
-    await c.click(`document.querySelector('[data-testid=project-list] [data-project-id="${projectId}"]')`)
+    await goToProject(c, projectId)
     await c.waitFor(`location.hash === ${JSON.stringify(`#/projects/${projectId}`)}`, 5000, 'プロジェクトを開く')
     await c.waitFor(`document.querySelector('[data-testid=milestone-board]')`, 5000, 'カード列')
     await sleep(200)

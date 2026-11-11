@@ -14,6 +14,7 @@ import { useTable, type SortingState } from '@tanstack/react-table'
 import { Search } from 'lucide-react'
 import type { ProjectDto } from '../../../../shared/contracts/projects'
 import type { TaskDto } from '../../../../shared/contracts/tasks'
+import { ShellSlot } from '../../components/ShellSlots'
 import { MilestoneBoard } from '../milestones/MilestoneBoard'
 import { milestoneListQueryOptions } from '../milestones/milestone-queries'
 import { useDraftGuard } from '../drafts/DraftGuard'
@@ -63,12 +64,13 @@ const STATUS_LABELS: Record<TaskStatusFilter, string> = { open: '未完了', com
 // - プロジェクト: マイルストン別のカード（MilestoneBoard）。カードごとに別の仮想リスト。検索・状態・ソートは全カード共通。
 //   常設の追加欄は置かず、各カードの NEW TASK・末尾の NEW MILESTONE から登録する。
 // - Inbox: 従来どおりの追加欄と一覧（カード表示にはしない）。
+// フェーズ5.8:
+// - 検索・状態・並べ替え（プロジェクト）はトップバーに、件数はステータスバーの中央に描画する（ShellSlot。状態はここのまま）。
 // フェーズ5.6:
 // - Inbox・カードの行から削除できる（行のメニュー「…」・右クリック・Shift+F10 / ContextMenu、Delete キー）。確認後に物理削除する。
 export function TaskScopeView({
   scope,
   scopeLabel,
-  addTargetLabel,
   addDisabledReason,
   sorting,
   onSortingChange,
@@ -79,8 +81,7 @@ export function TaskScopeView({
   scope: TaskScope
   // 一覧の説明（「プロジェクトに属さないタスク」など。対象外の表示に使う）
   scopeLabel: string
-  // 追加欄（Inboxだけ）の追加先の表示と、追加できない理由
-  addTargetLabel?: string
+  // 追加欄（Inboxだけ）の追加できない理由（フェーズ5.8で追加先の表示は廃止）
   addDisabledReason?: string | undefined
   sorting: SortingState
   onSortingChange: (updater: SortingState | ((current: SortingState) => SortingState)) => void
@@ -202,26 +203,33 @@ export function TaskScopeView({
   const resetScrollKey = `${scopeKey}\u0000${search}\u0000${status}\u0000${JSON.stringify(sorting)}\u0000${revealOpenRequest}`
   const handleSort = (column: TaskSortColumn) => onSortingChange((current) => nextSorting(current, column))
 
+  // ステータスバーの件数（フェーズ5.8）: 絞り込み後の表示対象タスク数 / この範囲の全タスク数。
+  // 仮想化で描画した行数ではなく、Tableの絞り込み結果から数える。プロジェクトは全カードの合計（見出し・追加欄は含めない）。
+  // 削除由来の非表示タスクは一覧の取得（Main）の時点で除かれるため含まれない。読み込み中・失敗時は表示しない。
+  const shownCount = groups ? groups.reduce((sum, group) => sum + group.tasks.length, 0) : visibleTasks.length
+
   return (
     <>
-      {/* 一覧より上の領域は縮めない（一覧だけがスクロールする） */}
-      <Box sx={{ flexShrink: 0 }}>
-        {!project && (
-          <TaskQuickAdd
-            projectId={scopeProjectId(scope)}
-            targetLabel={addTargetLabel ?? ''}
-            disabledReason={addDisabledReason}
-          />
-        )}
-
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 2, flexWrap: 'wrap' }}>
+      {/* 表示設定はトップバーへ（フェーズ5.8）。状態はこの部品のまま（範囲を切り替えると従来どおり初期化される） */}
+      <ShellSlot name="top-bar-controls">
+        <Box
+          role="group"
+          aria-label="表示設定"
+          data-testid="view-controls"
+          sx={{ display: 'flex', alignItems: 'center', gap: 2, minWidth: 0, flex: 1 }}
+        >
           <TextField
             value={search}
             onChange={(event) => setSearch(event.target.value)}
             placeholder="タイトルで絞り込み"
             size="small"
             autoComplete="off"
-            sx={{ flex: '1 1 200px', minWidth: 160 }}
+            data-testid="view-search"
+            sx={{
+              flex: '0 1 240px',
+              minWidth: 96,
+              '& .MuiInputBase-root': { height: 28, fontSize: 12 }
+            }}
             slotProps={{
               htmlInput: { 'aria-label': 'タイトルで絞り込み' },
               input: {
@@ -238,19 +246,21 @@ export function TaskScopeView({
             exclusive
             size="small"
             aria-label="表示するタスク"
+            data-testid="view-status"
+            sx={{ flexShrink: 0, height: 28 }}
             onChange={(_event, value: TaskStatusFilter | null) => {
               if (value) setStatus(value)
             }}
           >
             {(Object.keys(STATUS_LABELS) as TaskStatusFilter[]).map((key) => (
-              <ToggleButton key={key} value={key} sx={{ px: 3, py: 0.5, fontSize: 12 }}>
+              <ToggleButton key={key} value={key} sx={{ px: 2.5, py: 0, fontSize: 12 }}>
                 {STATUS_LABELS[key]}
               </ToggleButton>
             ))}
           </ToggleButtonGroup>
           {project && (
-            // カード表示には列見出しがないため、並べ替えはここで行う（全カード共通）
-            <Box sx={{ display: 'flex', alignItems: 'center', height: 28 }} role="group" aria-label="並べ替え">
+            // カード表示には列見出しがないため、並べ替えはここで行う（全カード共通）。Inboxは一覧の列見出しで並べ替える
+            <Box sx={{ display: 'flex', alignItems: 'center', height: 28, flexShrink: 0 }} role="group" aria-label="並べ替え" data-testid="view-sort">
               <Typography component="span" variant="caption" color="text.secondary" sx={{ mr: 1 }}>
                 並べ替え:
               </Typography>
@@ -258,10 +268,19 @@ export function TaskScopeView({
               <SortHeader column="createdAt" label="作成日時" sorting={sorting} onSort={handleSort} />
             </Box>
           )}
-          <Typography variant="caption" color="text.secondary" role="status" data-testid="task-count">
-            {visibleTasks.length} 件表示 / 全 {scopeCount} 件
-          </Typography>
         </Box>
+      </ShellSlot>
+      {tasksQuery.isSuccess && (
+        <ShellSlot name="status-count">
+          <Typography component="span" role="status" data-testid="task-count" sx={{ fontVariantNumeric: 'tabular-nums' }}>
+            {shownCount} 件表示 / 全 {scopeCount} 件
+          </Typography>
+        </ShellSlot>
+      )}
+      {/* 一覧より上の領域は縮めない（一覧だけがスクロールする） */}
+      <Box sx={{ flexShrink: 0 }}>
+        {!project && <TaskQuickAdd projectId={scopeProjectId(scope)} disabledReason={addDisabledReason} />}
+
         <Box
           role="status"
           aria-live="polite"

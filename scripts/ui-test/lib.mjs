@@ -310,3 +310,20 @@ export async function firstMilestoneId(c, projectId) {
     `window.gtd.milestones.list().then((r) => r.data.filter((m) => m.projectId === ${JSON.stringify(projectId)}).sort((a, b) => (a.createdAt < b.createdAt ? -1 : a.createdAt > b.createdAt ? 1 : a.id < b.id ? -1 : 1))[0]?.id ?? null)`
   )
 }
+
+// プロジェクトを開く（フェーズ5.8）。未完了のプロジェクトはサイドバーの項目をクリックする。
+// 完了済みのプロジェクトはサイドバーに表示されないため、テストだけルート（ハッシュ）で開く
+// （画面の遷移は通常と同じ Router・未保存確認を通る）。
+export async function goToProject(c, projectId) {
+  const item = `document.querySelector('[data-testid=project-list] [data-project-id="${projectId}"]')`
+  if (await c.evaluate(`!!${item}`)) {
+    await c.click(item)
+    return
+  }
+  const completed = await c.evaluate(
+    `window.gtd.projects.list().then((r) => r.data.find((p) => p.id === ${JSON.stringify(projectId)})?.completedAt != null)`
+  )
+  // 未完了なのにサイドバーにない場合は失敗にする（ルートで開いて隠さない）
+  if (!completed) throw new TestFailure(`未完了のプロジェクトがサイドバーにありません: ${projectId}`)
+  await c.evaluate(`location.hash = ${JSON.stringify(`#/projects/${projectId}`)}`)
+}

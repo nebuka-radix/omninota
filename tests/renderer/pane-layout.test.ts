@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { computePaneWidths, inferOperatedPane } from '../../src/renderer/src/features/workspace/pane-layout'
 
-// 最小幅: サイドバー180 / メイン320 / 詳細220
+// 最小幅: サイドバー108（フェーズ5.8で180から変更）/ メイン320 / 詳細220
 describe('希望幅から実寸を計算する', () => {
   it('十分な幅があれば希望幅のまま表示する', () => {
     expect(
@@ -32,8 +32,8 @@ describe('希望幅から実寸を計算する', () => {
 
   it('両方を最小幅まで縮めても足りなければ、メインパネルが最小幅を下回る', () => {
     expect(
-      computePaneWidths({ available: 650, sidebarPreferred: 300, detailPreferred: 300, priority: 'sidebar' })
-    ).toEqual({ sidebar: 180, main: 250, detail: 220 })
+      computePaneWidths({ available: 580, sidebarPreferred: 300, detailPreferred: 300, priority: 'sidebar' })
+    ).toEqual({ sidebar: 108, main: 252, detail: 220 })
   })
 
   it('詳細パネル非表示ではサイドバーとメインだけで配分する', () => {

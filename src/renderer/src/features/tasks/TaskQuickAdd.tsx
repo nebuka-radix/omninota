@@ -6,22 +6,20 @@ import { useCreateTaskMutation } from './task-queries'
 
 // タスクの追加欄。最終的な入力判定（所属先の存在・未完了を含む）はMain側で行う。
 // - projectId: 追加先（nullは未所属 = Inbox）。作成時に明示的に渡す（フェーズ5.2）
-// - targetLabel: 追加先の表示（「〈プロジェクト名〉に追加」など）
 // - disabledReason: 追加できない理由（完了済みプロジェクトなど）。指定時は入力・登録を無効にして理由を表示する
 // - 未送信の入力は未保存確認（DraftGuard）の対象にしない（既存方針）
-const TARGET_ID = 'task-quick-add-target'
+// - フェーズ5.8: 追加先の説明行（「追加先: Inbox（…）」）は表示しない。入力欄のアクセシブル名「タスクのタイトル」は維持する
+const REASON_ID = 'task-quick-add-disabled-reason'
 
 // - milestoneId: 追加先のマイルストン（フェーズ5.4）。フェーズ5.5からInboxだけで使う（projectId = null のため常に null）
 export function TaskQuickAdd({
   projectId,
   milestoneId = null,
-  targetLabel,
   disabledReason,
   inputRef
 }: {
   projectId: string | null
   milestoneId?: string | null
-  targetLabel: string
   disabledReason?: string | undefined
   inputRef?: Ref<HTMLInputElement>
 }) {
@@ -62,9 +60,11 @@ export function TaskQuickAdd({
 
   return (
     <Box component="form" onSubmit={handleSubmit} noValidate sx={{ mb: 4 }}>
-      <Typography id={TARGET_ID} variant="caption" color="text.secondary" component="p" sx={{ mb: 1 }} data-testid="task-add-target">
-        {disabled ? disabledReason : targetLabel}
-      </Typography>
+      {disabled && (
+        <Typography id={REASON_ID} variant="caption" color="text.secondary" component="p" sx={{ mb: 1 }} data-testid="task-add-disabled-reason">
+          {disabledReason}
+        </Typography>
+      )}
       <Box sx={{ display: 'flex', gap: 2, alignItems: 'flex-start' }}>
         <TextField
           value={title}
@@ -73,7 +73,7 @@ export function TaskQuickAdd({
             if (createTask.isError) createTask.reset()
           }}
           onKeyDown={handleKeyDown}
-          placeholder={`${targetLabel} — タイトルを入力して Enter`}
+          placeholder="タイトルを入力して Enter"
           size="small"
           fullWidth
           autoComplete="off"
@@ -82,7 +82,7 @@ export function TaskQuickAdd({
           slotProps={{
             htmlInput: {
               'aria-label': 'タスクのタイトル',
-              'aria-describedby': TARGET_ID,
+              'aria-describedby': disabled ? REASON_ID : undefined,
               maxLength: TASK_TITLE_MAX_LENGTH,
               // 保存中は編集させない（フォーカスを失わないようdisabledにはしない）
               readOnly: createTask.isPending

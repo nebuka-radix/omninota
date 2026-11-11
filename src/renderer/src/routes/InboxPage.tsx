@@ -16,7 +16,6 @@ export function InboxPage() {
       <TaskScopeView
         scope={INBOX_SCOPE}
         scopeLabel="Inbox: プロジェクトに属さないタスク"
-        addTargetLabel="追加先: Inbox（プロジェクトに属さないタスク）"
         sorting={sorting}
         onSortingChange={setSorting}
       />

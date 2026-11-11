@@ -8,11 +8,12 @@ import type { PaneKey } from '../../features/workspace/pane-layout'
 import { usePaneLayout } from '../../features/workspace/use-pane-layout'
 import { useWorkspace } from '../../features/workspace/WorkspaceContext'
 import { vscodeColors } from '../../theme'
+import { ShellSlotsProvider } from '../../components/ShellSlots'
 import { DetailPanel } from './DetailPanel'
 import { MainPanel } from './MainPanel'
 import { NavigationPane } from './NavigationPane'
 import { StatusBar } from './StatusBar'
-import { TopBar } from './TopBar'
+import { TOP_BAR_HEIGHT, TopBar } from './TopBar'
 
 const { sidebarWidth: SIDEBAR, detailWidth: DETAIL, mainMinWidth } = WORKSPACE_LIMITS
 
@@ -115,78 +116,81 @@ export function AppShell() {
   }, [settings.detailVisible, setDetailVisible, confirmLeave])
 
   return (
-    <Box
-      sx={{
-        height: '100%',
-        display: 'grid',
-        gridTemplateRows: '32px minmax(0, 1fr) 22px',
-        gridTemplateColumns: 'minmax(0, 1fr)',
-        gridTemplateAreas: '"top" "body" "status"',
-        overflow: 'hidden',
-        color: 'text.primary'
-      }}
-    >
-      <TopBar detailVisible={settings.detailVisible} onToggleDetail={() => void toggleDetail()} toggleButtonRef={toggleButtonRef} />
+    <ShellSlotsProvider>
+      <Box
+        sx={{
+          height: '100%',
+          display: 'grid',
+          // トップバーの高さは TOP_BAR_HEIGHT（フェーズ5.8で32px→40px）。メイン領域は残りの高さ（1fr）を使う
+          gridTemplateRows: `${TOP_BAR_HEIGHT}px minmax(0, 1fr) 22px`,
+          gridTemplateColumns: 'minmax(0, 1fr)',
+          gridTemplateAreas: '"top" "body" "status"',
+          overflow: 'hidden',
+          color: 'text.primary'
+        }}
+      >
+        <TopBar detailVisible={settings.detailVisible} onToggleDetail={() => void toggleDetail()} toggleButtonRef={toggleButtonRef} />
 
-      <Box sx={{ gridArea: 'body', display: 'flex', minWidth: 0, minHeight: 0, ...separatorStyles }}>
-        <Group
-          id="workspace-panes"
-          orientation="horizontal"
-          groupRef={pane.groupRef}
-          elementRef={pane.groupElementRef}
-          onLayoutChanged={pane.handleLayoutChanged}
-          resizeTargetMinimumSize={{ coarse: 20, fine: SEPARATOR_WIDTH }}
-          style={{ flex: 1, minWidth: 0, height: '100%' }}
-        >
-          <Panel
-            id="sidebar"
-            elementRef={pane.sidebarElementRef}
-            defaultSize={initialSidebarWidth}
-            minSize={SIDEBAR.min}
-            maxSize={SIDEBAR.max}
-            groupResizeBehavior="preserve-pixel-size"
-            style={{ backgroundColor: vscodeColors.sideBarBackground }}
+        <Box sx={{ gridArea: 'body', display: 'flex', minWidth: 0, minHeight: 0, ...separatorStyles }}>
+          <Group
+            id="workspace-panes"
+            orientation="horizontal"
+            groupRef={pane.groupRef}
+            elementRef={pane.groupElementRef}
+            onLayoutChanged={pane.handleLayoutChanged}
+            resizeTargetMinimumSize={{ coarse: 20, fine: SEPARATOR_WIDTH }}
+            style={{ flex: 1, minWidth: 0, height: '100%' }}
           >
-            {/* 幅広のナビゲーション（フェーズ5.4。旧アクティビティバー＋サイドバー）。幅の保存は従来の sidebarWidth を使う */}
-            <NavigationPane pathname={pathname} />
-          </Panel>
-          <PaneSeparator
-            id="sidebar-separator"
-            label="ナビゲーションの幅を調整"
-            pane="sidebar"
-            onOperate={pane.markOperated}
-            onReset={pane.resetToDefault}
-          />
-          <Panel
-            id="main"
-            elementRef={pane.mainElementRef}
-            minSize={mainMinWidth}
-            style={{ backgroundColor: vscodeColors.editorBackground }}
-          >
-            <MainPanel />
-          </Panel>
-          {settings.detailVisible && (
-            <>
-              <PaneSeparator
-                id="detail-separator"
-                label="詳細パネルの幅を調整"
-                pane="detail"
-                onOperate={pane.markOperated}
-                onReset={pane.resetToDefault}
-              />
-              <DetailPane
-                preferredWidth={settings.detailWidth}
-                elementRef={pane.detailElementRef}
-                pathname={pathname}
-                onClose={() => void toggleDetail()}
-                containerRef={detailContainerRef}
-              />
-            </>
-          )}
-        </Group>
+            <Panel
+              id="sidebar"
+              elementRef={pane.sidebarElementRef}
+              defaultSize={initialSidebarWidth}
+              minSize={SIDEBAR.min}
+              maxSize={SIDEBAR.max}
+              groupResizeBehavior="preserve-pixel-size"
+              style={{ backgroundColor: vscodeColors.sideBarBackground }}
+            >
+              {/* 幅広のナビゲーション（フェーズ5.4。旧アクティビティバー＋サイドバー）。幅の保存は従来の sidebarWidth を使う */}
+              <NavigationPane pathname={pathname} />
+            </Panel>
+            <PaneSeparator
+              id="sidebar-separator"
+              label="ナビゲーションの幅を調整"
+              pane="sidebar"
+              onOperate={pane.markOperated}
+              onReset={pane.resetToDefault}
+            />
+            <Panel
+              id="main"
+              elementRef={pane.mainElementRef}
+              minSize={mainMinWidth}
+              style={{ backgroundColor: vscodeColors.editorBackground }}
+            >
+              <MainPanel />
+            </Panel>
+            {settings.detailVisible && (
+              <>
+                <PaneSeparator
+                  id="detail-separator"
+                  label="詳細パネルの幅を調整"
+                  pane="detail"
+                  onOperate={pane.markOperated}
+                  onReset={pane.resetToDefault}
+                />
+                <DetailPane
+                  preferredWidth={settings.detailWidth}
+                  elementRef={pane.detailElementRef}
+                  pathname={pathname}
+                  onClose={() => void toggleDetail()}
+                  containerRef={detailContainerRef}
+                />
+              </>
+            )}
+          </Group>
+        </Box>
+
+        <StatusBar pathname={pathname} />
       </Box>
-
-      <StatusBar pathname={pathname} />
-    </Box>
+    </ShellSlotsProvider>
   )
 }

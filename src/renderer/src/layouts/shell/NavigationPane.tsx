@@ -13,7 +13,8 @@ import { PaneHeader } from './PaneHeader'
 import { SCREENS, screenOf, type ScreenId } from './screens'
 
 // 幅広のナビゲーション（フェーズ5.4。旧アクティビティバー＋サイドバーを1つのペインに統合）。
-// - Inbox / Project（未完了と完了済みの区分つきプロジェクト一覧、最下段に NEW PROJECT）/ 設定 を縦に並べ、全体を縦スクロールする。
+// - Inbox / Project（未完了のプロジェクト一覧、最下段に NEW PROJECT。フェーズ5.8で区分を廃止）/ 設定 を縦に並べ、全体を縦スクロールする。
+// - 狭い幅（最小幅はWORKSPACE_LIMITS.sidebarWidth.min）では項目名を省略表示し、バッジ・折りたたみボタンは常に表示する。
 // - 選択状態はRouterの現在位置から導出する（aria-current）。プロジェクトの選択は既存の未保存確認（useBlocker）を通る。
 // - Project は折りたためる（保存しない）。折りたたんでも選択中のプロジェクト名は表示し、選択が分からなくならないようにする。
 // - 幅は既存の左ペインの希望幅（Workspace設定の sidebarWidth、既定240px）をそのまま使う。
@@ -58,8 +59,8 @@ function NavItem({
           '&:hover': { bgcolor: active ? vscodeColors.listActiveSelection : vscodeColors.listHover }
         }}
       >
-        <Icon size={16} strokeWidth={1.75} aria-hidden />
-        <Typography component="span" sx={{ fontSize: 13, fontWeight: 600 }}>
+        <Icon size={16} strokeWidth={1.75} aria-hidden style={{ flexShrink: 0 }} />
+        <Typography component="span" noWrap sx={{ fontSize: 13, fontWeight: 600, minWidth: 0 }}>
           {label}
         </Typography>
         {badge && (
@@ -70,6 +71,7 @@ function NavItem({
               data-testid={`nav-${screen}-badge`}
               sx={{
                 ml: 'auto',
+                flexShrink: 0,
                 minWidth: 20,
                 height: 18,
                 px: 1.5,
@@ -117,7 +119,8 @@ export function NavigationPane({ pathname }: { pathname: string }) {
   const [projectsOpen, setProjectsOpen] = useState(true)
   const projects = useQuery(projectListQueryOptions)
   const selectedProjectId = projectIdFromRoute(pathname)
-  const selectedProject = projects.data?.find((project) => project.id === selectedProjectId)
+  // 完了済みのプロジェクトはサイドバーに表示しないため、折りたたみ中の「選択中」にも出さない（フェーズ5.8）
+  const selectedProject = projects.data?.find((project) => project.id === selectedProjectId && project.completedAt === null)
   const inboxBadge = useInboxBadge()
 
   return (
@@ -141,7 +144,7 @@ export function NavigationPane({ pathname }: { pathname: string }) {
                 aria-expanded={projectsOpen}
                 aria-controls="navigation-projects"
                 onClick={() => setProjectsOpen((open) => !open)}
-                sx={{ color: 'text.secondary', mr: 1 }}
+                sx={{ color: 'text.secondary', mr: 1, flexShrink: 0 }}
               >
                 {projectsOpen ? <ChevronDown size={14} aria-hidden /> : <ChevronRight size={14} aria-hidden />}
               </IconButton>

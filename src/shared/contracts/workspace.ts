@@ -23,10 +23,12 @@ export function projectIdFromRoute(route: string): string | null {
 
 // ペイン幅の制約（px）。Rendererのパネル制約とMainの検証で共通に使う。
 export const WORKSPACE_LIMITS = {
-  sidebarWidth: { min: 180, max: 480 },
+  // 最小幅はフェーズ5.8で180→108（従来の0.6倍）。最大・既定は変えない
+  sidebarWidth: { min: 108, max: 480 },
   detailWidth: { min: 220, max: 560 },
   // プロジェクト画面のマイルストンカードの幅（全カード・全プロジェクト共通。フェーズ5.5）
-  milestoneCardWidth: { min: 240, max: 640 },
+  // 最小幅はフェーズ5.8で240→144（従来の0.6倍）。最大・既定は変えない
+  milestoneCardWidth: { min: 144, max: 640 },
   // メインパネルの最小幅（保存はしない。ウィンドウ最小幅の計算に使う）
   mainMinWidth: 320
 } as const

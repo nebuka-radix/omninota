@@ -22,6 +22,7 @@ import { layoutScenarios } from './scenarios-layout.mjs'
 import { milestoneScenarios } from './scenarios-milestones.mjs'
 import { projectCompletionScenarios } from './scenarios-project-completion.mjs'
 import { taskProjectScenarios } from './scenarios-task-projects.mjs'
+import { topBarScenarios } from './scenarios-topbar.mjs'
 
 const args = process.argv.slice(2)
 const mode = args[0]
@@ -279,6 +280,8 @@ scenarios.push(...cardScenarios({ withApp, root }))
 scenarios.push(...deletionScenarios({ withApp, root }))
 // フェーズ5.7: メインパネルの簡素化
 scenarios.push(...layoutScenarios({ withApp, root }))
+// フェーズ5.8: トップバー・ステータスバー・サイドバー・カードの最小幅
+scenarios.push(...topBarScenarios({ withApp, root }))
 
 console.log(`UIテスト（${mode}${displayId ? `、表示先 ${displayId}` : ''}）一時ディレクトリ: ${root}`)
 let failed = 0

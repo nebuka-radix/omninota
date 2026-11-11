@@ -1,5 +1,6 @@
 import { Box, Typography } from '@mui/material'
 import { useIsMutating, useQuery } from '@tanstack/react-query'
+import { useShellSlotRef } from '../../components/ShellSlots'
 import { appInfoQueryOptions } from '../../features/app-info/app-info-query'
 import { taskKeys } from '../../features/tasks/task-queries'
 import { useWorkspace } from '../../features/workspace/WorkspaceContext'
@@ -8,11 +9,14 @@ import { SCREENS, screenOf } from './screens'
 
 // 実際に取得できる情報と、進行中・失敗した非同期処理だけを表示する。
 // 「すべて保存済み」のような根拠のない表示はしない。長いパスは設定画面に集約する。
+// フェーズ5.8: 中央に現在の画面のタスク件数の差し込み先を置く（件数は一覧の部品が描画する。対象外の画面では空）。
+// 左右を同じ幅の列（minmax(0, 1fr)）にして、左右の文字の長さで中央の位置がずれないようにする。狭い時は左右を省略表示する。
 export function StatusBar({ pathname }: { pathname: string }) {
   const appInfo = useQuery(appInfoQueryOptions)
   // タスクの登録・更新（mutationKeyが ['tasks', ...] のもの）
   const savingTasks = useIsMutating({ mutationKey: taskKeys.all })
   const { saveStatus, persistenceEnabled } = useWorkspace()
+  const countRef = useShellSlotRef('status-count')
 
   const screenId = screenOf(pathname)
   const screen = screenId ? SCREENS[screenId].label : '—'
@@ -36,23 +40,30 @@ export function StatusBar({ pathname }: { pathname: string }) {
         gridArea: 'status',
         bgcolor: hasError ? vscodeColors.statusBarErrorBackground : vscodeColors.statusBarBackground,
         color: vscodeColors.statusBarForeground,
-        display: 'flex',
+        display: 'grid',
+        gridTemplateColumns: 'minmax(0, 1fr) auto minmax(0, 1fr)',
         alignItems: 'center',
-        gap: 4,
+        columnGap: 4,
         px: 3,
         minWidth: 0,
         overflow: 'hidden',
         whiteSpace: 'nowrap',
         '& .MuiTypography-root': { fontSize: 12 }
       }}
+      data-testid="status-bar"
     >
-      <Typography component="span" data-testid="status-screen">
-        {screen}
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 4, minWidth: 0, overflow: 'hidden' }} data-testid="status-left">
+        <Typography component="span" data-testid="status-screen" sx={{ flexShrink: 0 }}>
+          {screen}
+        </Typography>
+        <Typography component="span" role="status" data-testid="status-messages" sx={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+          {messages.join(' · ')}
+        </Typography>
+      </Box>
+      <Box ref={countRef} data-testid="status-center" sx={{ display: 'flex', justifyContent: 'center', minWidth: 0 }} />
+      <Typography component="span" data-testid="status-app" sx={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', textAlign: 'right' }}>
+        {appText}
       </Typography>
-      <Typography component="span" role="status" data-testid="status-messages" sx={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis' }}>
-        {messages.join(' · ')}
-      </Typography>
-      <Typography component="span">{appText}</Typography>
     </Box>
   )
 }

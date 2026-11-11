@@ -5,7 +5,6 @@ import {
   List,
   ListItemButton,
   ListItemText,
-  ListSubheader,
   Typography
 } from '@mui/material'
 import { useQuery } from '@tanstack/react-query'
@@ -18,7 +17,7 @@ import { NEW_PROJECT_PATH, rememberNewProjectReturn } from './new-project'
 import { groupProjects } from './project-order'
 import { projectListQueryOptions } from './project-queries'
 
-// Projectの左サイドバー: プロジェクト一覧（未完了・完了済みの区分）と、最下段の「NEW PROJECT」（フェーズ5.5）。
+// Projectの左サイドバー: 未完了のプロジェクト一覧と、最下段の「NEW PROJECT」（フェーズ5.5。区分の廃止はフェーズ5.8）。
 // - 旧来の名前入力欄と＋ボタンは廃止した。NEW PROJECT はメインパネルに新規プロジェクトの編集画面を開く（DBにはまだ作らない）。
 // - プロジェクトの選択・NEW PROJECT はルートの変更（未保存の編集があれば、遷移の前に既存の確認が出る）。
 function NewProjectItem({ pathname }: { pathname: string }) {
@@ -34,7 +33,7 @@ function NewProjectItem({ pathname }: { pathname: string }) {
         rememberNewProjectReturn(pathname)
         void navigate({ to: NEW_PROJECT_PATH })
       }}
-      sx={{ px: 4, gap: 1.5, mt: 1 }}
+      sx={{ px: 4, gap: 1.5, mt: 1, minWidth: 0 }}
     >
       <Plus size={14} aria-hidden />
       <ListItemText
@@ -65,78 +64,55 @@ export function ProjectsSidebar({ pathname }: { pathname: string }) {
         プロジェクトを読み込めませんでした: {projects.error.message}
       </Alert>
     )
-  } else if (projects.data.length === 0) {
-    body = (
-      <Typography variant="body2" color="text.secondary" sx={{ px: 4 }} role="status">
-        プロジェクトはまだありません。
-      </Typography>
-    )
   } else {
-    // 区分（未完了・完了済み）ごとに表示する。区分の中は名前順（同名は作成日時・ID）。選択はルートで決まるため、完了操作で区分が変わっても維持される
-    const groups = groupProjects(projects.data)
-    // 同名のプロジェクトは、作成日時とIDの先頭を副テキストで示して判別できるようにする（フェーズ5.4）
+    // 未完了のプロジェクトだけを、Project 配下にそのまま並べる（名前順。同名は作成日時・ID）。
+    // フェーズ5.8: 「未完了」の見出しと完了済みの区分は廃止した。完了済みのプロジェクトはサイドバーに表示しない（データは残る）。
+    // 完了した直後も開いている画面はそのまま（ルートで決まる）で、完了を取り消すと一覧に戻る。
+    const openProjects = groupProjects(projects.data).open
+    // 同名のプロジェクトは、作成日時とIDの先頭を副テキストで示して判別できるようにする（フェーズ5.4。一覧に表示するものの中で判定）
     const nameCounts = new Map<string, number>()
-    for (const project of projects.data) nameCounts.set(project.name, (nameCounts.get(project.name) ?? 0) + 1)
-    const secondaryOf = (project: ProjectDto) => {
-      const parts: string[] = []
-      if (project.completedAt !== null) parts.push('完了済み')
-      if ((nameCounts.get(project.name) ?? 0) > 1) parts.push(`${formatTaskDateTime(project.createdAt)} 作成・ID ${project.id.slice(0, 8)}`)
-      return parts.length > 0 ? parts.join('・') : undefined
-    }
-    const renderItem = (project: ProjectDto) => {
-      const selected = project.id === selectedId
-      return (
-        <ListItemButton
-          key={project.id}
-          selected={selected}
-          aria-current={selected ? 'page' : undefined}
-          data-project-id={project.id}
-          onClick={() => void navigate({ to: '/projects/$projectId', params: { projectId: project.id } })}
-          sx={{ px: 4 }}
-        >
-          <ListItemText
-            primary={project.name}
-            // 完了済みは色だけでなく文字でも示す
-            secondary={secondaryOf(project)}
-            slotProps={{ primary: { noWrap: true, sx: { fontSize: 13 } }, secondary: { sx: { fontSize: 11 } } }}
-          />
-        </ListItemButton>
+    for (const project of openProjects) nameCounts.set(project.name, (nameCounts.get(project.name) ?? 0) + 1)
+    const secondaryOf = (project: ProjectDto) =>
+      (nameCounts.get(project.name) ?? 0) > 1 ? `${formatTaskDateTime(project.createdAt)} 作成・ID ${project.id.slice(0, 8)}` : undefined
+    body =
+      openProjects.length === 0 ? (
+        <Typography variant="body2" color="text.secondary" sx={{ px: 4 }} role="status" data-testid="project-list-empty">
+          {projects.data.length === 0 ? 'プロジェクトはまだありません。' : '未完了のプロジェクトはありません。'}
+        </Typography>
+      ) : (
+        <List dense disablePadding aria-label="プロジェクト一覧" data-testid="project-list">
+          {openProjects.map((project) => {
+            const selected = project.id === selectedId
+            return (
+              <ListItemButton
+                key={project.id}
+                selected={selected}
+                aria-current={selected ? 'page' : undefined}
+                data-project-id={project.id}
+                onClick={() => void navigate({ to: '/projects/$projectId', params: { projectId: project.id } })}
+                sx={{ px: 4, minWidth: 0 }}
+              >
+                <ListItemText
+                  primary={project.name}
+                  secondary={secondaryOf(project)}
+                  sx={{ minWidth: 0 }}
+                  // 狭い幅では省略表示する（メイン領域へはみ出さない）
+                  slotProps={{
+                    primary: { noWrap: true, title: project.name, sx: { fontSize: 13 } },
+                    secondary: { noWrap: true, sx: { fontSize: 11 } }
+                  }}
+                />
+              </ListItemButton>
+            )
+          })}
+        </List>
       )
-    }
-    const section = (key: 'open' | 'completed', label: string, items: ProjectDto[]) => (
-      <List
-        key={key}
-        dense
-        disablePadding
-        aria-labelledby={`project-section-${key}`}
-        data-testid={`project-section-${key}`}
-        subheader={
-          <ListSubheader id={`project-section-${key}`} disableSticky sx={{ px: 4, lineHeight: '28px', fontSize: 11, bgcolor: 'transparent' }}>
-            {label}（{items.length}）
-          </ListSubheader>
-        }
-      >
-        {items.length === 0 ? (
-          <Typography variant="caption" color="text.secondary" component="p" sx={{ px: 4, py: 0.5, m: 0 }}>
-            なし
-          </Typography>
-        ) : (
-          items.map(renderItem)
-        )}
-      </List>
-    )
-    body = (
-      <Box data-testid="project-list" aria-label="プロジェクト一覧" role="group">
-        {section('open', '未完了', groups.open)}
-        {section('completed', '完了済み', groups.completed)}
-      </Box>
-    )
   }
 
   return (
     <>
       {body}
-      {/* 区分の中ではなく、Project配下全体の最後に置く（0件・読み込み失敗時も表示） */}
+      {/* 一覧の後、Project配下の最下段に置く（0件・読み込み失敗時も表示） */}
       <List dense disablePadding aria-label="プロジェクトの作成">
         <NewProjectItem pathname={pathname} />
       </List>

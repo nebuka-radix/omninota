@@ -3,7 +3,7 @@
 import { randomUUID } from 'node:crypto'
 import { writeFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { assert, closeInlineCreate, createDatabaseAt, firstMilestoneId, openDatabaseReadOnly, requestQuit, sleep } from './lib.mjs'
+import { goToProject, assert, closeInlineCreate, createDatabaseAt, firstMilestoneId, openDatabaseReadOnly, requestQuit, sleep } from './lib.mjs'
 
 export function milestoneScenarios({ withApp, root }) {
   const dir = join(root, 'userData-milestones')
@@ -24,7 +24,7 @@ export function milestoneScenarios({ withApp, root }) {
     await c.waitFor(`location.hash === '#/inbox'`, 5000, 'Inbox')
   }
   const openProject = async (c, projectId) => {
-    await c.click(`document.querySelector('[data-testid=project-list] [data-project-id="${projectId}"]')`)
+    await goToProject(c, projectId)
     await c.waitFor(`location.hash === ${JSON.stringify(`#/projects/${projectId}`)}`, 5000, 'プロジェクトを開く')
     await sleep(300)
   }

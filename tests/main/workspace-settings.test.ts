@@ -72,6 +72,19 @@ describe('保存値の読み取り時の正規化（フォールバック）', (
     expect(normalizeWorkspaceSettings(JSON.stringify(valid))).toEqual({ settings: valid, source: 'saved' })
   })
 
+  it('最小幅（フェーズ5.8: サイドバー108・カード144。従来の0.6倍）: 新しい最小幅を保存でき、従来の範囲で保存した幅は縮めずにそのまま読み込む', () => {
+    expect(WORKSPACE_LIMITS.sidebarWidth).toEqual({ min: 108, max: 480 })
+    expect(WORKSPACE_LIMITS.milestoneCardWidth).toEqual({ min: 144, max: 640 })
+    expect(DEFAULT_WORKSPACE_SETTINGS.sidebarWidth).toBe(240)
+    expect(DEFAULT_WORKSPACE_SETTINGS.milestoneCardWidth).toBe(320)
+    const narrow = { ...valid, sidebarWidth: 108, milestoneCardWidth: 144 }
+    expect(workspaceSaveArgsSchema.safeParse([narrow]).success).toBe(true)
+    expect(normalizeWorkspaceSettings(JSON.stringify(narrow))).toEqual({ settings: narrow, source: 'saved' })
+    // 従来の最小幅（180・240）で保存した値
+    const previousMin = { ...valid, sidebarWidth: 180, milestoneCardWidth: 240 }
+    expect(normalizeWorkspaceSettings(JSON.stringify(previousMin))).toEqual({ settings: previousMin, source: 'saved' })
+  })
+
   it('フェーズ3〜4で保存した設定（/inbox・/settings）をそのまま読み込める', () => {
     for (const lastRoute of ['/inbox', '/settings'] as const) {
       const raw = JSON.stringify({ ...valid, lastRoute })

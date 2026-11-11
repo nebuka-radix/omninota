@@ -4,12 +4,12 @@ import { APP_IDENTITY } from '../shared/app-identity'
 import { WORKSPACE_LIMITS } from '../shared/contracts/workspace'
 import { isAllowedAppUrl } from './infrastructure/app-paths'
 
-// 全ペインの最小幅を並べられるウィンドウ最小幅（境界線・余白として少し足す）
+// ウィンドウ最小幅。全ペインの最小幅を並べられる幅（境界線・余白として少し足す）。
+// フェーズ5.8でサイドバーの最小幅を180→108に下げたが、ウィンドウ最小幅は従来の値（180基準の752px）のまま変えない
+// （トップバーの表示設定の配置もこの幅を前提にする）。
+const WINDOW_MIN_SIDEBAR_ALLOWANCE = 180
 export const MIN_WINDOW_WIDTH =
-  WORKSPACE_LIMITS.sidebarWidth.min +
-  WORKSPACE_LIMITS.mainMinWidth +
-  WORKSPACE_LIMITS.detailWidth.min +
-  32
+  WINDOW_MIN_SIDEBAR_ALLOWANCE + WORKSPACE_LIMITS.mainMinWidth + WORKSPACE_LIMITS.detailWidth.min + 32
 
 const indexHtmlPath = join(__dirname, '../renderer/index.html')
 const preloadPath = join(__dirname, '../preload/index.js')

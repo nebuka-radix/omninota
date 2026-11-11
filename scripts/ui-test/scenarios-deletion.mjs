@@ -4,7 +4,7 @@
 import { randomUUID } from 'node:crypto'
 import { join } from 'node:path'
 import { createRequire } from 'node:module'
-import { assert, createDatabaseAt, firstMilestoneId, openDatabaseReadOnly, PROJECT_ROOT, requestQuit, sleep } from './lib.mjs'
+import { goToProject, assert, createDatabaseAt, firstMilestoneId, openDatabaseReadOnly, PROJECT_ROOT, requestQuit, sleep } from './lib.mjs'
 
 const require = createRequire(join(PROJECT_ROOT, 'package.json'))
 
@@ -31,7 +31,7 @@ export function deletionScenarios({ withApp, root }) {
     await sleep(200)
   }
   const openProject = async (c, projectId) => {
-    await c.click(`document.querySelector('[data-testid=project-list] [data-project-id="${projectId}"]')`)
+    await goToProject(c, projectId)
     await c.waitFor(`location.hash === ${JSON.stringify(`#/projects/${projectId}`)}`, 5000, 'プロジェクトを開く')
     await c.waitFor(`document.querySelector('[data-testid=milestone-board]')`, 5000, 'カードの表示')
     await sleep(200)
@@ -56,6 +56,9 @@ export function deletionScenarios({ withApp, root }) {
   const openRowMenu = async (c, taskId) => {
     await c.click(`document.querySelector('[data-row-menu-task-id="${taskId}"]')`)
     await c.waitFor(`document.querySelector('[data-testid=task-row-menu] [role=menu]')`, 3000, '行のメニュー')
+    // 開いた時の位置決め・フォーカス移動が終わってから項目を押す（押す位置がずれて別の項目を押さないように）
+    await c.waitFor(`document.querySelector('[data-testid=task-row-menu] [role=menu]')?.contains(document.activeElement)`, 3000, '行のメニューへフォーカス')
+    await sleep(150)
   }
   const shiftF10 = async (c) => {
     await c.send('Input.dispatchKeyEvent', { type: 'rawKeyDown', key: 'F10', code: 'F10', windowsVirtualKeyCode: 121, modifiers: 8 })

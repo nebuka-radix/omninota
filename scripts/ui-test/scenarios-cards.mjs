@@ -6,7 +6,7 @@ import { randomUUID } from 'node:crypto'
 import { writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { createRequire } from 'node:module'
-import { assert, closeInlineCreate, createDatabaseAt, firstMilestoneId, openDatabaseReadOnly, PROJECT_ROOT, requestQuit, sleep } from './lib.mjs'
+import { goToProject, assert, closeInlineCreate, createDatabaseAt, firstMilestoneId, openDatabaseReadOnly, PROJECT_ROOT, requestQuit, sleep } from './lib.mjs'
 
 const require = createRequire(join(PROJECT_ROOT, 'package.json'))
 
@@ -31,7 +31,7 @@ export function cardScenarios({ withApp, root }) {
     await c.waitFor(`location.hash === '#/inbox'`, 5000, 'Inbox')
   }
   const openProject = async (c, projectId) => {
-    await c.click(`document.querySelector('[data-testid=project-list] [data-project-id="${projectId}"]')`)
+    await goToProject(c, projectId)
     await c.waitFor(`location.hash === ${JSON.stringify(`#/projects/${projectId}`)}`, 5000, 'プロジェクトを開く')
     await c.waitFor(`document.querySelector('[data-testid=milestone-board]')`, 5000, 'カードの表示')
     await sleep(200)
@@ -102,22 +102,24 @@ export function cardScenarios({ withApp, root }) {
           ids.badgeTask = (await tasks(c)).find((t) => t.title === 'バッジ2').id
           assert((await task(c, t1)).completedAt !== null, '完了した')
 
-          // NEW PROJECT はプロジェクト一覧（未完了・完了済みの区分）の後、Project配下の最後
+          // NEW PROJECT はプロジェクト一覧の後、Project配下の最後（フェーズ5.8: 区分はなく、完了済みのプロジェクトは表示しない）
           ids.a = (await api(c, `window.gtd.projects.create({ name: 'A案件' })`)).id
           ids.done = (await api(c, `window.gtd.projects.create({ name: '終わった案件' })`)).id
           await api(c, `window.gtd.projects.setCompleted({ id: ${JSON.stringify(ids.done)}, completed: true })`)
           await reload(c)
           const order = await c.evaluate(`(() => {
             const area = document.querySelector('#navigation-projects')
-            const all = [...area.querySelectorAll('[data-testid^=project-section-], [data-testid=new-project]')]
+            const all = [...area.querySelectorAll('[data-testid=project-list], [data-testid^=project-section-], [data-testid=new-project]')]
             const np = document.querySelector('[data-testid=new-project]')
-            const inSection = !!np.closest('[data-testid^=project-section-]')
+            const inList = !!np.closest('[data-testid=project-list]')
             const last = [...area.querySelectorAll('[role=button], button, [data-project-id]')].at(-1)
-            return { order: all.map((e) => e.dataset.testid), inSection, isLast: last === np || np.contains(last) }
+            const items = [...area.querySelectorAll('[data-project-id]')].map((e) => e.dataset.projectId)
+            return { order: all.map((e) => e.dataset.testid), inList, isLast: last === np || np.contains(last), items }
           })()`)
           assert(
-            JSON.stringify(order.order) === JSON.stringify(['project-section-open', 'project-section-completed', 'new-project']) && !order.inSection && order.isLast,
-            'NEW PROJECT は区分の中ではなく、Project配下全体の最後',
+            JSON.stringify(order.order) === JSON.stringify(['project-list', 'new-project']) && !order.inList && order.isLast &&
+              order.items.includes(ids.a) && !order.items.includes(ids.done),
+            'NEW PROJECT は一覧の中ではなく、Project配下全体の最後（完了済みは一覧にない）',
             order
           )
           // キーボード: NEW PROJECT にフォーカスして Enter → 新規画面
@@ -356,7 +358,7 @@ export function cardScenarios({ withApp, root }) {
           const gone = await c.evaluate(`({
             milestoneInput: !!document.querySelector('[data-testid=milestone-create]') || [...document.querySelectorAll('button')].some((b) => b.textContent.includes('マイルストン登録')),
             taskInput: !!document.querySelector('main input[aria-label="タスクのタイトル"]'),
-            taskLabel: !!document.querySelector('main [data-testid=task-add-target]'),
+            taskLabel: !!document.querySelector('main [data-testid=task-add-target]') || !!document.querySelector('main [data-testid=task-add-disabled-reason]'),
             register: [...document.querySelectorAll('main button')].some((b) => b.textContent.trim() === '登録')
           })`)
           assert(Object.values(gone).every((v) => v === false), '旧来の常設の登録欄・ボタン・項目名ラベルはない', gone)
@@ -439,7 +441,7 @@ export function cardScenarios({ withApp, root }) {
           await openNewTask(c, ids.failMilestone)
           await c.insertText('拒否されるタスク')
           await c.click(`document.querySelector('[data-testid=new-milestone-button]')`)
-          await c.waitFor(`document.querySelector('[data-testid=new-milestone] input')`, 3000, 'NEW MILESTONE の入力')
+          await c.waitFor(`document.activeElement === document.querySelector('[data-testid=new-milestone] input')`, 3000, 'NEW MILESTONE の入力へフォーカス')
           await c.insertText('拒否されるM')
           await api(c, `window.gtd.projects.setCompleted({ id: ${JSON.stringify(ids.failProject)}, completed: true })`)
           await c.enter()
@@ -531,7 +533,7 @@ export function cardScenarios({ withApp, root }) {
           let list = await cards(c)
           assert(list.every((x) => x.width === 320), '全カードが同じ幅', list.map((x) => x.width))
           const aria = await c.evaluate(`(() => { const h = document.querySelector('[data-testid=card-resize-handle]'); return { role: h.getAttribute('role'), name: h.getAttribute('aria-label'), now: h.getAttribute('aria-valuenow'), min: h.getAttribute('aria-valuemin'), max: h.getAttribute('aria-valuemax'), orientation: h.getAttribute('aria-orientation'), tab: h.tabIndex, inListbox: !!h.closest('[role=listbox]') } })()`)
-          assert(aria.role === 'separator' && aria.name.includes('カードの幅') && aria.now === '320' && aria.min === '240' && aria.max === '640' && aria.orientation === 'vertical' && aria.tab === 0 && !aria.inListbox, 'ハンドルの名前・現在値・最小・最大（一覧の外）', aria)
+          assert(aria.role === 'separator' && aria.name.includes('カードの幅') && aria.now === '320' && aria.min === '144' && aria.max === '640' && aria.orientation === 'vertical' && aria.tab === 0 && !aria.inListbox, 'ハンドルの名前・現在値・最小・最大（一覧の外）', aria)
 
           // 横スクロール: ウィンドウ・メインパネルではなく、カード列の中だけ
           const scroll = await c.evaluate(`(() => { const b = document.querySelector('[data-testid=milestone-board]'); const m = document.querySelector('main'); const d = document.scrollingElement; return { board: b.scrollWidth > b.clientWidth, main: m.scrollWidth <= m.clientWidth, doc: d.scrollWidth <= d.clientWidth, mainV: m.scrollHeight <= m.clientHeight + 1 } })()`)
@@ -583,11 +585,11 @@ export function cardScenarios({ withApp, root }) {
           await c.key('ArrowLeft', 37)
           await c.waitFor(`(async () => (await window.gtd.workspace.get()).data.milestoneCardWidth === 404)()`, 3000, '← で縮小・保存')
           await c.key('Home', 36)
-          await c.waitFor(`(async () => (await window.gtd.workspace.get()).data.milestoneCardWidth === 240)()`, 3000, 'Home で最小')
-          assert((await cards(c)).every((x) => x.width === 240) && (await c.evaluate(`document.querySelector('[data-testid=card-resize-handle]').getAttribute('aria-valuenow')`)) === '240', '最小240px')
+          await c.waitFor(`(async () => (await window.gtd.workspace.get()).data.milestoneCardWidth === 144)()`, 3000, 'Home で最小')
+          assert((await cards(c)).every((x) => x.width === 144) && (await c.evaluate(`document.querySelector('[data-testid=card-resize-handle]').getAttribute('aria-valuenow')`)) === '144', '最小144px（フェーズ5.8で240から変更）')
           await c.key('ArrowLeft', 37)
           await sleep(200)
-          assert((await workspace(c)).milestoneCardWidth === 240, '最小より小さくしない')
+          assert((await workspace(c)).milestoneCardWidth === 144, '最小より小さくしない')
           await c.key('End', 35)
           await c.waitFor(`(async () => (await window.gtd.workspace.get()).data.milestoneCardWidth === 640)()`, 3000, 'End で最大')
           await c.key('ArrowRight', 39)
