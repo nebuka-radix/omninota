@@ -17,5 +17,5 @@
     "forceConsistentCasingInFileNames": true,
     "skipLibCheck": true
   },
-  "include": ["src/renderer/src/**/*", "src/shared/contracts/**/*", "src/shared/app-identity.ts"]
+  "include": ["src/renderer/src/**/*", "src/shared/contracts/**/*", "src/shared/app-identity.ts", "src/shared/date-only.ts", "src/shared/summary-sections.ts"]
 }

@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto'
+import { addDaysToDateOnly, localDateOnly } from '../../shared/date-only'
 import type {
   AssignInboxTasksInput,
   CreateTaskInput,
@@ -7,6 +8,8 @@ import type {
   DeleteTasksInput,
   DeleteTasksResult,
   ReorderMilestoneTasksInput,
+  SetTaskDueInput,
+  SetTaskFavoriteInput,
   SetTaskAssignmentInput,
   SetTaskCompletedInput,
   TaskDto,
@@ -58,10 +61,17 @@ export type TaskService = {
   // マイルストン内のタスクの手動順を保存する。orderedIds がDBの表示中の所属タスク全件と一致しなければ CONFLICT（order-changed）。
   // 順位だけを書き換え、updated_at などの日時は変えない。そのマイルストンの表示中のタスク全件（新しい順序）を返す
   reorderInMilestone(input: ReorderMilestoneTasksInput): TaskDto[]
+  // 期限の設定・変更・解除（フェーズ6）。「今日」「明日」は操作の時点（now）のローカルの暦日で決める。
+  // 表示中のタスクだけ（非表示・削除済みは NOT_FOUND。遅れた保存で対象を作り直さない）。期限だけを更新し、
+  // タイトル・所属・完了状態・手動順は変えない。同じ期限なら更新しない（updatedAt も変えない）
+  setDue(input: SetTaskDueInput): TaskDto
+  // お気に入りの設定・解除。表示中のタスクだけ（非表示・削除済みは NOT_FOUND。遅れた保存で対象を作り直さない）。
+  // お気に入りだけを更新し、他の項目は変えない。同じ値なら更新しない（updatedAt も変えない）
+  setFavorite(input: SetTaskFavoriteInput): TaskDto
 }
 
-// DBの行型をそのまま画面へ渡さず、契約上のDTOへ詰め替える。
-function toDto(row: TaskRow): TaskDto {
+// DBの行型をそのまま画面へ渡さず、契約上のDTOへ詰め替える（Summary Review でも使う）。
+export function toTaskDto(row: TaskRow): TaskDto {
   return {
     id: row.id,
     title: row.title,
@@ -70,9 +80,12 @@ function toDto(row: TaskRow): TaskDto {
     completedAt: row.completedAt,
     projectId: row.projectId,
     milestoneId: row.milestoneId,
-    position: row.position
+    position: row.position,
+    dueto: row.dueto,
+    favorite: row.favorite
   }
 }
+const toDto = toTaskDto
 
 export function createTaskService(deps: {
   repository: TaskRepository
@@ -136,7 +149,10 @@ export function createTaskService(deps: {
           projectId,
           milestoneId,
           hiddenAt: null,
-          position: nextPosition(milestoneId)
+          position: nextPosition(milestoneId),
+          // 期限は作成時には設定しない（作成日時などから補完しない）
+          dueto: null,
+          favorite: false
         }
         repository.insert(row)
         return toDto(row)
@@ -236,6 +252,34 @@ export function createTaskService(deps: {
           if (repository.updatePosition(id, index) !== 1) throw orderChanged('task')
         })
         return repository.listVisibleByMilestone(input.milestoneId).map(toDto)
+      })
+    },
+    setDue(input) {
+      return transaction(() => {
+        const current = findOrThrow(input.id)
+        const at = now()
+        const today = localDateOnly(at)
+        const dueto =
+          input.due.kind === 'today'
+            ? today
+            : input.due.kind === 'tomorrow'
+              ? addDaysToDateOnly(today, 1)
+              : input.due.kind === 'date'
+                ? input.due.date
+                : null
+        if (current.dueto === dueto) return toDto(current)
+        const updated = repository.updateDue(input.id, dueto, at.toISOString())
+        if (!updated) throw taskNotFound()
+        return toDto(updated)
+      })
+    },
+    setFavorite(input) {
+      return transaction(() => {
+        const current = findOrThrow(input.id)
+        if (current.favorite === input.favorite) return toDto(current)
+        const updated = repository.updateFavorite(input.id, input.favorite, now().toISOString())
+        if (!updated) throw taskNotFound()
+        return toDto(updated)
       })
     }
   }

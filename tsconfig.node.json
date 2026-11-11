@@ -34,6 +34,9 @@
     "src/renderer/src/features/tasks/task-save-queue.ts",
     "src/renderer/src/features/tasks/assignment.ts",
     "src/renderer/src/features/tasks/task-rules.ts",
-    "src/renderer/src/features/tasks/selection.ts"
+    "src/renderer/src/features/tasks/selection.ts",
+    "src/renderer/src/features/tasks/favorite-saver.ts",
+    "src/renderer/src/features/tasks/due-format.ts",
+    "src/renderer/src/features/summary/summary-merge.ts"
   ]
 }

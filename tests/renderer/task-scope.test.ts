@@ -26,7 +26,8 @@ const task = (id: string, title: string, projectId: string | null, completed = f
   completedAt: completed ? '2026-11-10T01:00:00.000Z' : null,
   projectId,
   milestoneId: null,
-  position: null
+  position: null,
+  dueto: null, favorite: false
 })
 
 describe('表示範囲（Inbox / プロジェクト）', () => {

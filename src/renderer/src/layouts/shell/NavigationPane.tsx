@@ -13,7 +13,7 @@ import { PaneHeader } from './PaneHeader'
 import { SCREENS, screenOf, type ScreenId } from './screens'
 
 // 幅広のナビゲーション（フェーズ5.4。旧アクティビティバー＋サイドバーを1つのペインに統合）。
-// - Inbox / Project（未完了のプロジェクト一覧、最下段に NEW PROJECT。フェーズ5.8で区分を廃止）/ 設定 を縦に並べ、全体を縦スクロールする。
+// - Summary Review（フェーズ6）/ Inbox / Project（未完了のプロジェクト一覧、最下段に NEW PROJECT。フェーズ5.8で区分を廃止）/ 設定 を縦に並べ、全体を縦スクロールする。
 // - 狭い幅（最小幅はWORKSPACE_LIMITS.sidebarWidth.min）では項目名を省略表示し、バッジ・折りたたみボタンは常に表示する。
 // - 選択状態はRouterの現在位置から導出する（aria-current）。プロジェクトの選択は既存の未保存確認（useBlocker）を通る。
 // - Project は折りたためる（保存しない）。折りたたんでも選択中のプロジェクト名は表示し、選択が分からなくならないようにする。
@@ -132,6 +132,8 @@ export function NavigationPane({ pathname }: { pathname: string }) {
     >
       <PaneHeader id="navigation-title" title="GTD" />
       <Box sx={{ flex: 1, minHeight: 0, overflowY: 'auto', overflowX: 'hidden', pb: 2 }}>
+        {/* Summary Review（フェーズ6）は Inbox の直上 */}
+        <NavItem screen="summary" active={screen === 'summary'} onClick={() => void navigate({ to: '/summary' })} />
         <NavItem screen="inbox" active={screen === 'inbox'} badge={inboxBadge} onClick={() => void navigate({ to: '/inbox' })} />
         <NavItem
           screen="projects"

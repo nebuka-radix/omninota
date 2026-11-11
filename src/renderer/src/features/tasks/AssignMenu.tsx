@@ -15,6 +15,8 @@ import { disambiguatedNames, milestonesOf, type Assignment } from './assignment'
 // キーボード: MUI の Menu（↑↓・Enter・Esc）。開いた時と段階が変わった時は先頭の項目にフォーカスする。
 // フェーズ5.9: 複数タスク（Inboxの選択中のタスク）をまとめて紐付けられる。対象件数をメニューの見出しに示す。
 //   マイルストンはカードと同じ順（手動順 → 作成順）
+// TaskRow の紐付けアイコン: その行の1タスク。プロジェクト所属のタスクでは、現在のマイルストンを選べない項目として示す
+//   （保存は呼び出し側。Inbox のタスクは Inbox からの紐付けAPI、プロジェクト所属のタスクは単体の所属変更API）
 export function AssignMenu({
   tasks,
   anchor,
@@ -26,6 +28,9 @@ export function AssignMenu({
   onChoose: (assignment: Assignment) => void
   onClose: () => void
 }) {
+  // 1タスクの所属変更（プロジェクト所属のタスク）なら、その現在の所属
+  const single = tasks.length === 1 ? tasks[0] : undefined
+  const currentMilestoneId = single?.milestoneId ?? null
   const projects = useQuery(projectListQueryOptions)
   const milestones = useQuery(milestoneListQueryOptions)
   const [projectId, setProjectId] = useState<string | null>(null)
@@ -56,7 +61,7 @@ export function AssignMenu({
   } else if (!chosenProject) {
     items = [
       <ListSubheader key="title" sx={{ lineHeight: '28px', fontSize: 11 }}>
-        {tasks.length > 1 ? `選択した ${tasks.length} 件の紐付け先のプロジェクト` : '紐付け先のプロジェクト'}
+        {tasks.length > 1 ? `選択した ${tasks.length} 件の紐付け先のプロジェクト` : currentMilestoneId ? '移動先のプロジェクト' : '紐付け先のプロジェクト'}
       </ListSubheader>,
       ...(openProjects.length === 0
         ? [
@@ -105,18 +110,27 @@ export function AssignMenu({
             </MenuItem>
           ]
         : []),
-      ...own.map((milestone, index) => (
-        <MenuItem
-          key={milestone.id}
-          autoFocus={index === 0}
-          data-assign-milestone-id={milestone.id}
-          onClick={() => choose({ projectId: chosenProject.id, milestoneId: milestone.id })}
-          sx={{ fontSize: 13, gap: 1 }}
-        >
-          <Flag size={14} aria-hidden />
-          {milestoneLabels.get(milestone.id) ?? milestone.name}
-        </MenuItem>
-      ))
+      ...own.map((milestone) => {
+        const current = milestone.id === currentMilestoneId
+        return (
+          <MenuItem
+            key={milestone.id}
+            autoFocus={milestone.id === own.find((item) => item.id !== currentMilestoneId)?.id}
+            disabled={current}
+            data-assign-milestone-id={milestone.id}
+            onClick={() => choose({ projectId: chosenProject.id, milestoneId: milestone.id })}
+            sx={{ fontSize: 13, gap: 1 }}
+          >
+            <Flag size={14} aria-hidden />
+            {milestoneLabels.get(milestone.id) ?? milestone.name}
+            {current && (
+              <Typography component="span" sx={{ ml: 'auto', pl: 2, fontSize: 11, color: 'text.secondary' }}>
+                現在の所属
+              </Typography>
+            )}
+          </MenuItem>
+        )
+      })
     ]
   }
 

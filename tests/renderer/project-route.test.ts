@@ -13,7 +13,7 @@ const project: ProjectDto = {
 }
 
 describe('起動時の画面の復元（ルート未指定の場合）', () => {
-  it.each(['/inbox', '/settings', '/projects'] as const)('%s はそのまま開き、プロジェクト一覧は取得しない', async (route) => {
+  it.each(['/inbox', '/settings', '/projects', '/summary'] as const)('%s はそのまま開き、プロジェクト一覧は取得しない', async (route) => {
     const load = vi.fn(async () => [project])
     expect(await resolveStartupTarget(route, load)).toEqual({ to: route })
     expect(load).not.toHaveBeenCalled()

@@ -1,6 +1,7 @@
 import {
   useCallback,
   useEffect,
+  useId,
   useLayoutEffect,
   useRef,
   useState,
@@ -8,31 +9,19 @@ import {
   type MouseEvent as ReactMouseEvent,
   type PointerEvent as ReactPointerEvent
 } from 'react'
-import { Box, Button, ButtonBase, Checkbox, Typography } from '@mui/material'
+import { Box, ButtonBase, Typography } from '@mui/material'
 import { defaultRangeExtractor, useVirtualizer, type Range } from '@tanstack/react-virtual'
-import { ArrowDown, ArrowUp, GripVertical, Link2, MoreHorizontal } from 'lucide-react'
+import { ArrowDown, ArrowUp, GripVertical } from 'lucide-react'
 import type { SortingState } from '@tanstack/react-table'
-import { isTaskCompleted, type TaskDto } from '../../../../shared/contracts/tasks'
+import type { TaskDto } from '../../../../shared/contracts/tasks'
+import { useLocalDay } from '../../lib/local-day'
 import { vscodeColors } from '../../theme'
-import { InlineTitleInput, type InlineTitleEditController } from './inline-title-edit'
+import { usePendingClick } from './pending-click'
 import { nearestRemaining, selectAll, selectOnly, selectRange, toggleSelection, EMPTY_SELECTION, type TaskSelection } from './selection'
 import type { TaskSortColumn } from './task-table'
+import { TaskRow, TASK_ROW_HEIGHT, taskOptionId, type TaskRowActions } from './TaskRow'
 
-// 固定行高（可変行高は将来の課題）。仮想行にMotionのlayoutアニメーションは付けない。
-export const TASK_ROW_HEIGHT = 34
-const DATE_COLUMN_WIDTH = 132
-const ASSIGN_COLUMN_WIDTH = 88
-// 行のメニュー（「…」）の列（フェーズ5.6）
-const MENU_COLUMN_WIDTH = 28
-// 並べ替えのハンドルの列（カード。フェーズ5.9）
-const HANDLE_COLUMN_WIDTH = 18
-const CHECK_COLUMN_WIDTH = { table: 40, card: 32 }
-const gridColumns = (withAssign: boolean, card: boolean, withMenu: boolean, withHandle: boolean) => {
-  const menu = withMenu ? ` ${MENU_COLUMN_WIDTH}px` : ''
-  return card
-    ? `${withHandle ? `${HANDLE_COLUMN_WIDTH}px ` : ''}${CHECK_COLUMN_WIDTH.card}px minmax(0, 1fr)${menu}`
-    : `${CHECK_COLUMN_WIDTH.table}px minmax(0, 1fr) ${withAssign ? `${ASSIGN_COLUMN_WIDTH}px ` : ''}${DATE_COLUMN_WIDTH}px${menu}`
-}
+export { TASK_ROW_HEIGHT, taskOptionId }
 const PAGE_STEP = 10
 // 行のドラッグ（Inbox → 紐付け先）を始める移動量（px）。これより小さい移動はクリック・ダブルクリックとして扱う
 const DRAG_THRESHOLD = 5
@@ -51,8 +40,6 @@ export const formatTaskDateTime = (iso: string) => {
   const date = new Date(iso)
   return Number.isNaN(date.getTime()) ? iso : dateTimeFormat.format(date)
 }
-
-export const taskOptionId = (taskId: string) => `task-option-${taskId}`
 
 export function SortHeader({
   column,
@@ -110,34 +97,42 @@ export type ReorderOptions = {
   onBlocked: (reason: string) => void
 }
 
-// タスクの一覧（role="listbox"）。DOMフォーカスはリスト本体に置き、
-// 現在行は aria-activedescendant で示す（仮想化で行要素が入れ替わってもフォーカスを失わない）。
+// 外部のスクロール領域で仮想化する一覧（Summary Review のセクション。複数の一覧で1つのスクロール領域を共有する）
+export type ExternalScroll = {
+  element: HTMLElement | null
+  // スクロール領域の内容の先頭から、この一覧の先頭までの距離（px）
+  offset: number
+}
+
+// タスクの一覧（role="listbox"）。各行は共通の TaskRow（Inbox・プロジェクトのカード・Summary Review）。
+// DOMフォーカスはリスト本体に置き、現在行は aria-activedescendant で示す（仮想化で行要素が入れ替わってもフォーカスを失わない）。
 // - 上下キー・Home/End・PageUp/PageDown: 現在行の移動（選択は変えない）
 // - Enter: 現在行を選択して詳細を表示（Inboxは右サイドバーを「タスク詳細」に切り替える）
 // - Space: 現在行の完了／未完了を切り替える（行の選択は変えない）
-// - M: 「紐付け」メニュー（Inbox。現在行が選択に含まれていれば選択中のタスクすべて）
-// - Delete / Backspace: 削除（確認なし。フェーズ5.9。Inboxは現在行が選択に含まれていれば選択中のタスクすべて）
-// - Shift+F10 / ContextMenu キー: 行のメニュー
-// - F2: タスク名のインライン編集（フェーズ5.9。マウスはタスク名のダブルクリック）
+// - E: 現在行のタスク編集モーダル（マウスはタスク名のクリック）
+// - F2: タスク名のインライン編集（マウスはタスク名のダブルクリック）
+// - F: お気に入りの切り替え / D: 期限のメニュー
+// - M: 紐付けメニュー（Inbox は現在行が選択に含まれていれば選択中のタスクすべて＝onRequestAssignKey。それ以外は現在行の1件）
+// - Delete / Backspace: 削除（確認なし。Inboxは現在行が選択に含まれていれば選択中のタスクすべて）
+// - Shift+F10 / ContextMenu キー: 行の「…」メニュー（削除だけ）
 // - Inboxの複数選択（フェーズ5.9）: Shift+↑↓ で範囲選択、X で現在行の選択の追加・解除、⌘A ですべて選択、Esc で選択解除。
-//   マウスは ⌘+クリックで追加・解除、Shift+クリックで範囲選択（現在の表示順）。
+//   マウスは ⌘+クリックで追加・解除、Shift+クリックで範囲選択（現在の表示順）。修飾キー付きのタスク名のクリックも複数選択（モーダルは開かない）。
 // - カードの並べ替え（フェーズ5.9）: Alt+↑↓ で現在行を上下へ移動。マウスは行の先頭のハンドルをドラッグ（Esc で取り消し）。
-// - 行のチェックボックスはマウス用。キーボード・読み上げでは上記のSpaceで同じ操作を行う
-//   （option内に操作要素を置けないため。Tab移動の対象も増やさない）
-// 「紐付け」ボタン・「…」ボタン・並べ替えのハンドル・インライン編集の入力欄は listbox の外側の重ね合わせ層に描画し、
-// option の中に操作要素を置かない。
-// フェーズ5.5: variant="card" はマイルストンのカード内の一覧（列見出し・作成日時の列なし。カードごとに1つの仮想リスト）。
-// - ← → : 隣のカードの一覧へフォーカスを移す（onNavigateCard）
+// マウス:
+// - 行の背景のクリック: 選択（既存どおり）。タスク名のクリック: 少し待ってから編集モーダル（ダブルクリックならモーダルを開かずインライン編集）。
+//   保留中のクリックは、ドラッグの開始・他の操作・アンマウントで取り消す（pending-click.ts）。ドラッグはクリックとして扱わない。
+// variant: table（Inbox。並べ替えの見出しあり）/ card（マイルストンのカード。← → で隣のカードへ）/ section（Summary Review。外部のスクロール領域）
 export function TaskList({
   tasks,
+  actions,
   variant = 'table',
   listLabel,
   cardKey,
   emptyLabel,
   maxVisibleRows,
+  externalScroll,
   onNavigateCard,
-  onRequestAssign,
-  onRequestRowMenu,
+  onRequestAssignKey,
   onRequestDelete,
   totalCount,
   selectedTaskId,
@@ -146,14 +141,13 @@ export function TaskList({
   resetScrollKey,
   onSort,
   onSelect,
-  onToggleCompleted,
   multiSelect,
-  inlineEdit,
   onRowDragStart,
   reorder
 }: {
   tasks: readonly TaskDto[]
-  variant?: 'table' | 'card'
+  actions: TaskRowActions
+  variant?: 'table' | 'card' | 'section'
   // 一覧の読み上げ名（省略時は「タスク一覧（N件表示 / 全N件）」）
   listLabel?: string
   // カードの識別（隣のカードへの移動で使う）
@@ -162,24 +156,22 @@ export function TaskList({
   emptyLabel?: string
   // 行数に合わせて高さを決める場合の最大行数（row レイアウトのカード。フェーズ5.9）。省略時は親の高さいっぱい
   maxVisibleRows?: number
+  // variant="section" の外部のスクロール領域
+  externalScroll?: ExternalScroll
   onNavigateCard?: (direction: -1 | 1) => void
-  // 行の「紐付け」（Inbox）。anchor はメニューを表示する位置の要素
-  onRequestAssign?: (task: TaskDto, anchor: HTMLElement) => void
-  // 行のメニュー（削除など。フェーズ5.6）。anchor はメニューを表示する位置の要素
-  onRequestRowMenu?: (task: TaskDto, anchor: HTMLElement) => void
-  // 行の削除（確認なし。フェーズ5.9）
-  onRequestDelete?: (task: TaskDto) => void
+  // M キー（Inbox: 選択中のタスクの一括紐付け）。省略時は現在行の1件の紐付けメニュー
+  onRequestAssignKey?: (task: TaskDto, anchor: HTMLElement) => void
+  // Delete キー（確認なし。Inbox: 選択中のタスクの一括削除）
+  onRequestDelete: (task: TaskDto) => void
   totalCount: number
   selectedTaskId: string | null
   pendingTaskIds: ReadonlySet<string>
-  sorting: SortingState
+  sorting?: SortingState
   // 検索・表示切り替え・ソートが変わったら先頭へスクロールする（データ更新だけでは戻さない）
   resetScrollKey: string
-  onSort: (column: TaskSortColumn) => void
+  onSort?: (column: TaskSortColumn) => void
   onSelect: (taskId: string) => void
-  onToggleCompleted: (task: TaskDto) => void
   multiSelect?: MultiSelectOptions
-  inlineEdit?: InlineTitleEditController
   // 行のドラッグの開始（Inbox → 紐付け先。フェーズ5.9）。しきい値を超えて動かした時に呼ぶ
   onRowDragStart?: (task: TaskDto, point: { x: number; y: number }) => void
   reorder?: ReorderOptions
@@ -189,14 +181,20 @@ export function TaskList({
   const [activeTaskId, setActiveTaskId] = useState<string | null>(null)
   const [listFocused, setListFocused] = useState(false)
   const card = variant === 'card'
-  const withAssign = onRequestAssign !== undefined && !card
-  const withMenu = onRequestRowMenu !== undefined
+  const section = variant === 'section'
   const withHandle = card && reorder !== undefined
-  const GRID_COLUMNS = gridColumns(withAssign, card, withMenu, withHandle)
+  const inlineEdit = actions.inlineEdit
+  const today = useLocalDay()
+  const listId = `task-list-${useId().replace(/:/g, '')}`
+  // 行の操作ボタン（TaskRow がポータルで描画する重ね合わせ層）
+  const [controlsLayer, setControlsLayer] = useState<HTMLElement | null>(null)
+  const pendingClick = usePendingClick()
+  // 外部のスクロール領域を使う場合（section）の位置
+  const scrollOffset = section ? externalScroll?.offset ?? 0 : 0
   // キーボード移動の対象となるタスクの並び（行の並びと同じ）
   const orderedTasks = tasks
   const order = tasks.map((task) => task.id)
-  const editingTaskId = inlineEdit?.state?.taskId ?? null
+  const editingTaskId = inlineEdit.state?.taskId ?? null
   const editingIndex = editingTaskId === null ? -1 : tasks.findIndex((task) => task.id === editingTaskId)
 
   // 並べ替えのドラッグ中の状態（挿入位置 0..n）
@@ -204,7 +202,8 @@ export function TaskList({
 
   const virtualizer = useVirtualizer({
     count: tasks.length,
-    getScrollElement: () => scrollRef.current,
+    getScrollElement: () => (section ? externalScroll?.element ?? null : scrollRef.current),
+    scrollMargin: scrollOffset,
     estimateSize: () => TASK_ROW_HEIGHT,
     // 安定したキー（タスクID）。1つのタスクは1つのカードにだけ表示されるため、カード間でも衝突しない
     getItemKey: (index) => tasks[index]?.id ?? index,
@@ -222,8 +221,8 @@ export function TaskList({
 
   // 条件（resetScrollKey）が変わった時だけ先頭へ戻す。virtualizerは毎回同じインスタンス。
   useEffect(() => {
-    virtualizer.scrollToOffset(0)
-  }, [resetScrollKey, virtualizer])
+    if (!section) virtualizer.scrollToOffset(0)
+  }, [resetScrollKey, virtualizer, section])
 
   const scrollToTask = (taskIndex: number) => {
     virtualizer.scrollToIndex(taskIndex, { align: 'auto' })
@@ -277,10 +276,14 @@ export function TaskList({
   const focusList = () => listRef.current?.focus({ preventScroll: true })
 
   const startEdit = (task: TaskDto) => {
-    if (!inlineEdit || pendingTaskIds.has(task.id)) return
+    pendingClick.cancel()
+    if (pendingTaskIds.has(task.id)) return
     setActiveTaskId(task.id)
     void inlineEdit.start(task)
   }
+
+  // 現在行の要素（キーボードから開くメニュー・モーダルの位置と、閉じた後のフォーカスの戻り先）
+  const anchorOf = (task: TaskDto) => document.getElementById(taskOptionId(task.id)) ?? listRef.current
 
   // 並べ替え（キーボード Alt+↑↓・ハンドルのドラッグ）で、このカードのタスクの新しい順序を作る
   const moveRow = (taskId: string, toIndex: number) => {
@@ -297,6 +300,7 @@ export function TaskList({
 
   const handleKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     if (event.target !== event.currentTarget) return
+    pendingClick.cancel()
     const meta = event.metaKey || event.ctrlKey
     // カードの並べ替え（Alt+↑↓）
     if (reorder && event.altKey && !meta && (event.key === 'ArrowUp' || event.key === 'ArrowDown')) {
@@ -374,7 +378,7 @@ export function TaskList({
       }
       case ' ': {
         // 現在行の完了切り替え。現在行がなければ表示範囲の行を現在行にするだけ（意図しない行を操作しない）
-        if (activeTask) onToggleCompleted(activeTask)
+        if (activeTask) actions.toggleCompleted(activeTask)
         else moveTo(current)
         break
       }
@@ -390,7 +394,7 @@ export function TaskList({
         break
       }
       case 'F2': {
-        if (!inlineEdit) {
+        if (meta || event.altKey) {
           handled = false
           break
         }
@@ -398,23 +402,37 @@ export function TaskList({
         else moveTo(current)
         break
       }
+      case 'e':
+      case 'E':
+      case 'f':
+      case 'F':
+      case 'd':
+      case 'D':
       case 'm':
       case 'M': {
-        // 紐付けメニュー（現在行がなければ現在行を決めるだけ）
-        if (!onRequestAssign || meta || event.altKey) {
+        // E: 編集モーダル / F: お気に入り / D: 期限のメニュー / M: 紐付けメニュー（現在行がなければ現在行を決めるだけ）
+        if (meta || event.altKey) {
           handled = false
           break
         }
-        if (activeTask) {
-          const anchor = document.getElementById(taskOptionId(activeTask.id)) ?? listRef.current
-          if (anchor) onRequestAssign(activeTask, anchor)
-        } else moveTo(current)
+        if (!activeTask) {
+          moveTo(current)
+          break
+        }
+        const anchor = anchorOf(activeTask)
+        if (!anchor) break
+        const key = event.key.toLowerCase()
+        if (key === 'e') actions.openEditor(activeTask, anchor)
+        else if (key === 'f') actions.toggleFavorite(activeTask)
+        else if (key === 'd') {
+          if (!pendingTaskIds.has(activeTask.id)) actions.openDue(activeTask, anchor)
+        } else if (!pendingTaskIds.has(activeTask.id)) (onRequestAssignKey ?? actions.openAssign)(activeTask, anchor)
         break
       }
       case 'Delete':
       case 'Backspace': {
         // 削除（確認なし。現在行がなければ現在行を決めるだけ）
-        if (!onRequestDelete || meta || event.altKey) {
+        if (meta || event.altKey) {
           handled = false
           break
         }
@@ -424,14 +442,14 @@ export function TaskList({
       }
       case 'ContextMenu':
       case 'F10': {
-        // 現在行のメニュー（Shift+F10 か ContextMenu キー）
-        if (!onRequestRowMenu || (event.key === 'F10' && !event.shiftKey)) {
+        // 現在行の「…」メニュー（Shift+F10 か ContextMenu キー）
+        if (event.key === 'F10' && !event.shiftKey) {
           handled = false
           break
         }
         if (activeTask) {
-          const anchor = document.getElementById(taskOptionId(activeTask.id)) ?? listRef.current
-          if (anchor) onRequestRowMenu(activeTask, anchor)
+          const anchor = anchorOf(activeTask)
+          if (anchor) actions.openMenu(activeTask, anchor)
         } else moveTo(current)
         break
       }
@@ -446,11 +464,12 @@ export function TaskList({
   const handleFocus = () => {
     setListFocused(true)
     if (activeIndex >= 0 || orderedTasks.length === 0) return
-    const scrollTop = scrollRef.current?.scrollTop ?? 0
+    const scroller = section ? externalScroll?.element : scrollRef.current
+    const scrollTop = (scroller?.scrollTop ?? 0) - scrollOffset
     const items = virtualizer.getVirtualItems()
     const taskOf = (index: number) => tasks[index]
     const selectedItem = items.find((item) => taskOf(item.index)?.id === selectedTaskId)
-    const firstInView = items.find((item) => item.end > scrollTop)
+    const firstInView = items.find((item) => item.end - scrollOffset > scrollTop)
     const chosen = selectedItem ?? firstInView ?? items[0]
     const target = chosen ? taskOf(chosen.index) : orderedTasks[0]
     if (target) setActiveTaskId(target.id)
@@ -470,6 +489,7 @@ export function TaskList({
       if (Math.hypot(move.clientX - start.x, move.clientY - start.y) < DRAG_THRESHOLD) return
       cleanup()
       suppressClickRef.current = true
+      pendingClick.cancel()
       onRowDragStart(task, { x: move.clientX, y: move.clientY })
     }
     const cleanup = () => {
@@ -504,6 +524,35 @@ export function TaskList({
     onSelect(task.id)
   }
 
+  // タスク名のクリック: シングルは少し待って編集モーダル、ダブルはインライン編集（モーダルを開かない）。
+  // 修飾キー付き（Inboxの複数選択）・ドラッグの直後は、行のクリックとして扱う（モーダルを開かない）
+  const handleTitleClick = (event: ReactMouseEvent<HTMLElement>, task: TaskDto) => {
+    if (suppressClickRef.current) {
+      // ドラッグの直後のクリック: 選択もモーダルも行わない
+      event.stopPropagation()
+      suppressClickRef.current = false
+      return
+    }
+    if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) {
+      pendingClick.cancel()
+      return
+    }
+    event.stopPropagation()
+    setActiveTaskId(task.id)
+    if (event.detail >= 2) {
+      startEdit(task)
+      return
+    }
+    const anchor = event.currentTarget
+    pendingClick.schedule(anchor, () => {
+      if (document.contains(anchor)) actions.openEditor(task, anchor)
+      else {
+        const row = anchorOf(task)
+        if (row) actions.openEditor(task, row)
+      }
+    })
+  }
+
   // --- 並べ替えのハンドル（カード） ---
   const reorderCleanupRef = useRef<(() => void) | null>(null)
   useEffect(() => () => reorderCleanupRef.current?.(), [])
@@ -518,6 +567,7 @@ export function TaskList({
 
   const handleReorderPointerDown = (event: ReactPointerEvent<HTMLElement>, task: TaskDto, index: number) => {
     event.stopPropagation()
+    pendingClick.cancel()
     if (!reorder || event.button !== 0 || reorderDrag) return
     event.preventDefault()
     if (reorder.disabledReason) {
@@ -590,45 +640,48 @@ export function TaskList({
   const activeTask = activeIndex >= 0 ? orderedTasks[activeIndex] : undefined
   const activeId = activeRendered && activeTask ? taskOptionId(activeTask.id) : undefined
 
-  const rowBox = (start: number) => ({
-    position: 'absolute' as const,
-    top: 0,
-    left: 0,
-    width: '100%',
-    height: TASK_ROW_HEIGHT,
-    transform: `translateY(${start}px)`
-  })
-
-  // インライン編集の入力欄の位置（タイトルの列に重ねる）
-  const titleLeft = card ? (withHandle ? HANDLE_COLUMN_WIDTH : 0) + CHECK_COLUMN_WIDTH.card : CHECK_COLUMN_WIDTH.table
-  const titleRight = card
-    ? withMenu
-      ? MENU_COLUMN_WIDTH
-      : 0
-    : (withAssign ? ASSIGN_COLUMN_WIDTH : 0) + DATE_COLUMN_WIDTH + (withMenu ? MENU_COLUMN_WIDTH : 0)
-  const editingItem = editingIndex >= 0 ? virtualItems.find((item) => item.index === editingIndex) : undefined
-  const editingTask = editingIndex >= 0 ? tasks[editingIndex] : undefined
-
   const selectedIds = multiSelect?.selection.ids
-  const fixedHeight = maxVisibleRows !== undefined ? Math.max(1, Math.min(maxVisibleRows, tasks.length)) * TASK_ROW_HEIGHT : undefined
+  const fixedHeight =
+    section ? tasks.length * TASK_ROW_HEIGHT : maxVisibleRows !== undefined ? Math.max(1, Math.min(maxVisibleRows, tasks.length)) * TASK_ROW_HEIGHT : undefined
+
+  const reorderHandle = (task: TaskDto, index: number) => {
+    if (!withHandle || !reorder) return undefined
+    const blocked = reorder.disabledReason
+    return (
+      // マウス用の入口（Tab移動の対象は増やさない。キーボードは一覧で Alt+↑↓）
+      <Box
+        component="span"
+        role="presentation"
+        title={blocked ?? (reorder.manual ? 'ドラッグして並べ替え（Alt+↑↓）' : 'ドラッグして並べ替え（並べ替えが「手動順」に切り替わります）')}
+        data-reorder-task-id={task.id}
+        data-reorder-disabled={blocked ? '' : undefined}
+        onPointerDown={(event) => handleReorderPointerDown(event, task, index)}
+        sx={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          width: 16,
+          height: 30,
+          borderRadius: 0.5,
+          touchAction: 'none',
+          cursor: blocked ? 'not-allowed' : 'grab',
+          color: 'text.secondary',
+          opacity: blocked ? 0.35 : 0.8,
+          '&:hover': { bgcolor: blocked ? 'transparent' : vscodeColors.listHover, opacity: 1 }
+        }}
+      >
+        <GripVertical size={12} aria-hidden />
+      </Box>
+    )
+  }
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', minHeight: 0, flex: fixedHeight === undefined ? 1 : '0 0 auto' }}>
-      {!card && (
-        <Box
-          sx={{
-            display: 'grid',
-            gridTemplateColumns: GRID_COLUMNS,
-            height: 28,
-            flexShrink: 0,
-            borderBottom: `1px solid ${vscodeColors.border}`
-          }}
-        >
-          <span aria-hidden />
+      {variant === 'table' && sorting && onSort && (
+        // 並べ替えの見出し（作成日時は表示しないが、作成日時での並べ替えは残す）
+        <Box sx={{ display: 'flex', justifyContent: 'space-between', height: 28, flexShrink: 0, borderBottom: `1px solid ${vscodeColors.border}` }}>
           <SortHeader column="title" label="タイトル" sorting={sorting} onSort={onSort} />
-          {withAssign && <span aria-hidden />}
           <SortHeader column="createdAt" label="作成日時" sorting={sorting} onSort={onSort} align="right" />
-          {withMenu && <span aria-hidden />}
         </Box>
       )}
       <Box
@@ -640,7 +693,8 @@ export function TaskList({
           flex: fixedHeight === undefined ? 1 : '0 0 auto',
           height: fixedHeight,
           minHeight: 0,
-          overflowY: 'auto',
+          // section は外部のスクロール領域を使う（ここではスクロールしない）
+          overflowY: section ? 'visible' : 'auto',
           overflowX: 'hidden'
         }}
       >
@@ -648,6 +702,7 @@ export function TaskList({
         <Box sx={{ position: 'relative', height: virtualizer.getTotalSize(), minHeight: card ? '100%' : undefined }}>
           <Box
             ref={listRef}
+            id={listId}
             role="listbox"
             aria-label={listLabel ?? `タスク一覧（${orderedTasks.length}件表示 / 全${totalCount}件）`}
             aria-activedescendant={listFocused ? activeId : undefined}
@@ -658,6 +713,7 @@ export function TaskList({
             onBlur={() => setListFocused(false)}
             data-testid="task-list"
             data-card-list={cardKey}
+            data-variant={variant}
             sx={{
               position: 'absolute',
               inset: 0,
@@ -670,150 +726,48 @@ export function TaskList({
             {virtualItems.map((item) => {
               const task = tasks[item.index]
               if (!task) return null
-              const completed = isTaskCompleted(task)
               const selected = selectedIds ? selectedIds.has(task.id) : task.id === selectedTaskId
-              const active = listFocused && item.index === activeIndex
-              const pending = pendingTaskIds.has(task.id)
-              const dragging = reorderDrag?.taskId === task.id
               return (
-                <Box
+                <TaskRow
                   key={task.id}
-                  id={taskOptionId(task.id)}
-                  role="option"
-                  aria-selected={selected}
-                  aria-busy={pending || undefined}
-                  // 読み上げ名に対象のタスク名・完了状態を含める（チェックボックスは読み上げ対象外）
-                  aria-label={`${task.title}、${completed ? '完了' : '未完了'}、作成 ${formatTaskDateTime(task.createdAt)}${pending ? '、保存中' : ''}`}
-                  data-task-id={task.id}
-                  data-pending={pending || undefined}
-                  onPointerDown={(event) => handleRowPointerDown(event, task)}
-                  onClick={(event) => handleRowClick(event, task)}
-                  onContextMenu={
-                    onRequestRowMenu
-                      ? (event) => {
-                          // 右クリック: 行のメニュー（選択・詳細パネルは変えない）
-                          event.preventDefault()
-                          setActiveTaskId(task.id)
-                          onRequestRowMenu(task, event.currentTarget)
-                        }
-                      : undefined
-                  }
-                  sx={{
-                    ...rowBox(item.start),
-                    display: 'grid',
-                    gridTemplateColumns: GRID_COLUMNS,
-                    alignItems: 'center',
-                    cursor: 'default',
-                    // 保存中（一括紐付け・削除・並べ替えなど）の行は薄く表示する
-                    opacity: pending || dragging ? 0.5 : 1,
-                    bgcolor: selected ? vscodeColors.listActiveSelection : 'transparent',
-                    // キーボードの現在行（フォーカス）は枠線、選択は背景色で区別する
-                    outline: active ? `1px solid ${vscodeColors.focusBorder}` : 'none',
-                    outlineOffset: -1,
-                    '&:hover': { bgcolor: selected ? vscodeColors.listActiveSelection : vscodeColors.listHover }
+                  task={task}
+                  top={item.start - scrollOffset}
+                  listId={listId}
+                  controlsLayer={controlsLayer}
+                  today={today}
+                  actions={actions}
+                  selected={selected}
+                  active={listFocused && item.index === activeIndex}
+                  pending={pendingTaskIds.has(task.id)}
+                  dimmed={reorderDrag?.taskId === task.id}
+                  handle={reorderHandle(task, item.index)}
+                  onRowPointerDown={(event) => handleRowPointerDown(event, task)}
+                  onRowClick={(event) => handleRowClick(event, task)}
+                  onRowContextMenu={(event) => {
+                    // 右クリック: 行の「…」メニュー（選択・詳細パネルは変えない）
+                    event.preventDefault()
+                    pendingClick.cancel()
+                    setActiveTaskId(task.id)
+                    actions.openMenu(task, event.currentTarget)
                   }}
-                >
-                  {withHandle && <span aria-hidden />}
-                  <Box
-                    sx={{ display: 'flex', justifyContent: 'center' }}
-                    // チェック操作で行選択（詳細パネルの切り替え）・ドラッグを起こさない
-                    onClick={(event) => event.stopPropagation()}
-                    onPointerDown={(event) => event.stopPropagation()}
-                    aria-hidden
-                  >
-                    <Checkbox
-                      size="small"
-                      checked={completed}
-                      disabled={pending}
-                      onChange={() => onToggleCompleted(task)}
-                      tabIndex={-1}
-                      slotProps={{ input: { 'aria-hidden': true, tabIndex: -1 } }}
-                      sx={{ p: 0.5 }}
-                    />
-                  </Box>
-                  <Typography
-                    component="span"
-                    noWrap
-                    data-testid="task-title"
-                    // タスク名のダブルクリックでインライン編集（フェーズ5.9）
-                    onDoubleClick={
-                      inlineEdit
-                        ? (event) => {
-                            event.stopPropagation()
-                            startEdit(task)
-                          }
-                        : undefined
-                    }
-                    sx={{
-                      fontSize: 13,
-                      px: 2,
-                      // 完了は色だけでなく取り消し線でも示す
-                      textDecoration: completed ? 'line-through' : 'none',
-                      color: completed ? 'text.secondary' : 'text.primary'
-                    }}
-                  >
-                    {task.title}
-                  </Typography>
-                  {withAssign && <span aria-hidden />}
-                  {!card && (
-                    <Typography component="span" noWrap sx={{ fontSize: 12, px: 2, textAlign: 'right', color: 'text.secondary' }}>
-                      {formatTaskDateTime(task.createdAt)}
-                    </Typography>
-                  )}
-                  {withMenu && <span aria-hidden />}
-                </Box>
+                  onTitleClick={(event) => handleTitleClick(event, task)}
+                  onTitleDoubleClick={(event) => {
+                    if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return
+                    event.stopPropagation()
+                    startEdit(task)
+                  }}
+                  onInlineDone={focusList}
+                />
               )
             })}
           </Box>
-          {/* listbox の外側の重ね合わせ層: 「紐付け」「…」ボタン・並べ替えのハンドル・インライン編集（option の中に操作要素を置かない）と、空のカードの表示 */}
-          <Box sx={{ position: 'absolute', inset: 0, pointerEvents: 'none' }} data-testid="task-list-overlay">
+          {/* listbox の外側の重ね合わせ層: 各 TaskRow の操作ボタン・並べ替えのハンドル・インライン編集（option の中に操作要素を置かない）と、空のカードの表示 */}
+          <Box ref={setControlsLayer} sx={{ position: 'absolute', inset: 0, pointerEvents: 'none' }} data-testid="task-list-overlay">
             {tasks.length === 0 && emptyLabel && (
               <Typography variant="caption" color="text.secondary" component="p" sx={{ px: 2, py: 1.5, m: 0 }} aria-hidden>
                 {emptyLabel}
               </Typography>
             )}
-            {withHandle &&
-              reorder &&
-              virtualItems.map((item) => {
-                const task = tasks[item.index]
-                if (!task) return null
-                const blocked = reorder.disabledReason
-                return (
-                  <Box
-                    key={`handle-${task.id}`}
-                    sx={{ ...rowBox(item.start), width: HANDLE_COLUMN_WIDTH, display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'auto' }}
-                  >
-                    {/* マウス用の入口（Tab移動の対象は増やさない。キーボードは一覧で Alt+↑↓） */}
-                    <Box
-                      component="span"
-                      role="presentation"
-                      title={
-                        blocked ??
-                        (reorder.manual ? 'ドラッグして並べ替え（Alt+↑↓）' : 'ドラッグして並べ替え（並べ替えが「手動順」に切り替わります）')
-                      }
-                      data-reorder-task-id={task.id}
-                      data-reorder-disabled={blocked ? '' : undefined}
-                      onPointerDown={(event) => handleReorderPointerDown(event, task, item.index)}
-                      onClick={(event) => event.stopPropagation()}
-                      sx={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        width: 16,
-                        height: 22,
-                        borderRadius: 0.5,
-                        touchAction: 'none',
-                        cursor: blocked ? 'not-allowed' : 'grab',
-                        color: 'text.secondary',
-                        opacity: blocked ? 0.35 : 0.8,
-                        '&:hover': { bgcolor: blocked ? 'transparent' : vscodeColors.listHover, opacity: 1 }
-                      }}
-                    >
-                      <GripVertical size={12} aria-hidden />
-                    </Box>
-                  </Box>
-                )
-              })}
             {reorderDrag && (
               // 挿入位置の線
               <Box
@@ -828,124 +782,6 @@ export function TaskList({
                   bgcolor: vscodeColors.focusBorder
                 }}
               />
-            )}
-            {withAssign &&
-              onRequestAssign &&
-              virtualItems.map((item) => {
-                const task = tasks[item.index]
-                if (!task) return null
-                const pending = pendingTaskIds.has(task.id)
-                return (
-                  <Box
-                    key={`assign-${task.id}`}
-                    sx={{
-                      ...rowBox(item.start),
-                      width: ASSIGN_COLUMN_WIDTH,
-                      left: 'auto',
-                      right: DATE_COLUMN_WIDTH + (withMenu ? MENU_COLUMN_WIDTH : 0),
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      pointerEvents: 'auto'
-                    }}
-                  >
-                    {/* マウス用の入口（Tab移動の対象は増やさない。キーボードは一覧で M キー） */}
-                    <Button
-                      size="small"
-                      variant="outlined"
-                      tabIndex={-1}
-                      disabled={pending}
-                      startIcon={<Link2 size={12} aria-hidden />}
-                      aria-label={`「${task.title}」を紐付け`}
-                      data-assign-task-id={task.id}
-                      onClick={(event) => onRequestAssign(task, event.currentTarget)}
-                      sx={{ minWidth: 0, px: 1, py: 0, fontSize: 11, height: 22 }}
-                    >
-                      紐付け
-                    </Button>
-                  </Box>
-                )
-              })}
-            {withMenu &&
-              onRequestRowMenu &&
-              virtualItems.map((item) => {
-                const task = tasks[item.index]
-                if (!task) return null
-                return (
-                  <Box
-                    key={`menu-${task.id}`}
-                    sx={{
-                      ...rowBox(item.start),
-                      width: MENU_COLUMN_WIDTH,
-                      left: 'auto',
-                      right: 0,
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      pointerEvents: 'auto'
-                    }}
-                  >
-                    {/* マウス用の入口（Tab移動の対象は増やさない。キーボードは一覧で Shift+F10 / ContextMenu、削除は Delete） */}
-                    <ButtonBase
-                      tabIndex={-1}
-                      aria-label={`「${task.title}」のメニュー`}
-                      aria-haspopup="menu"
-                      data-row-menu-task-id={task.id}
-                      onClick={(event) => {
-                        event.stopPropagation()
-                        onRequestRowMenu(task, event.currentTarget)
-                      }}
-                      sx={{
-                        width: 22,
-                        height: 22,
-                        borderRadius: 1,
-                        color: 'text.secondary',
-                        '&:hover': { bgcolor: vscodeColors.listHover, color: 'text.primary' }
-                      }}
-                    >
-                      <MoreHorizontal size={14} aria-hidden />
-                    </ButtonBase>
-                  </Box>
-                )
-              })}
-            {inlineEdit && editingItem && editingTask && (
-              <Box
-                data-testid="inline-title-editor-row"
-                sx={{
-                  ...rowBox(editingItem.start),
-                  left: titleLeft,
-                  width: `calc(100% - ${titleLeft + titleRight}px)`,
-                  display: 'flex',
-                  alignItems: 'center',
-                  px: 0.5,
-                  pointerEvents: 'auto',
-                  zIndex: 1
-                }}
-              >
-                <InlineTitleInput controller={inlineEdit} taskTitle={editingTask.title} onDone={focusList} />
-              </Box>
-            )}
-            {inlineEdit?.state?.error && editingItem && (
-              <Typography
-                id="inline-title-error"
-                role="alert"
-                data-testid="inline-title-error"
-                sx={{
-                  position: 'absolute',
-                  top: editingItem.start + TASK_ROW_HEIGHT - 2,
-                  left: titleLeft + 4,
-                  zIndex: 2,
-                  px: 1,
-                  py: 0.25,
-                  fontSize: 11,
-                  color: '#f48771',
-                  bgcolor: vscodeColors.sideBarBackground,
-                  border: '1px solid #f48771',
-                  borderRadius: 0.5
-                }}
-              >
-                {inlineEdit.state.error}
-              </Typography>
             )}
           </Box>
         </Box>

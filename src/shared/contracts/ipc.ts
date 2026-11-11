@@ -26,11 +26,14 @@ import type {
   DeleteTasksInput,
   DeleteTasksResult,
   ReorderMilestoneTasksInput,
+  SetTaskDueInput,
+  SetTaskFavoriteInput,
   SetTaskAssignmentInput,
   SetTaskCompletedInput,
   TaskDto,
   UpdateTaskTitleInput
 } from './tasks'
+import type { SummaryReview } from './summary'
 import type { WorkspaceSettings } from './workspace'
 
 export const IPC_CHANNELS = {
@@ -44,6 +47,10 @@ export const IPC_CHANNELS = {
   tasksAssignFromInbox: 'tasks:assign-from-inbox',
   tasksDeleteMany: 'tasks:delete-many',
   tasksReorderInMilestone: 'tasks:reorder-in-milestone',
+  tasksSetDue: 'tasks:set-due',
+  tasksSetFavorite: 'tasks:set-favorite',
+  summaryGet: 'summary:get',
+  summaryToday: 'summary:today',
   projectsList: 'projects:list',
   projectsCreate: 'projects:create',
   projectsRename: 'projects:rename',
@@ -156,6 +163,16 @@ export type GtdApi = {
     deleteMany: (input: DeleteTasksInput) => Promise<IpcResult<DeleteTasksResult>>
     // マイルストン内のタスクの手動順を保存する（フェーズ5.9）。そのマイルストンの表示中のタスク全件を返す
     reorderInMilestone: (input: ReorderMilestoneTasksInput) => Promise<IpcResult<TaskDto[]>>
+    // 期限の設定・変更・解除（フェーズ6）。期限だけを更新し、保存後のタスクを返す
+    setDue: (input: SetTaskDueInput) => Promise<IpcResult<TaskDto>>
+    // お気に入りの設定・解除。お気に入りだけを更新し、保存後のタスクを返す
+    setFavorite: (input: SetTaskFavoriteInput) => Promise<IpcResult<TaskDto>>
+  }
+  // Summary Review（フェーズ6）。条件は Main で適用し、該当するタスクだけを返す
+  summary: {
+    get: () => Promise<IpcResult<SummaryReview>>
+    // Main のローカルの今日（"YYYY-MM-DD"）。期限の表示に使う（保存の「今日」「明日」と同じ日付）
+    today: () => Promise<IpcResult<string>>
   }
   // 用途別のAPI（一覧・作成・名前変更はフェーズ5.1、完了・取り消しは5.3）
   projects: {

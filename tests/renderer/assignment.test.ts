@@ -34,7 +34,8 @@ const task = (id: string, milestoneId: string | null, projectId: string | null =
   completedAt: null,
   projectId,
   milestoneId,
-  position: null
+  position: null,
+  dueto: null, favorite: false
 })
 
 const m1 = milestone('11111111-0000-4000-8000-000000000001', P, 'M1', '2026-11-02T00:00:00.000Z')

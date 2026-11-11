@@ -1,6 +1,6 @@
-import { and, asc, count, desc, eq, inArray, isNull, max, sql } from 'drizzle-orm'
+import { and, asc, between, count, desc, eq, inArray, isNotNull, isNull, max, sql } from 'drizzle-orm'
 import type { AppDatabase } from '../db/client'
-import { tasks, type NewTaskRow, type TaskRow } from '../db/schema'
+import { milestones, projects, tasks, type NewTaskRow, type TaskRow } from '../db/schema'
 
 // SQLを使う取得・保存だけを置く。業務ルール（日時の付与・不要更新の判定）はServiceで行う。
 // 更新は用途別の関数に限定し、任意の列を書き換える関数は作らない。
@@ -50,7 +50,17 @@ export type TaskRepository = {
   maxPositionInMilestone(milestoneId: string): number | null
   // 手動順だけを書き換える（updated_at・created_at・completed_at は変えない）。表示中の行だけ。更新した件数を返す
   updatePosition(id: string, position: number): number
+  // --- フェーズ6: 期限・Summary Review ---
+  // 期限だけを書き換える（表示中の行だけ）。更新した行を返す。対象がない・非表示なら undefined
+  updateDue(id: string, dueto: string | null, updatedAt: string): TaskRow | undefined
+  // 未完了・表示中・期限が from〜to（両端を含む。"YYYY-MM-DD"）のタスクと、所属のプロジェクト名・マイルストン名。
+  // 期限の昇順 → 作成日時の昇順 → IDの昇順（索引 tasks_dueto_idx）
+  listDueBetween(from: string, to: string): DueTaskRow[]
+  // お気に入りだけを書き換える（表示中の行だけ）。更新した行を返す。対象がない・非表示なら undefined
+  updateFavorite(id: string, favorite: boolean, updatedAt: string): TaskRow | undefined
 }
+
+export type DueTaskRow = TaskRow & { dueto: string; projectName: string | null; milestoneName: string | null }
 
 export function createTaskRepository(db: AppDatabase): TaskRepository {
   const visible = (id: string) => and(eq(tasks.id, id), isNull(tasks.hiddenAt))
@@ -137,6 +147,23 @@ export function createTaskRepository(db: AppDatabase): TaskRepository {
     },
     updatePosition(id, position) {
       return db.update(tasks).set({ position }).where(visible(id)).run().changes
+    },
+    updateDue(id, dueto, updatedAt) {
+      return db.update(tasks).set({ dueto, updatedAt }).where(visible(id)).returning().get()
+    },
+    listDueBetween(from, to) {
+      const rows = db
+        .select({ task: tasks, projectName: projects.name, milestoneName: milestones.name })
+        .from(tasks)
+        .leftJoin(projects, eq(tasks.projectId, projects.id))
+        .leftJoin(milestones, eq(tasks.milestoneId, milestones.id))
+        .where(and(isNull(tasks.completedAt), isNull(tasks.hiddenAt), isNotNull(tasks.dueto), between(tasks.dueto, from, to)))
+        .orderBy(asc(tasks.dueto), asc(tasks.createdAt), asc(tasks.id))
+        .all()
+      return rows.map((row) => ({ ...row.task, dueto: row.task.dueto as string, projectName: row.projectName, milestoneName: row.milestoneName }))
+    },
+    updateFavorite(id, favorite, updatedAt) {
+      return db.update(tasks).set({ favorite, updatedAt }).where(visible(id)).returning().get()
     }
   }
 }

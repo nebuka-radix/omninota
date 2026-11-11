@@ -17,7 +17,13 @@ const api: GtdApi = {
     delete: (input) => ipcRenderer.invoke(IPC_CHANNELS.tasksDelete, input),
     assignFromInbox: (input) => ipcRenderer.invoke(IPC_CHANNELS.tasksAssignFromInbox, input),
     deleteMany: (input) => ipcRenderer.invoke(IPC_CHANNELS.tasksDeleteMany, input),
-    reorderInMilestone: (input) => ipcRenderer.invoke(IPC_CHANNELS.tasksReorderInMilestone, input)
+    reorderInMilestone: (input) => ipcRenderer.invoke(IPC_CHANNELS.tasksReorderInMilestone, input),
+    setDue: (input) => ipcRenderer.invoke(IPC_CHANNELS.tasksSetDue, input),
+    setFavorite: (input) => ipcRenderer.invoke(IPC_CHANNELS.tasksSetFavorite, input)
+  },
+  summary: {
+    get: () => ipcRenderer.invoke(IPC_CHANNELS.summaryGet),
+    today: () => ipcRenderer.invoke(IPC_CHANNELS.summaryToday)
   },
   projects: {
     list: () => ipcRenderer.invoke(IPC_CHANNELS.projectsList),

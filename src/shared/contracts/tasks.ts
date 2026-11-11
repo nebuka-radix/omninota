@@ -89,6 +89,26 @@ export type TaskDto = {
   // マイルストン内の手動順（フェーズ5.9。小さいほど上）。null は手動順がない（作成日時の古い順で表示する）。
   // 同じマイルストンの表示中のタスクは、全件に値があるか、全件 null のどちらか（Mainが保つ）
   position: number | null
+  // 期限（フェーズ6）。日付のみ "YYYY-MM-DD"（時刻・タイムゾーンなし）。null は未設定
+  dueto: string | null
+  // お気に入り（0009で追加）。未設定はなく、既定は false
+  favorite: boolean
+}
+
+// 期限の設定・変更・解除（フェーズ6）。「今日」「明日」は Main が操作の時点のローカルの暦日で決める
+// （画面を開いたまま日付が変わっても、古い日付を保存しない）。date は実在する暦日（Mainで検証）。過去の日付も可
+export type TaskDueChange = { kind: 'today' } | { kind: 'tomorrow' } | { kind: 'date'; date: string } | { kind: 'clear' }
+
+export type SetTaskDueInput = {
+  id: string
+  due: TaskDueChange
+}
+
+// お気に入りの設定・解除（TaskRow の星）。トグルではなく目的の状態を指定する（連打・再試行で反転しないようにする）。
+// お気に入りだけを更新し、同じ値なら変更しない（updatedAt も変えない）
+export type SetTaskFavoriteInput = {
+  id: string
+  favorite: boolean
 }
 
 export function isTaskCompleted(task: Pick<TaskDto, 'completedAt'>): boolean {

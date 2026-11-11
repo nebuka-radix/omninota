@@ -75,12 +75,13 @@ export function assert(condition, message, detail) {
 }
 
 // アプリを起動する。userDataDir は呼び出し側が作った一時ディレクトリ。
-export async function launchApp({ mode, userDataDir, dialogAnswers = [], displayId, label }) {
+// extraEnv（フェーズ6）: タイムゾーン（TZ）・テスト用の時計（GTD_TEST_CLOCK_FILE）など、この起動だけの環境変数
+export async function launchApp({ mode, userDataDir, dialogAnswers = [], displayId, label, extraEnv = {} }) {
   if (!existsSync(join(PROJECT_ROOT, 'out', 'main', 'index.js'))) {
     throw new Error('out/ がありません。先に npm run build を実行してください（npm run test:ui は自動でビルドします）')
   }
   const port = await freePort()
-  const env = { ...process.env, GTD_TEST_UI: mode, GTD_DEV_USER_DATA_DIR: userDataDir }
+  const env = { ...process.env, GTD_TEST_UI: mode, GTD_DEV_USER_DATA_DIR: userDataDir, ...extraEnv }
   delete env.ELECTRON_RENDERER_URL // ビルド済みのファイルを読み込む（開発サーバーは使わない）
   delete env.GTD_TEST_DIALOG_ANSWERS
   delete env.GTD_TEST_DISPLAY_ID

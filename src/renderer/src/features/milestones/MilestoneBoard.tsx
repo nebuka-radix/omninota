@@ -15,7 +15,7 @@ import { useDraftGuard, type DraftTarget } from '../drafts/DraftGuard'
 import type { TaskGroup } from '../tasks/assignment'
 import { taskListQueryOptions, useCreateTaskMutation, useReorderMilestoneTasksMutation } from '../tasks/task-queries'
 import type { TaskSortColumn } from '../tasks/task-table'
-import type { InlineTitleEditController } from '../tasks/inline-title-edit'
+import type { TaskRowActions } from '../tasks/TaskRow'
 import { TaskList } from '../tasks/TaskList'
 import { useWorkspace } from '../workspace/WorkspaceContext'
 import { MilestoneNameEditor } from './MilestoneForms'
@@ -456,11 +456,9 @@ export function MilestoneBoard({
   resetScrollKey,
   onSort,
   onSelect,
-  onToggleCompleted,
-  onRequestRowMenu,
+  actions,
   onRequestDelete,
   onAnnounce,
-  inlineEdit,
   taskReorder
 }: {
   project: ProjectDto
@@ -472,12 +470,11 @@ export function MilestoneBoard({
   resetScrollKey: string
   onSort: (column: TaskSortColumn) => void
   onSelect: (taskId: string) => void
-  onToggleCompleted: (task: TaskDto) => void
-  // 行のメニュー・削除（フェーズ5.6）
-  onRequestRowMenu: (task: TaskDto, anchor: HTMLElement) => void
+  // 行内の操作（TaskRow。3画面で共通の useTaskRowActions）
+  actions: TaskRowActions
+  // Delete キーの削除（確認なし。フェーズ5.9）
   onRequestDelete: (task: TaskDto) => void
   onAnnounce: (message: string) => void
-  inlineEdit: InlineTitleEditController
   taskReorder: TaskReorderSettings
 }) {
   const { settings, setMilestoneCardWidth } = useWorkspace()
@@ -810,11 +807,9 @@ export function MilestoneBoard({
                 resetScrollKey={resetScrollKey}
                 onSort={onSort}
                 onSelect={onSelect}
-                onToggleCompleted={onToggleCompleted}
                 onNavigateCard={(direction) => focusCard(index + direction)}
-                onRequestRowMenu={onRequestRowMenu}
+                actions={actions}
                 onRequestDelete={onRequestDelete}
-                inlineEdit={inlineEdit}
                 reorder={{
                   disabledReason: taskReorder.disabledReason,
                   manual: taskReorder.manual,

@@ -1,3 +1,4 @@
+import { useCallback, useSyncExternalStore } from 'react'
 import { queryOptions, useMutation, useMutationState, useQueryClient, type QueryClient } from '@tanstack/react-query'
 import type {
   AssignInboxTasksInput,
@@ -5,12 +6,15 @@ import type {
   DeleteTaskInput,
   DeleteTasksInput,
   ReorderMilestoneTasksInput,
+  SetTaskDueInput,
   SetTaskAssignmentInput,
   SetTaskCompletedInput,
   TaskDto,
   UpdateTaskTitleInput
 } from '../../../../shared/contracts/tasks'
 import { unwrapIpc } from '../../lib/ipc'
+import { queryClient as appQueryClient } from '../../lib/query-client'
+import { createFavoriteSaver } from './favorite-saver'
 import { taskSaveQueue } from './task-save-queue'
 
 export const taskKeys = {
@@ -27,7 +31,9 @@ export const taskMutationKeys = {
   // フェーズ5.9: 一括操作・並べ替え（variables は ids / orderedIds を持つ）
   assignFromInbox: [...taskKeys.all, 'assign-from-inbox'] as const,
   deleteMany: [...taskKeys.all, 'delete-many'] as const,
-  reorder: [...taskKeys.all, 'reorder'] as const
+  reorder: [...taskKeys.all, 'reorder'] as const,
+  // フェーズ6: 期限
+  setDue: [...taskKeys.all, 'set-due'] as const
 }
 
 // タスク一覧の正本はこのQuery（全件）。Inbox・プロジェクトの一覧、詳細、件数はすべてここから導出する。
@@ -157,6 +163,18 @@ export function useReorderMilestoneTasksMutation() {
   })
 }
 
+// 期限の設定・変更・解除（フェーズ6）。同じタスクの保存キューに並べる（タイトルの保存・所属の変更・削除と順番に実行する。
+// 削除の後に届いても Main が NOT_FOUND にし、対象を作り直さない）。成功した応答だけで一覧の行を置き換える。
+// Summary Review の取得結果は query-client の MutationCache で古いものとして扱う
+export function useSetTaskDueMutation() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationKey: taskMutationKeys.setDue,
+    mutationFn: (input: SetTaskDueInput) => taskSaveQueue.run(input.id, () => unwrapIpc(window.gtd.tasks.setDue(input))),
+    onSuccess: (saved) => replaceTaskInList(queryClient, saved)
+  })
+}
+
 // 更新中（タイトル・完了状態・所属・削除・一括操作）のタスクID。同じタスクへの重複操作を制限するために使う。
 export function usePendingTaskIds(): ReadonlySet<string> {
   const ids = useMutationState({
@@ -184,9 +202,51 @@ const TASK_UPDATE_KEYS: readonly unknown[] = [
   taskMutationKeys.delete[1],
   taskMutationKeys.assignFromInbox[1],
   taskMutationKeys.deleteMany[1],
-  taskMutationKeys.reorder[1]
+  taskMutationKeys.reorder[1],
+  taskMutationKeys.setDue[1]
 ]
 
 function isTaskUpdateKey(key: readonly unknown[] | undefined): boolean {
   return key !== undefined && key[0] === taskKeys.all[0] && TASK_UPDATE_KEYS.includes(key[1])
 }
+
+// --- お気に入り（TaskRow の星） ---
+// 順序制御は favorite-saver.ts（同じタスクの保存キュー・最後に押した状態を保存）。アプリ全体で1つ。
+// 保存中は行を「保存中」にしない（連打しても行を薄くしない・他の操作を止めない）。順番は保存キューが保証する。
+let favoriteError: string | null = null
+const favoriteErrorListeners = new Set<() => void>()
+const setFavoriteError = (message: string | null) => {
+  favoriteError = message
+  for (const listener of favoriteErrorListeners) listener()
+}
+
+export const taskFavoriteSaver = createFavoriteSaver<TaskDto>({
+  enqueue: (taskId, save) => taskSaveQueue.run(taskId, save),
+  save: (id, favorite) => unwrapIpc(window.gtd.tasks.setFavorite({ id, favorite })),
+  onSaved: (saved) => replaceTaskInList(appQueryClient, saved),
+  onError: (_taskId, error) => {
+    setFavoriteError(`お気に入りを保存できませんでした: ${(error as Error).message}`)
+    // 表示を保存済みの値と揃える（一覧を DB から取り直す）
+    void appQueryClient.invalidateQueries({ queryKey: taskKeys.list() })
+    void appQueryClient.invalidateQueries({ queryKey: ['summary'] })
+  }
+})
+
+export function useTaskFavorite() {
+  // 目的の状態・エラーが変わったら再描画する
+  useSyncExternalStore(taskFavoriteSaver.subscribe, () => taskFavoriteSaver.version())
+  const error = useSyncExternalStore(
+    (listener) => {
+      favoriteErrorListeners.add(listener)
+      return () => favoriteErrorListeners.delete(listener)
+    },
+    () => favoriteError
+  )
+  const isFavorite = useCallback((task: TaskDto) => taskFavoriteSaver.desired(task.id) ?? task.favorite, [])
+  const toggle = useCallback((task: TaskDto) => {
+    setFavoriteError(null)
+    taskFavoriteSaver.toggle(task.id, task.favorite)
+  }, [])
+  return { isFavorite, toggle, error, clearError: () => setFavoriteError(null) }
+}
+

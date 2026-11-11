@@ -27,12 +27,12 @@ export async function seedDatabase(dir, { projects = [], milestones = [], tasks 
   const insertProject = db.prepare('INSERT INTO projects (id, name, created_at, updated_at, completed_at) VALUES (?, ?, ?, ?, ?)')
   const insertMilestone = db.prepare('INSERT INTO milestones (id, project_id, name, created_at, updated_at, position) VALUES (?, ?, ?, ?, ?, ?)')
   const insertTask = db.prepare(
-    'INSERT INTO tasks (id, title, created_at, updated_at, completed_at, project_id, milestone_id, hidden_at, position) VALUES (?, ?, ?, ?, ?, ?, ?, NULL, ?)'
+    'INSERT INTO tasks (id, title, created_at, updated_at, completed_at, project_id, milestone_id, hidden_at, position, dueto, favorite) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
   )
   db.transaction(() => {
     for (const p of projects) insertProject.run(p.id, p.name, p.createdAt, p.createdAt, p.completedAt ?? null)
     for (const m of milestones) insertMilestone.run(m.id, m.projectId, m.name, m.createdAt, m.createdAt, m.position ?? null)
-    for (const t of tasks) insertTask.run(t.id, t.title, t.createdAt, t.createdAt, t.completedAt ?? null, t.projectId ?? null, t.milestoneId ?? null, t.position ?? null)
+    for (const t of tasks) insertTask.run(t.id, t.title, t.createdAt, t.createdAt, t.completedAt ?? null, t.projectId ?? null, t.milestoneId ?? null, t.hiddenAt ?? null, t.position ?? null, t.dueto ?? null, t.favorite ? 1 : 0)
   })()
   db.close()
 }
@@ -150,7 +150,7 @@ export function inboxOpsScenarios({ withApp, root }) {
           assert(await c.evaluate(`!!${treeMilestone(M1)}`), '展開するとマイルストンを表示')
 
           // 行のクリックは選択だけ（詳細へ自動で切り替えない）
-          await c.click(titleOf(T(25)))
+          await c.click(rowOf(T(25)))
           assert((await panel(c)) === 'targets' && (await selectedIds(c)).join() === T(25), 'クリックは単一選択（紐付け先のまま）', { panel: await panel(c), sel: await selectedIds(c) })
           // Enter（明示的な操作）で詳細へ
           await c.focus('[data-testid=task-list]')
@@ -186,7 +186,9 @@ export function inboxOpsScenarios({ withApp, root }) {
           await c.waitFor(`document.querySelector('[data-testid=selection-count]')?.textContent === '10 件選択中'`, 3000, '絞り込み後の選択件数（Inbox 10〜19）')
           await c.setInput('input[aria-label="タイトルで絞り込み"]', '')
           await sleep(300)
-          assert((await selectedIds(c)).length === 10, '絞り込みを戻しても、外れたIDは選択に戻らない', (await selectedIds(c)).length)
+          // 行の高さ（2行構成）により描画される行は一部のため、選択件数の表示で確かめる
+          const restored = await c.evaluate(`document.querySelector('[data-testid=selection-count]')?.textContent`)
+          assert(restored === '10 件選択中', '絞り込みを戻しても、外れたIDは選択に戻らない', restored)
           // 仮想化: 描画外にスクロールしても選択は残る
           await c.evaluate(`document.querySelector('[data-testid=task-list-scroll]').scrollTop = 99999`)
           await sleep(200)
@@ -205,7 +207,7 @@ export function inboxOpsScenarios({ withApp, root }) {
           const c = app.cdp
           await waitInbox(c)
           // 選択済みの行をドラッグ → 選択集合（3件）をまとめて移す
-          await c.click(titleOf(T(30)))
+          await c.click(rowOf(T(30)))
           await clickWith(c, rowOf(T(28)), MOD.shift)
           await dragRow(c, T(29), treeMilestone(M1), { release: false })
           let p = await preview(c)
@@ -222,7 +224,7 @@ export function inboxOpsScenarios({ withApp, root }) {
           await c.waitFor(`document.querySelector('[data-testid=status-center]')?.textContent?.includes('全 27 件')`, 3000, '件数の更新')
 
           // 未選択の行をドラッグ → その1件だけ（選択は変えない）
-          await c.click(titleOf(T(27)))
+          await c.click(rowOf(T(27)))
           await clickWith(c, rowOf(T(26)), MOD.meta)
           await dragRow(c, T(24), treeMilestone(M2), { release: false })
           p = await preview(c)
@@ -324,7 +326,7 @@ export function inboxOpsScenarios({ withApp, root }) {
 
           // ドラッグでも同じ（詳細に表示中のタスクを移す）
           const next = await c.evaluate(`document.querySelector('[data-testid=task-list] [role=option]').dataset.taskId`)
-          await c.click(titleOf(next))
+          await c.click(rowOf(next))
           await c.focus('[data-testid=task-list]')
           await keyWith(c, 'Enter', 13)
           await c.waitFor(`document.querySelector('[data-testid=task-editor]')`, 3000, '詳細を表示')
@@ -361,7 +363,7 @@ export function inboxOpsScenarios({ withApp, root }) {
           await waitInbox(c)
           await watchDialogs(c)
           // Delete キー（単体）
-          await c.click(titleOf(T(511)))
+          await c.click(rowOf(T(511)))
           await c.focus('[data-testid=task-list]')
           await keyWith(c, 'Delete', 46)
           await c.waitFor(`!${rowOf(T(511))}`, 5000, 'Delete で削除')
@@ -373,14 +375,14 @@ export function inboxOpsScenarios({ withApp, root }) {
           await c.click(`document.querySelector('[data-testid=task-row-menu-delete]')`)
           await c.waitFor(`!${rowOf(T(510))}`, 5000, 'メニューから削除')
           // 複数選択 → Delete で一括削除
-          await c.click(titleOf(T(509)))
+          await c.click(rowOf(T(509)))
           await clickWith(c, rowOf(T(507)), MOD.shift)
           await c.focus('[data-testid=task-list]')
           await keyWith(c, 'Backspace', 8)
           await c.waitFor(`!${rowOf(T(509))} && !${rowOf(T(508))} && !${rowOf(T(507))}`, 5000, '選択した3件を一括削除')
           assert(![507, 508, 509].some((i) => exists(T(i))), 'DBから3件とも削除')
           // 選択バーの削除（件数を表示）
-          await c.click(titleOf(T(506)))
+          await c.click(rowOf(T(506)))
           await clickWith(c, rowOf(T(505)), MOD.meta)
           const label = await c.evaluate(`document.querySelector('[data-testid=selection-delete]').textContent`)
           assert(label.includes('2 件を削除'), '一括削除の対象件数を表示', label)
@@ -388,7 +390,7 @@ export function inboxOpsScenarios({ withApp, root }) {
           await c.waitFor(`!${rowOf(T(506))} && !${rowOf(T(505))}`, 5000, '選択バーから一括削除')
           // 文字入力中の Delete／Backspace では削除しない（追加欄・検索欄・インライン編集）
           const count = total()
-          await c.click(titleOf(T(504)))
+          await c.click(rowOf(T(504)))
           await c.focus('input[aria-label="タスクのタイトル"]')
           await c.insertText('abc')
           await keyWith(c, 'Backspace', 8)
@@ -406,7 +408,7 @@ export function inboxOpsScenarios({ withApp, root }) {
           assert(total() === count && exists(T(504)), '入力中の Delete／Backspace ではタスクを削除しない', { before: count, after: total() })
           // 別のタスクの詳細の未保存入力は残る。削除するタスク自身の未保存入力は確認なしで破棄
           await c.focus('[data-testid=task-list]')
-          await c.click(titleOf(T(503)))
+          await c.click(rowOf(T(503)))
           await c.focus('[data-testid=task-list]')
           await keyWith(c, 'Enter', 13)
           await c.waitFor(`document.querySelector('[data-testid=task-editor]')`, 3000, '詳細')
@@ -426,7 +428,7 @@ export function inboxOpsScenarios({ withApp, root }) {
           // プロジェクトのカードでも確認なし
           await c.evaluate(`location.hash = ${JSON.stringify(`#/projects/${PX}`)}`)
           await c.waitFor(`document.querySelector('[data-testid=milestone-board]') && ${rowOf(T(600))}`, 5000, 'カード')
-          await c.click(titleOf(T(600)))
+          await c.click(rowOf(T(600)))
           await c.focus(`[data-card-list="group:${MX}"]`)
           await keyWith(c, 'Delete', 46)
           await c.waitFor(`!${rowOf(T(600))}`, 5000, 'カードで Delete')
@@ -437,7 +439,7 @@ export function inboxOpsScenarios({ withApp, root }) {
       }
     ],
     [
-      'インライン編集（5.9）: ダブルクリック・F2・メニュー、Enter・blur・Esc・空・変更なし・保存失敗・IME・仮想化・詳細との競合・カード',
+      'インライン編集（5.9）: ダブルクリック・F2、Enter・blur・Esc・空・変更なし・保存失敗・IME・仮想化・詳細との競合・カード',
       async () => {
         const PE = U(4001)
         const ME = U(4101)
@@ -521,7 +523,7 @@ export function inboxOpsScenarios({ withApp, root }) {
           await c.click(`document.querySelector('[data-testid=view-search]')`)
           await c.waitFor(`!${editor}`, 3000, 'blur で閉じる')
           assert(row(second).title === 'blurで保存', 'blur で保存', row(second))
-          // F2・行のメニューの「名前を変更」でも開始できる
+          // F2 でも開始できる（行の「…」メニューは削除だけになり、「名前を変更」は置かない）
           await c.focus('[data-testid=task-list]')
           await keyWith(c, 'Home', 36)
           await keyWith(c, 'F2', 113)
@@ -530,9 +532,10 @@ export function inboxOpsScenarios({ withApp, root }) {
           await c.evaluate(`${rowOf(second)}.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 10, clientY: 10 }))`)
           await c.waitFor(`document.querySelector('[data-testid=task-row-menu] [role=menu]')?.contains(document.activeElement)`, 3000, '行のメニュー')
           await sleep(150)
-          await c.click(`document.querySelector('[data-testid=task-row-menu-rename]')`)
-          await c.waitFor(`document.activeElement === ${editor}`, 3000, 'メニューから編集')
+          const menuItems = await c.evaluate(`[...document.querySelectorAll('[data-testid=task-row-menu] [role=menuitem]')].map((e) => e.textContent)`)
+          assert(JSON.stringify(menuItems) === JSON.stringify(['削除']), '行の「…」メニューに名前の変更は置かない', menuItems)
           await keyWith(c, 'Escape', 27)
+          await c.waitFor(`!document.querySelector('[data-testid=task-row-menu]') && document.activeElement === document.querySelector('[data-testid=task-list]')`, 3000, 'メニューを閉じて一覧へ戻る')
           // 仮想化: 編集中の行が表示範囲の外へ出ても、入力を失わない
           await doubleClick(c, titleOf(top))
           await c.waitFor(`document.activeElement === ${editor}`, 3000, '編集')
@@ -558,7 +561,7 @@ export function inboxOpsScenarios({ withApp, root }) {
           await c.focus('[data-testid=inline-title-editor] input')
           await keyWith(c, 'Escape', 27)
           // 詳細パネルとの競合: インラインで保存した名前は、詳細の（未編集の）入力に反映する
-          await c.click(titleOf(top))
+          await c.click(rowOf(top))
           await c.focus('[data-testid=task-list]')
           await keyWith(c, 'Enter', 13)
           await c.waitFor(`document.querySelector('[data-testid=task-editor]')`, 3000, '詳細')

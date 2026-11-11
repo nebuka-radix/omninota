@@ -27,6 +27,8 @@ import { topBarScenarios } from './scenarios-topbar.mjs'
 import { inboxOpsScenarios } from './scenarios-inbox-ops.mjs'
 import { orderScenarios } from './scenarios-order.mjs'
 import { exitScenarios } from './scenarios-exit.mjs'
+import { dueSummaryScenarios } from './scenarios-due-summary.mjs'
+import { taskRowScenarios } from './scenarios-task-row.mjs'
 
 const args = process.argv.slice(2)
 const mode = args[0]
@@ -291,6 +293,10 @@ scenarios.push(...topBarScenarios({ withApp, root }))
 // （開発起動のシナリオは out/main・out/preload を作り直すため最後に置き、終了時に本番用のビルドへ戻す）
 scenarios.push(...inboxOpsScenarios({ withApp, root }))
 scenarios.push(...orderScenarios({ withApp, root }))
+// フェーズ6: 期限と Summary Review（開発起動のシナリオより前に置く）
+scenarios.push(...dueSummaryScenarios({ withApp, root }))
+// 共通のタスク行（TaskRow）: 3画面の行・お気に入り・クリック／ダブルクリック・紐付けアイコン・「…」の削除
+scenarios.push(...taskRowScenarios({ withApp, root }))
 scenarios.push(...exitScenarios({ withApp, root }))
 
 console.log(`UIテスト（${mode}${displayId ? `、表示先 ${displayId}` : ''}）一時ディレクトリ: ${root}`)

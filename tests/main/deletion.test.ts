@@ -526,7 +526,7 @@ describe('移行（0005 → 0006）: プロジェクトだけに所属するタ�
     expect(runMigrations(upgraded, MIGRATIONS_DIR)).toEqual({ appliedBefore: 6, appliedAfter: MIGRATION_COUNT })
     const after = upgraded.$client.prepare('SELECT * FROM tasks ORDER BY id').all()
     // 残すタスクは全列（updated_at を含む）そのまま。hidden_at はNULL（表示対象）
-    expect(after).toEqual(before.filter((t) => t.id !== T(1) && t.id !== T(2)).map((t) => ({ ...t, hidden_at: null, position: null })))
+    expect(after).toEqual(before.filter((t) => t.id !== T(1) && t.id !== T(2)).map((t) => ({ ...t, hidden_at: null, position: null, dueto: null, favorite: 0 })))
     // 0007（フェーズ5.9）で手動順の列が加わる（既存の行はNULL）。それ以外の列は変えない
     expect(upgraded.$client.prepare('SELECT * FROM milestones').all()).toEqual(
       (beforeMilestones as Record<string, unknown>[]).map((m) => ({ ...m, position: null }))

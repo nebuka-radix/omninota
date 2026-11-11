@@ -16,7 +16,8 @@ import { usePendingTaskIds, useSetTaskCompletedMutation, useUpdateTaskTitleMutat
 // - 別タスクの選択・画面遷移・パネルを閉じる・完了操作の前は DraftGuard で確認する。
 // - 所属の変更（TaskProjectField）は即時保存で、タイトルのドラフトとは独立している（フェーズ5.2）。
 //   同じタスクの更新は順番に実行されるため、タイトル保存と所属変更の応答が互いの新しい値を古い値で上書きしない。
-export function TaskEditor({ task }: { task: TaskDto }) {
+// TaskEditDialog（TaskRow のタスク名のクリック）でも同じ部品を使う（保存の経路・確認は詳細パネルと同じ）。autoFocusTitle で表示時にタイトルへフォーカスする
+export function TaskEditor({ task, autoFocusTitle = false }: { task: TaskDto; autoFocusTitle?: boolean }) {
   const [draft, setDraft] = useState(task.title)
   const updateTitle = useUpdateTaskTitleMutation()
   const setCompleted = useSetTaskCompletedMutation()
@@ -124,7 +125,7 @@ export function TaskEditor({ task }: { task: TaskDto }) {
   ]
 
   return (
-    <Box sx={{ px: 4, pt: 2, pb: 4 }} data-testid="task-editor">
+    <Box sx={{ px: autoFocusTitle ? 0 : 4, pt: 2, pb: autoFocusTitle ? 0 : 4 }} data-testid="task-editor">
       <Box component="form" onSubmit={handleSubmit} noValidate>
         <TextField
           value={draft}
@@ -140,6 +141,7 @@ export function TaskEditor({ task }: { task: TaskDto }) {
           error={blank}
           helperText={blank ? 'タイトルを入力してください。' : dirty ? '未保存の変更があります' : ' '}
           inputRef={inputRef}
+          autoFocus={autoFocusTitle}
           slotProps={{
             htmlInput: {
               maxLength: TASK_TITLE_MAX_LENGTH,

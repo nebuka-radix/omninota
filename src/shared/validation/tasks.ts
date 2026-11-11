@@ -1,6 +1,7 @@
 // Zodスキーマ。Mainだけがimportする（Preload / Rendererへ持ち込まない）。
 import { z } from 'zod'
 import { TASK_BULK_MAX, TASK_TITLE_MAX_LENGTH } from '../contracts/tasks'
+import { isValidDateOnly } from '../date-only'
 
 const titleSchema = z
   .string({ error: 'タイトルは文字列で指定してください。' })
@@ -73,3 +74,27 @@ export const tasksDeleteArgsSchema = z.tuple([deleteTaskInputSchema])
 export const tasksAssignFromInboxArgsSchema = z.tuple([assignInboxTasksInputSchema])
 export const tasksDeleteManyArgsSchema = z.tuple([deleteTasksInputSchema])
 export const tasksReorderInMilestoneArgsSchema = z.tuple([reorderMilestoneTasksInputSchema])
+
+// 期限（フェーズ6）: 日付のみ "YYYY-MM-DD"。形式だけでなく実在する暦日か（2月30日などを拒否）を確かめる
+export const dateOnlySchema = z
+  .string({ error: '日付は文字列で指定してください。' })
+  .refine(isValidDateOnly, { error: '日付が正しくありません（実在する日付を YYYY-MM-DD で指定してください）。' })
+
+export const setTaskDueInputSchema = z.strictObject({
+  id: taskIdSchema,
+  due: z.discriminatedUnion('kind', [
+    z.strictObject({ kind: z.literal('today') }),
+    z.strictObject({ kind: z.literal('tomorrow') }),
+    z.strictObject({ kind: z.literal('date'), date: dateOnlySchema }),
+    z.strictObject({ kind: z.literal('clear') })
+  ])
+})
+export const tasksSetDueArgsSchema = z.tuple([setTaskDueInputSchema])
+
+// お気に入り: 目的の状態（真偽値だけ。0 / 1 や文字列は受け付けない）
+export const setTaskFavoriteInputSchema = z.strictObject({
+  id: taskIdSchema,
+  favorite: z.boolean({ error: 'お気に入りは true / false で指定してください。' })
+})
+export const tasksSetFavoriteArgsSchema = z.tuple([setTaskFavoriteInputSchema])
+export const summaryGetArgsSchema = z.tuple([])

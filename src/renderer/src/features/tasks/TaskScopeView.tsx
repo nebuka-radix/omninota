@@ -26,19 +26,13 @@ import { projectListQueryOptions } from '../projects/project-queries'
 import { useWorkspace } from '../workspace/WorkspaceContext'
 import { AssignMenu } from './AssignMenu'
 import { buildTaskGroups, milestonesOf, type Assignment } from './assignment'
-import { useInlineTitleEdit } from './inline-title-edit'
-import { EMPTY_SELECTION, operationTargets, pruneSelection, removeFromSelection, selectOnly, type TaskSelection } from './selection'
+import { EMPTY_SELECTION, operationTargets, pruneSelection, removeFromSelection, type TaskSelection } from './selection'
 import { TaskList } from './TaskList'
-import { TaskRowMenu, useTaskDeletion } from './TaskDeletion'
 import { useTaskDrag, type DropTarget } from './TaskDragContext'
 import { TaskQuickAdd } from './TaskQuickAdd'
-import {
-  taskListQueryOptions,
-  useAssignInboxTasksMutation,
-  usePendingTaskIds,
-  useSetTaskCompletedMutation
-} from './task-queries'
-import { reopenBlockedReason, shouldClearSearchToRevealOpen } from './task-rules'
+import { taskListQueryOptions, useAssignInboxTasksMutation, usePendingTaskIds } from './task-queries'
+import { shouldClearSearchToRevealOpen } from './task-rules'
+import { useTaskRowActions } from './use-task-row-actions'
 import { isTaskInScope, scopeProjectId, taskScopeKey, type TaskScope } from './task-scope'
 import {
   DEFAULT_PROJECT_SORTING,
@@ -111,16 +105,13 @@ export function TaskScopeView({
   const { selectedTaskId, selectTask, enterTaskScope, setInboxPanel, inboxPanel, settings, setMilestoneLayout } = useWorkspace()
   const { confirmLeave, hasDirty } = useDraftGuard()
   const pendingTaskIds = usePendingTaskIds()
-  const setCompleted = useSetTaskCompletedMutation()
   const projectsQuery = useQuery(projectListQueryOptions)
   const milestonesQuery = useQuery(milestoneListQueryOptions)
   const assignTasks = useAssignInboxTasksMutation()
   const { startDrag } = useTaskDrag()
   const isInbox = scope.kind === 'inbox'
-  // 紐付けメニューの対象（Inbox。複数可）
+  // 紐付けメニューの対象（Inbox の一括紐付け: M キー・選択バー。複数可。行の紐付けアイコンは useTaskRowActions の1件の操作）
   const [assignTarget, setAssignTarget] = useState<{ tasks: TaskDto[]; anchor: HTMLElement } | null>(null)
-  // 行のメニューの対象（フェーズ5.6）
-  const [rowMenu, setRowMenu] = useState<{ task: TaskDto; anchor: HTMLElement } | null>(null)
   // Inboxの複数選択（フェーズ5.9）
   const [selection, setSelection] = useState<TaskSelection>(EMPTY_SELECTION)
   const [assignError, setAssignError] = useState<string | null>(null)
@@ -128,7 +119,6 @@ export function TaskScopeView({
   const scopeKey = taskScopeKey(scope)
   // 呼び出し側が毎回新しいオブジェクトを渡しても、範囲が同じなら同じ値を使う（Tableの絞り込みを作り直さない）
   const stableScope = useMemo(() => scope, [scopeKey]) // scope は scopeKey と一対一
-  const inlineEdit = useInlineTitleEdit(data)
 
   useEffect(() => {
     enterTaskScope(scopeKey)
@@ -137,10 +127,8 @@ export function TaskScopeView({
   // 検索・表示切り替えは画面内の状態（保存しない）
   const [search, setSearch] = useState('')
   const [status, setStatus] = useState<TaskStatusFilter>(initialStatus)
-  // 完了切り替えの結果を読み上げる（ライブリージョン）
+  // 操作の結果を読み上げる（ライブリージョン）
   const [announcement, setAnnouncement] = useState('')
-  // 操作できない理由（完了済みプロジェクトのタスクを未完了に戻そうとした時。Main側でも拒否する）
-  const [blockedNotice, setBlockedNotice] = useState<string | null>(null)
 
   // 「未完了のタスクを表示」の要求（マウント時の値は処理済みとして扱う）
   const handledRevealRef = useRef(revealOpenRequest)
@@ -200,26 +188,6 @@ export function TaskScopeView({
     if (taskId !== selectedTaskId && !(await confirmLeave())) return
     selectTask(taskId)
     if (isInbox) setInboxPanel('detail')
-  }
-
-  const handleToggleCompleted = async (task: TaskDto) => {
-    if (pendingTaskIds.has(task.id)) return
-    const blocked = reopenBlockedReason(task, projectsQuery.data)
-    if (blocked) {
-      setBlockedNotice(blocked)
-      setAnnouncement(blocked)
-      return
-    }
-    setBlockedNotice(null)
-    // 未保存の編集があるタスクは、完了操作の前に確認する（入力を黙って失わない）
-    if (!(await confirmLeave({ target: { kind: 'task', id: task.id } }))) return
-    setCompleted.mutate(
-      { id: task.id, completed: task.completedAt === null },
-      {
-        onSuccess: (saved) =>
-          setAnnouncement(`「${saved.title}」を${saved.completedAt === null ? '未完了に戻しました' : '完了にしました'}`)
-      }
-    )
   }
 
   // 操作の対象（Inbox: 起点の行が選択に含まれていれば、表示中の選択タスクすべて。含まれなければその行だけ）
@@ -283,16 +251,23 @@ export function TaskScopeView({
     )
   }
 
-  const deletion = useTaskDeletion({
+  // 行内の操作（TaskRow。3画面で共通）。ここには画面ごとの後処理だけを渡す
+  const rowActions = useTaskRowActions({
+    tasks: data,
+    onAnnounce: setAnnouncement,
+    onAssigned: (saved) => {
+      // Inbox から紐付けた（Inbox外へ移した）タスク、またはプロジェクトの一覧から外れたタスクは、選択・詳細の選択から外す
+      // （対象外の警告を出さない）
+      setSelection((current) => removeFromSelection(current, new Set([saved.id])))
+      if (!isTaskInScope(saved, stableScope)) rowActions.clearSelectionIf(saved.id)
+    },
     onDeleted: (tasks) => {
       const removed = new Set(tasks.map((task) => task.id))
       setSelection((current) => removeFromSelection(current, removed))
-      setAnnouncement(tasks.length === 1 ? `「${tasks[0]!.title}」を削除しました` : `${tasks.length} 件のタスクを削除しました`)
     }
   })
-  // 削除（確認なし。フェーズ5.9）。対象の保存中の更新があれば、その完了の後に削除する（保存キュー。削除後に対象を作り直さない）
-  const requestDelete = (task: TaskDto) => deletion.request(targetsFor(task))
-  const openRowMenu = (task: TaskDto, anchor: HTMLElement) => setRowMenu({ task, anchor })
+  // Delete キー・選択バーの削除（確認なし。フェーズ5.9）。Inbox は選択中のタスクすべて（起点の行が選択に含まれていれば）
+  const requestDelete = (task: TaskDto) => rowActions.deleteTasks(targetsFor(task))
   const requestAssign = (task: TaskDto, anchor: HTMLElement) => {
     const tasks = targetsFor(task)
     if (tasks.some((item) => pendingTaskIds.has(item.id))) return
@@ -442,21 +417,7 @@ export function TaskScopeView({
             {assignError}
           </Alert>
         )}
-        {deletion.error && (
-          <Alert severity="error" variant="outlined" sx={{ mb: 2 }} onClose={deletion.clearError} data-testid="task-delete-error">
-            {deletion.error}
-          </Alert>
-        )}
-        {setCompleted.isError && (
-          <Alert severity="error" variant="outlined" sx={{ mb: 2 }} onClose={() => setCompleted.reset()}>
-            完了状態を更新できませんでした: {setCompleted.error.message}
-          </Alert>
-        )}
-        {blockedNotice && (
-          <Alert severity="info" variant="outlined" sx={{ mb: 2 }} onClose={() => setBlockedNotice(null)} data-testid="task-blocked-notice">
-            {blockedNotice}
-          </Alert>
-        )}
+        {rowActions.alerts}
         {selectedOutOfScope && !isInbox && (
           <Alert severity="info" variant="outlined" sx={{ mb: 2, py: 0 }} data-testid="selected-out-of-scope">
             選択中のタスクは、この一覧（{scopeLabel}）の対象外です（所属を変更したため。詳細パネルには表示しています）。
@@ -558,11 +519,9 @@ export function TaskScopeView({
               resetScrollKey={resetScrollKey}
               onSort={handleSort}
               onSelect={(taskId) => void handleSelect(taskId)}
-              onToggleCompleted={(task) => void handleToggleCompleted(task)}
-              onRequestRowMenu={openRowMenu}
+              actions={rowActions.actions}
               onRequestDelete={requestDelete}
               onAnnounce={setAnnouncement}
-              inlineEdit={inlineEdit}
               taskReorder={{
                 disabledReason: filtered ? REORDER_FILTERED_REASON : null,
                 manual: isManualSorting(sorting),
@@ -572,8 +531,8 @@ export function TaskScopeView({
           ) : (
             <TaskList
               tasks={visibleTasks}
-              onRequestAssign={isInbox ? requestAssign : undefined}
-              onRequestRowMenu={openRowMenu}
+              actions={rowActions.actions}
+              onRequestAssignKey={isInbox ? requestAssign : undefined}
               onRequestDelete={requestDelete}
               totalCount={scopeCount}
               selectedTaskId={selectedTaskId}
@@ -582,8 +541,6 @@ export function TaskScopeView({
               resetScrollKey={resetScrollKey}
               onSort={handleSort}
               onSelect={(taskId) => void handleSelect(taskId)}
-              onToggleCompleted={(task) => void handleToggleCompleted(task)}
-              inlineEdit={inlineEdit}
               multiSelect={
                 isInbox
                   ? { selection, onChange: setSelection, onShowDetail: (taskId) => void showDetail(taskId) }
@@ -594,25 +551,7 @@ export function TaskScopeView({
           )}
         </>
       )}
-      {rowMenu && (
-        <TaskRowMenu
-          task={rowMenu.task}
-          anchor={rowMenu.anchor}
-          count={targetsFor(rowMenu.task).length}
-          onShowDetail={
-            isInbox
-              ? () => {
-                  setSelection(selectOnly(rowMenu.task.id))
-                  void showDetail(rowMenu.task.id)
-                }
-              : undefined
-          }
-          onRename={() => void inlineEdit.start(rowMenu.task)}
-          onAssign={isInbox ? () => requestAssign(rowMenu.task, rowMenu.anchor) : undefined}
-          onDelete={() => requestDelete(rowMenu.task)}
-          onClose={() => setRowMenu(null)}
-        />
-      )}
+      {rowActions.elements}
       {assignTarget && (
         <AssignMenu
           tasks={assignTarget.tasks}

@@ -30,7 +30,7 @@ function insertOldTasks(db: AppDatabase): void {
   for (const task of oldTasks) insert.run(task.id, task.title, task.at, task.at)
 }
 const expectedAfterUpgrade = oldTasks
-  .map((task) => ({ id: task.id, title: task.title, createdAt: task.at, updatedAt: task.at, completedAt: null, projectId: null, milestoneId: null, hiddenAt: null, position: null }))
+  .map((task) => ({ id: task.id, title: task.title, createdAt: task.at, updatedAt: task.at, completedAt: null, projectId: null, milestoneId: null, hiddenAt: null, position: null, dueto: null, favorite: false }))
   .reverse() // 新しい順（既存タスクは未所属で移行される）
 
 // 旧スキーマのDBから、当時の列だけでタスクを読む（現在のRepositoryは新しい列も選択するため使わない）
@@ -104,7 +104,7 @@ describe('既存データを保持したマイグレーション', () => {
 
     const upgraded = openDatabase(dbFile)
     expect(runMigrations(upgraded, MIGRATIONS_DIR)).toEqual({ appliedBefore: 3, appliedAfter: MIGRATION_COUNT })
-    expect(createTaskRepository(upgraded).listAll()).toEqual(before.map((task) => ({ ...task, projectId: null, milestoneId: null, hiddenAt: null, position: null })))
+    expect(createTaskRepository(upgraded).listAll()).toEqual(before.map((task) => ({ ...task, projectId: null, milestoneId: null, hiddenAt: null, position: null, dueto: null, favorite: false })))
     expect(createSettingsRepository(upgraded).get('workspace')?.value).toBe(workspaceValue)
     expect(upgraded.$client.prepare('SELECT COUNT(*) AS c FROM projects').get()).toEqual({ c: 0 })
     closeDatabase(upgraded)
@@ -188,7 +188,7 @@ describe('既存データを保持したマイグレーション', () => {
     const upgraded = openDatabase(dbFile)
     expect(runMigrations(upgraded, MIGRATIONS_DIR)).toEqual({ appliedBefore: 4, appliedAfter: MIGRATION_COUNT })
     // 既存タスクはID・タイトル・日時・完了日時を保持し、未所属（projectId = null）になる
-    expect(createTaskRepository(upgraded).listAll()).toEqual(beforeTasks.map((task) => ({ ...task, projectId: null, milestoneId: null, hiddenAt: null, position: null })))
+    expect(createTaskRepository(upgraded).listAll()).toEqual(beforeTasks.map((task) => ({ ...task, projectId: null, milestoneId: null, hiddenAt: null, position: null, dueto: null, favorite: false })))
     expect(upgraded.$client.prepare('SELECT * FROM projects ORDER BY id').all()).toEqual(beforeProjects)
     expect(createSettingsRepository(upgraded).get('workspace')?.value).toBe(workspaceValue)
 
@@ -211,7 +211,7 @@ describe('既存データを保持したマイグレーション', () => {
       appliedBefore: MIGRATION_COUNT,
       appliedAfter: MIGRATION_COUNT
     })
-    expect(createTaskRepository(restarted).listAll()).toEqual(beforeTasks.map((task) => ({ ...task, projectId: null, milestoneId: null, hiddenAt: null, position: null })))
+    expect(createTaskRepository(restarted).listAll()).toEqual(beforeTasks.map((task) => ({ ...task, projectId: null, milestoneId: null, hiddenAt: null, position: null, dueto: null, favorite: false })))
     closeDatabase(restarted)
   })
 })

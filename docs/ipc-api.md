@@ -47,6 +47,10 @@ type IpcErrorDetails =
 | `tasks.delete(input)` | `tasks:delete` | `{ id }` | `{ id }`（物理削除。フェーズ5.6） |
 | `tasks.assignFromInbox(input)` | `tasks:assign-from-inbox` | `{ ids: string[], projectId, milestoneId }` | `TaskDto[]`（ids の順。フェーズ5.9） |
 | `tasks.deleteMany(input)` | `tasks:delete-many` | `{ ids: string[] }` | `{ ids }`（物理削除。フェーズ5.9） |
+| `tasks.setDue(input)` | `tasks:set-due` | `{ id, due: { kind: 'today' } \| { kind: 'tomorrow' } \| { kind: 'date', date: 'YYYY-MM-DD' } \| { kind: 'clear' } }` | `TaskDto`（保存後。フェーズ6） |
+| `summary.get()` | `summary:get` | なし | `SummaryReview`（`{ today, todayItems, tomorrowItems, thisWeekItems }`。フェーズ6。各行は `TaskDto` と `projectName`・`milestoneName`） |
+| `summary.today()` | `summary:today` | なし | `string`（Main のローカルの今日 "YYYY-MM-DD"。期限の表示に使う） |
+| `tasks.setFavorite(input)` | `tasks:set-favorite` | `{ id, favorite: boolean }` | `TaskDto`（保存後。お気に入りだけを更新。同じ値なら更新しない。非表示・削除済みは NOT_FOUND） |
 | `tasks.reorderInMilestone(input)` | `tasks:reorder-in-milestone` | `{ milestoneId, orderedIds: string[] }` | `TaskDto[]`（そのマイルストンの全件・新しい順。フェーズ5.9） |
 | `projects.list()` | `projects:list` | なし | `ProjectDto[]` |
 | `projects.create(input)` | `projects:create` | `{ name }` | `ProjectDto` |
@@ -208,6 +212,8 @@ type TaskDto = {
   projectId: string | null // 所属するプロジェクト。nullは未所属（フェーズ5.2）
   milestoneId: string | null // 所属するマイルストン。nullは未設定（フェーズ5.4）
   position: number | null // マイルストン内の手動順（フェーズ5.9）。null は手動順なし（作成日時の古い順）
+  dueto: string | null // 期限（フェーズ6）。日付のみ "YYYY-MM-DD"。null は未設定
+  favorite: boolean // お気に入り（0009）。既定は false
 } // 日時はUTCのISO 8601
 // MilestoneDto にも position: number | null（プロジェクト内のカードの手動順。フェーズ5.9）
 ```

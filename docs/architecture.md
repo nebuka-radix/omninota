@@ -470,6 +470,46 @@ check → unsaved-draft → ダイアログ（保存して終了 / 保存せず�
   （保存確認・DBを閉じる処理を通らない）。上記の置き換えで、2回届いても保存確認を通って終了する（自動検証で確認）。
   開発サーバーのポートは `GTD_DEV_RENDERER_PORT`（自動検証用。通常は未設定）で固定できる。
 
+### 期限と Summary Review（フェーズ6）
+
+- 日付のみの値は `src/shared/date-only.ts`（副作用なし）: 実在する暦日の判定（うるう年・月の日数）、ローカルの暦日（`getFullYear` 等）、
+  暦日の加算（年・月・日で計算し、24時間のミリ秒を足さない）、Summary の期間、次のローカルの0時までの時間。日付のみの値を日時へ変換しない。
+- 期限の更新は用途限定の `tasks.setDue`（今日／明日／日付指定／解除）。今日・明日は Main が操作の時点の `now()` のローカルの暦日で決める。
+  期限だけを更新し、同じ値なら更新しない（updatedAt を変えない）。表示中の行だけ（削除・非表示の後に届いた保存は NOT_FOUND）。
+  Renderer では同じタスクの保存キューに並べる（タイトル・所属・削除と順番）。
+- 行の期限表示・期限設定アイコン（共通のタスク行。当初は行のメニューの「期限 ›」）から `TaskDue.tsx` の期限のメニュー・日付指定のダイアログ（`type=date`）。
+  閉じた後はその行の一覧（listbox）へフォーカスを戻す。期限の表示（`due-format.ts`）は文字列の年・月・日から作る。
+  行ではタスク名を先に縮め、期限は最後に省略表示する（最小のカード幅でもハンドル・メニューと重ならない）。
+- Summary Review: `summary.get`（`services/summary-service.ts`）。取得の時点のローカルの今日から期間を求め、
+  `tasks.dueto BETWEEN 今日 AND 7日後`（未完了・表示中。索引 `tasks_dueto_idx`）をプロジェクト・マイルストンと結合して取得し、期限で振り分ける。
+  画面（`routes/SummaryPage.tsx`）は見出し・行を1つの仮想リストで描画し、件数をステータスバーへ（ShellSlot）。トップバーの差し込みはしない。
+- 更新: Query のキーにローカルの日付を含める（`['summary', 日付]`。前日の結果を新しい日付の画面に出さない）。`refetchOnMount: 'always'`。
+  タスク・プロジェクト・マイルストンの更新の成功時に `MutationCache` で Summary を古いものとして扱う（期限・完了・削除・非表示化・名前・所属）。
+  日付の確認: 次のローカルの0時のタイマー・ウィンドウの focus・表示の再開（visibilitychange。スリープ復帰を含む）・60秒ごと。いずれもアンマウントで解除する。
+- 自動テストだけ、Main の現在時刻を `GTD_TEST_CLOCK_FILE`（テストモードのみ）でずらせる。タイムゾーンは起動時の `TZ` で固定する。
+
+### 共通のタスク行（TaskRow。2026-11-11）
+
+- `features/tasks/TaskRow.tsx`: 行の表示と行内の操作の共通部分（Inbox・カード・Summary）。2行構成（`TASK_ROW_HEIGHT` 52px。仮想化の行の高さ）。
+  - 行の本体は listbox の option（チェックボックスはマウス用の見た目で aria-hidden・Tab 対象外。タスク名は文字だけ）。
+  - 星・期限・紐付け・「…」・並べ替えのハンドル・インライン編集の入力欄は、同じ部品から一覧の外側の重ね合わせ層へ `createPortal` で描画する
+    （option の中に操作要素を置かない。ボタンは読み上げの対象で Tab 対象外。押してもフォーカスを一覧から移さない）。
+    重ね合わせ層のイベント（クリック・押下・フォーカス・キー）は行・一覧へ伝えない。
+- `features/tasks/use-task-row-actions.tsx`: 行内の操作（完了・お気に入り・期限・1件の紐付け／所属変更・1件の削除・「…」・編集モーダル・インライン編集）を
+  3画面で共通に作る。画面は保存後の後処理（Inbox の選択から外す・詳細の選択の解除）だけをコールバックで渡す。
+  紐付けは Inbox のタスクなら `tasks.assignFromInbox`（1件）、プロジェクト所属なら `tasks.setAssignment`。
+- `features/tasks/TaskList.tsx`: 一覧（listbox）・キーボード・Inbox の複数選択とドラッグ・カードの並べ替え。行は TaskRow。
+  `variant`: table（Inbox。並べ替えの見出し）/ card / section（Summary。外部のスクロール領域を `scrollMargin` で共有して仮想化）。
+  タスク名のクリックは `pending-click.ts` で少し待ち（ダブルクリックならインライン編集・ドラッグ／他の操作／アンマウントで取り消し）、編集モーダルを開く。
+- `features/tasks/TaskEditDialog.tsx`: 編集モーダル（TaskEditor をそのまま使う）。開く前・閉じる前に DraftGuard の確認。削除されたら閉じる。
+  閉じた後は開いた時に決めた一覧へフォーカスを戻す（`TaskDue.tsx` の `useFocusReturn`。描画の確定後に移す）。
+- お気に入り: `tasks.setFavorite`（目的の状態）。`features/tasks/favorite-saver.ts` が同じタスクの保存キューに並べ、保存中の連打は待ちを1つにまとめて
+  最後の状態を保存する（画面は押した直後から目的の状態）。失敗時は目的の状態を捨て、一覧を取り直して保存済みの値に戻す。行を「保存中」にはしない。
+- 期限の表示: `lib/local-day.tsx`（アプリ全体で1組のタイマー。0時・focus・visibilitychange・60秒）。日付は `summary.today`（Main の `now()` の
+  ローカルの暦日）で決め、保存の「今日」「明日」・Summary の判定と揃える。`due-format.ts` の `dueLabelOf` が暦日の差で表示を決める。
+- Summary: Main の取得結果に一覧の Query の新しい方の値を重ね、`shared/summary-sections.ts`（Main と共通）で振り分け直す
+  （`features/summary/summary-merge.ts`）。完了・期限の変更・削除は保存の直後から反映し、所属の変更だけでは外さない。
+
 ### タスク一覧の表示範囲と所属（フェーズ5.2）
 
 - 表示範囲 `TaskScope`: `{ kind: 'inbox' }`（プロジェクトに属さないタスク）/ `{ kind: 'project', projectId }`

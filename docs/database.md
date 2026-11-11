@@ -287,6 +287,21 @@ WAL使用中は、稼働中のDBファイルを単純コピーしてもバック
 | 削除時の所属解除・非表示化・削除は全部成功するか何も変えない | Service（1つのトランザクション・BEGIN IMMEDIATE） |
 | 確認後に配下の件数が変わったら削除しない | Service（確認時の件数と比べて CONFLICT） |
 
+### 0009_task_favorite（共通のタスク行。2026-11-11）
+
+- 生成SQL（`db:generate --name task_favorite` の結果に説明を追記）: `ALTER TABLE tasks ADD favorite integer DEFAULT false NOT NULL`。過去のマイグレーションは変更していない。
+- `favorite`: お気に入り。論理型（Drizzle の `integer({ mode: 'boolean' })`。SQLite には真偽値の型がないため INTEGER の 0 / 1）。
+  NOT NULL・既定値 false。既存の行はすべて false（0）になる。入力は Zod で真偽値だけを受け付ける。
+- **既存のDB（通常利用 GTD・開発 GTD-dev）は、次にアプリを通常起動した時に未適用の 0007〜0009 が適用される。** 起動前にバックアップを取ること。
+
+### 0008_task_dueto（フェーズ6）
+
+- 生成SQL（`db:generate --name task_dueto` の結果に説明を追記）: `ALTER TABLE tasks ADD dueto text`、索引 `tasks_dueto_idx`。過去のマイグレーションは変更していない。
+- `dueto`: 期限。日付のみの "YYYY-MM-DD"（TEXT。時刻・タイムゾーンなし。UTC日時へ変換しない）。NULL は未設定。既存の行はすべて NULL。
+  SQLite は型を検証しないため、Main の入力検証（Zod + `isValidDateOnly`）で実在する暦日だけを受け付ける（2月30日などは INVALID_INPUT）。
+  固定長のため文字列の比較が日付の前後と一致する（Summary の範囲の取得に使う）。
+- **既存のDB（通常利用 GTD・開発 GTD-dev）は、次にアプリを通常起動した時に 0007・0008（開発DBは状況による）が適用される。** 起動前にバックアップを取ること。
+
 ### 0007_task_and_milestone_order（フェーズ5.9）
 
 - 生成SQL（`db:generate --name task_and_milestone_order` の結果に説明のコメントを追記）:

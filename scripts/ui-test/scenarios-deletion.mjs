@@ -106,10 +106,10 @@ export function deletionScenarios({ withApp, root }) {
           })`)
           assert(structure.inOption === 0 && structure.menuButtons === 6 && structure.menuTab, 'option の中に操作要素を置かない（「…」は一覧の外・Tab移動の対象外）', structure)
 
-          // マウス: 「…」→ メニュー（詳細・名前の変更・紐付け・削除）→ 削除（確認なし）
+          // マウス: 「…」→ メニュー（削除だけ。TaskRow）→ 削除（確認なし）
           await openRowMenu(c, t['削除F'])
           const items = await c.evaluate(`[...document.querySelectorAll('[data-testid=task-row-menu] [role=menuitem]')].map((e) => e.textContent)`)
-          assert(JSON.stringify(items) === JSON.stringify(['詳細を表示', '名前を変更（F2）', '紐付け…', 'タスクを削除']), 'Inboxの行のメニュー', items)
+          assert(JSON.stringify(items) === JSON.stringify(['削除']), 'Inboxの行の「…」メニューは削除だけ（TaskRow）', items)
           await c.click(`document.querySelector('[data-testid=task-row-menu-delete]')`)
           await c.waitFor(`!document.querySelector('[data-testid=task-list] [data-task-id="${t['削除F']}"]')`, 5000, '確認なしで一覧から消える')
           assert(rawTask(t['削除F']) === undefined, 'DBから物理削除')
@@ -120,7 +120,7 @@ export function deletionScenarios({ withApp, root }) {
           await c.key('Escape', 27)
           await c.waitFor(`!document.querySelector('[data-testid=task-row-menu]')`, 3000, 'メニューを閉じる')
 
-          // キーボード: Shift+F10 → メニュー（末尾の削除）→ 削除、Delete キー → 削除（どちらも確認なし）
+          // キーボード: Shift+F10 → メニュー（削除だけ）→ 削除、Delete キー → 削除（どちらも確認なし）
           await c.focus('[data-testid=task-list]')
           await c.key('Home', 36)
           const first = await c.evaluate(`document.getElementById(document.querySelector('[data-testid=task-list]').getAttribute('aria-activedescendant'))?.dataset.taskId`)
@@ -129,7 +129,7 @@ export function deletionScenarios({ withApp, root }) {
           await c.waitFor(`document.querySelector('[data-testid=task-row-menu] [role=menu]')?.contains(document.activeElement)`, 3000, 'Shift+F10 でメニュー')
           await sleep(200)
           const menuFocus = await c.evaluate(`document.activeElement?.textContent`)
-          assert(menuFocus === '詳細を表示', 'メニューの先頭にフォーカス', menuFocus)
+          assert(menuFocus === '削除', 'メニューの項目（削除だけ）にフォーカス', menuFocus)
           await c.key('End', 35)
           await c.enter()
           await c.waitFor(`!document.querySelector('[data-testid=task-list] [data-task-id="${t['削除E']}"]')`, 5000, '一覧から消える')
@@ -225,7 +225,7 @@ export function deletionScenarios({ withApp, root }) {
           await openProject(c, ids.p)
           await openRowMenu(c, open)
           const items = await c.evaluate(`[...document.querySelectorAll('[data-testid=task-row-menu] [role=menuitem]')].map((e) => e.textContent)`)
-          assert(JSON.stringify(items) === JSON.stringify(['名前を変更（F2）', 'タスクを削除']), 'カードの行のメニューは名前の変更と削除', items)
+          assert(JSON.stringify(items) === JSON.stringify(['削除']), 'カードの行の「…」メニューは削除だけ（TaskRow）', items)
           await c.click(`document.querySelector('[data-testid=task-row-menu-delete]')`)
           await c.waitFor(`!document.querySelector('[data-testid=task-list] [data-task-id="${open}"]')`, 5000, '確認なしで削除')
           assert(rawTask(open) === undefined && (await anyDialog(c)) === null, 'カードから削除（確認なし）')
@@ -475,8 +475,8 @@ export function deletionScenarios({ withApp, root }) {
         old.close()
         await withApp({ label: 'migration-56', userDataDir: migrationDir }, async (app) => {
           const c = app.cdp
-          // フェーズ5.9で 0007（手動順の列）が加わったため、0006 と 0007 を適用する
-          assert(app.logs.some((line) => line.includes('migrations applied: 6 -> 8')), '0006・0007を適用する', app.logs.filter((l) => l.includes('[db]')))
+          // フェーズ5.9で 0007（手動順）、フェーズ6で 0008（期限）、TaskRow で 0009（お気に入り）が加わったため、0006〜0009 を適用する
+          assert(app.logs.some((line) => line.includes('migrations applied: 6 -> 10')), '0006〜0009を適用する', app.logs.filter((l) => l.includes('[db]')))
           const visible = (await tasks(c)).map((t) => t.id).sort()
           assert(JSON.stringify(visible) === JSON.stringify([T[2], T[3], T[4]].sort()), '残したタスクだけを表示', visible)
           await openProject(c, p)
@@ -488,7 +488,7 @@ export function deletionScenarios({ withApp, root }) {
         readDb(file, (db) => {
           assert(!db.prepare('SELECT 1 FROM tasks WHERE id IN (?, ?)').get(T[0], T[1]), 'プロジェクトだけに所属するタスクを削除（完了済みを含む）')
           const kept = db.prepare('SELECT * FROM tasks WHERE id IN (?, ?, ?) ORDER BY id').all(T[2], T[3], T[4])
-          assert(JSON.stringify(kept) === JSON.stringify(keep.map((row) => ({ ...row, hidden_at: null, position: null }))), 'Inbox・マイルストン所属済みは全列そのまま（0007の手動順はNULL）', kept)
+          assert(JSON.stringify(kept) === JSON.stringify(keep.map((row) => ({ ...row, hidden_at: null, position: null, dueto: null, favorite: 0 }))), 'Inbox・マイルストン所属済みは全列そのまま（0007の手動順・0008の期限はNULL、0009のお気に入りは false）', kept)
           assert(db.prepare('SELECT COUNT(*) AS c FROM milestones').get().c === 1 && db.prepare('SELECT COUNT(*) AS c FROM projects').get().c === 1, 'プロジェクト・マイルストンは保持')
         })
       }

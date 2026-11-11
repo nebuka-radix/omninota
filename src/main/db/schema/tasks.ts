@@ -22,6 +22,10 @@ import { projects } from './projects'
 //   同じマイルストンの表示中のタスクは「全件に値がある」か「全件NULL」のどちらか（Serviceが保つ）。
 //   並べ替えで初めて値が入る。手動順のあるマイルストンへの追加・移動は末尾（最大値+1）、Inboxへ戻すとNULL。
 //   並べ替えでは created_at・completed_at・updated_at を変えない。
+// - dueto: 期限（フェーズ6。0008で追加）。日付のみ "YYYY-MM-DD" の TEXT（時刻・タイムゾーンなし。UTC日時へ変換しない）。NULLは未設定。
+//   SQLiteは型を検証しないため、実在する暦日かは Main の入力検証で確かめる。固定長のため文字列の比較が日付の前後と一致する。
+// - favorite: お気に入り（0009で追加）。論理型。SQLiteには真偽値の型がないため、Drizzle の boolean モードで INTEGER の 0 / 1 として格納する。
+//   NOT NULL・既定値 false（既存のタスクも false）。未設定（NULL）は許容しない。
 export const tasks = sqliteTable(
   'tasks',
   {
@@ -33,12 +37,16 @@ export const tasks = sqliteTable(
     projectId: text('project_id').references(() => projects.id),
     milestoneId: text('milestone_id').references(() => milestones.id),
     hiddenAt: text('hidden_at'),
-    position: integer('position')
+    position: integer('position'),
+    dueto: text('dueto'),
+    favorite: integer('favorite', { mode: 'boolean' }).notNull().default(false)
   },
   (table) => [
     index('tasks_created_at_id_idx').on(table.createdAt, table.id),
     index('tasks_project_id_idx').on(table.projectId),
-    index('tasks_milestone_id_idx').on(table.milestoneId)
+    index('tasks_milestone_id_idx').on(table.milestoneId),
+    // Summary Review の期間の取得（dueto の範囲）に使う
+    index('tasks_dueto_idx').on(table.dueto)
   ]
 )
 

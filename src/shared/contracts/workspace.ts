@@ -3,7 +3,8 @@
 // 最後に表示した画面として保存・復元できるルート（フェーズ5.1で /projects と /projects/<UUID> を追加）
 // - 固定のルートは列挙した値だけ
 // - プロジェクトのルートは「/projects/」+ 小文字のUUID だけ（任意のパスや外部URLは受け付けない）
-export const WORKSPACE_STATIC_ROUTES = ['/inbox', '/settings', '/projects'] as const
+// フェーズ6で /summary（Summary Review）を追加
+export const WORKSPACE_STATIC_ROUTES = ['/inbox', '/settings', '/projects', '/summary'] as const
 export type WorkspaceStaticRoute = (typeof WORKSPACE_STATIC_ROUTES)[number]
 export type ProjectRoute = `/projects/${string}`
 export type WorkspaceRoute = WorkspaceStaticRoute | ProjectRoute

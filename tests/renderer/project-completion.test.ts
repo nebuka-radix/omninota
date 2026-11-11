@@ -29,7 +29,8 @@ const task = (title: string, projectId: string | null, completed = false): TaskD
   completedAt: completed ? '2026-11-10T01:00:00.000Z' : null,
   projectId,
   milestoneId: null,
-  position: null
+  position: null,
+  dueto: null, favorite: false
 })
 
 describe('サイドバーの区分（未完了・完了済み）', () => {

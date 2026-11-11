@@ -23,6 +23,9 @@ import {
   tasksDeleteArgsSchema,
   tasksDeleteManyArgsSchema,
   tasksReorderInMilestoneArgsSchema,
+  tasksSetDueArgsSchema,
+  summaryGetArgsSchema,
+  tasksSetFavoriteArgsSchema,
   tasksListArgsSchema,
   tasksSetCompletedArgsSchema,
   tasksSetAssignmentArgsSchema,
@@ -36,6 +39,7 @@ import {
 import type { FlushRequester } from '../lifecycle/workspace-flush'
 import type { MilestoneService } from '../services/milestone-service'
 import type { ProjectService } from '../services/project-service'
+import type { SummaryService } from '../services/summary-service'
 import type { TaskService } from '../services/task-service'
 import type { WorkspaceSettingsService } from '../services/workspace-settings-service'
 import { createIpcHandler, type SenderPolicy } from './handler'
@@ -48,6 +52,7 @@ export function registerIpcHandlers(deps: {
   taskService: TaskService
   projectService: ProjectService
   milestoneService: MilestoneService
+  summaryService: SummaryService
   workspaceSettingsService: WorkspaceSettingsService
   flushRequester: FlushRequester
 }): void {
@@ -151,6 +156,48 @@ export function registerIpcHandlers(deps: {
       argsSchema: tasksReorderInMilestoneArgsSchema,
       policy,
       run: ([input]) => taskService.reorderInMilestone(input)
+    })
+  )
+
+  // フェーズ6: 期限の設定・変更・解除と Summary Review
+  ipcMain.handle(
+    IPC_CHANNELS.tasksSetDue,
+    createIpcHandler({
+      channel: IPC_CHANNELS.tasksSetDue,
+      argsSchema: tasksSetDueArgsSchema,
+      policy,
+      run: ([input]) => taskService.setDue(input)
+    })
+  )
+
+  // お気に入りの設定・解除
+  ipcMain.handle(
+    IPC_CHANNELS.tasksSetFavorite,
+    createIpcHandler({
+      channel: IPC_CHANNELS.tasksSetFavorite,
+      argsSchema: tasksSetFavoriteArgsSchema,
+      policy,
+      run: ([input]) => taskService.setFavorite(input)
+    })
+  )
+
+  ipcMain.handle(
+    IPC_CHANNELS.summaryGet,
+    createIpcHandler({
+      channel: IPC_CHANNELS.summaryGet,
+      argsSchema: summaryGetArgsSchema,
+      policy,
+      run: () => deps.summaryService.get()
+    })
+  )
+
+  ipcMain.handle(
+    IPC_CHANNELS.summaryToday,
+    createIpcHandler({
+      channel: IPC_CHANNELS.summaryToday,
+      argsSchema: summaryGetArgsSchema,
+      policy,
+      run: () => deps.summaryService.today()
     })
   )
 

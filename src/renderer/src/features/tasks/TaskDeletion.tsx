@@ -1,68 +1,41 @@
 import { useRef, useState } from 'react'
-import { Divider, Menu, MenuItem } from '@mui/material'
-import { Link2, PanelRight, Pencil, Trash2 } from 'lucide-react'
+import { Menu, MenuItem } from '@mui/material'
+import { Trash2 } from 'lucide-react'
 import type { TaskDto } from '../../../../shared/contracts/tasks'
 import { useDraftGuard } from '../drafts/DraftGuard'
 import { useWorkspace } from '../workspace/WorkspaceContext'
 import { useDeleteTaskMutation, useDeleteTasksMutation } from './task-queries'
 
-// 行のメニュー（フェーズ5.6。5.9で「名前を変更」「詳細を表示」と、選択中の複数タスクへの一括操作を追加）。
-// - count が2以上なら、紐付け・削除は選択中のタスクすべてが対象（項目名に件数を示す）。1なら行のタスクだけ
-// MUI の Menu（↑↓・Enter・Esc。開いた時は先頭の項目にフォーカス）。閉じたらフォーカスは元の位置（一覧）へ戻る。
+// 行の「…」メニュー（TaskRow の3点ボタン・一覧の Shift+F10 / ContextMenu キー）。項目は「削除」だけ
+// （名前の変更・期限・紐付けは TaskRow の各操作で行い、ここには重複して置かない）。
+// 対象は常にその行の1タスク（Inboxの複数選択中でも。選択中のタスクの一括削除は選択バー・Delete キー）。確認ダイアログは出さない。
+// MUI の Menu（↑↓・Enter・Esc。開いた時は項目にフォーカス）。閉じたらフォーカスは元の一覧へ戻す（呼び出し側）。
 export function TaskRowMenu({
   task,
   anchor,
-  count = 1,
-  onShowDetail,
-  onRename,
-  onAssign,
   onDelete,
   onClose
 }: {
   task: TaskDto
   anchor: HTMLElement
-  count?: number
-  onShowDetail?: (() => void) | undefined
-  onRename?: (() => void) | undefined
-  onAssign?: (() => void) | undefined
   onDelete: () => void
   onClose: () => void
 }) {
-  const bulk = count > 1
-  const items = [
-    onShowDetail && { key: 'detail', label: '詳細を表示', icon: PanelRight, run: onShowDetail },
-    onRename && !bulk && { key: 'rename', label: '名前を変更（F2）', icon: Pencil, run: onRename },
-    onAssign && { key: 'assign', label: bulk ? `選択した ${count} 件を紐付け…` : '紐付け…', icon: Link2, run: onAssign }
-  ].filter((item): item is { key: string; label: string; icon: typeof Pencil; run: () => void } => Boolean(item))
   return (
     <Menu
       open
+      // 閉じた後のフォーカスは呼び出し側が一覧へ戻す
+      disableRestoreFocus
       anchorEl={anchor}
       onClose={onClose}
       slotProps={{
-        list: { 'aria-label': bulk ? `選択した ${count} 件のタスクのメニュー` : `「${task.title}」のメニュー`, dense: true },
-        paper: { sx: { minWidth: 200 } }
+        list: { 'aria-label': `「${task.title}」のメニュー`, dense: true },
+        paper: { sx: { minWidth: 160 } }
       }}
       data-testid="task-row-menu"
     >
-      {items.map((item, index) => (
-        <MenuItem
-          key={item.key}
-          autoFocus={index === 0}
-          onClick={() => {
-            onClose()
-            item.run()
-          }}
-          sx={{ fontSize: 13, gap: 1 }}
-          data-testid={`task-row-menu-${item.key}`}
-        >
-          <item.icon size={14} aria-hidden />
-          {item.label}
-        </MenuItem>
-      ))}
-      {items.length > 0 && <Divider />}
       <MenuItem
-        autoFocus={items.length === 0}
+        autoFocus
         onClick={() => {
           onClose()
           onDelete()
@@ -71,7 +44,7 @@ export function TaskRowMenu({
         data-testid="task-row-menu-delete"
       >
         <Trash2 size={14} aria-hidden />
-        {bulk ? `選択した ${count} 件を削除` : 'タスクを削除'}
+        削除
       </MenuItem>
     </Menu>
   )

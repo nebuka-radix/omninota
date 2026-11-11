@@ -1,4 +1,4 @@
-import { realpathSync } from 'node:fs'
+import { readFileSync, realpathSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { app, BrowserWindow, dialog, screen, session } from 'electron'
 import { APP_IDENTITY } from '../shared/app-identity'
@@ -25,6 +25,7 @@ import { createSettingsRepository } from './repositories/settings-repository'
 import { createTaskRepository } from './repositories/task-repository'
 import { createMilestoneService } from './services/milestone-service'
 import { createProjectService } from './services/project-service'
+import { createSummaryService } from './services/summary-service'
 import { createTaskService } from './services/task-service'
 import { createWorkspaceSettingsService } from './services/workspace-settings-service'
 import {
@@ -73,6 +74,22 @@ if (testConfig) {
     console.info('[test] ウィンドウを閉じる要求（×と同じ経路）')
     if (mainWindow && !mainWindow.isDestroyed()) mainWindow.close()
   })
+}
+
+// 現在時刻（フェーズ6: 「今日」「明日」・Summary Review の期間の基準）。
+// 自動テストだけ（テストモード・未パッケージ）、GTD_TEST_CLOCK_FILE のJSON（{ at: ISO日時, setAt: 書き込んだ時のミリ秒 }）で
+// 現在時刻をずらせる（日付の切り替え・ローカル日付とUTC日付が異なる時刻の検証用。経過時間はそのまま進む）。ファイルがなければ実際の時刻。
+const clockFile = testConfig ? process.env['GTD_TEST_CLOCK_FILE'] : undefined
+function now(): Date {
+  if (!clockFile) return new Date()
+  try {
+    const { at, setAt } = JSON.parse(readFileSync(clockFile, 'utf8')) as { at: string; setAt: number }
+    const base = Date.parse(at)
+    if (Number.isNaN(base) || typeof setAt !== 'number') return new Date()
+    return new Date(base + (Date.now() - setAt))
+  } catch {
+    return new Date()
+  }
 }
 
 // ネイティブダイアログ。テストモードでは画面に出さず、指定した回答を使う。
@@ -335,8 +352,10 @@ if (!app.requestSingleInstanceLock()) {
         repository: taskRepository,
         findProject: projectRepository.findById,
         findMilestone: milestoneRepository.findById,
-        transaction
+        transaction,
+        now
       }),
+      summaryService: createSummaryService({ listDueBetween: taskRepository.listDueBetween, now }),
       milestoneService: createMilestoneService({
         repository: milestoneRepository,
         findProject: projectRepository.findById,

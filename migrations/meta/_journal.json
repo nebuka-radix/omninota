@@ -57,6 +57,20 @@
       "when": 1794371040496,
       "tag": "0007_task_and_milestone_order",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "6",
+      "when": 1794379808591,
+      "tag": "0008_task_dueto",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "6",
+      "when": 1794390043263,
+      "tag": "0009_task_favorite",
+      "breakpoints": true
     }
   ]
 }
