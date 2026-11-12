@@ -17,7 +17,7 @@ import { deletionScopeChanged, projectHasOpenTasks, projectNotFound } from './er
 // inputはIPC層でZod検証済み（前後空白の除去・空文字と長さ・IDの形式）であること。
 export type ProjectService = {
   list(): ProjectDto[]
-  // 未完了（completedAt = null）で作成する。同名のプロジェクトも作成できる。
+  // 未完了（done = false・doneOn = null）で作成する。同名のプロジェクトも作成できる。
   // フェーズ5.6: 同じトランザクションで「新しいマイルストン」（通常のマイルストン）を1件作る。どちらか一方だけが残ることはない。
   create(input: CreateProjectInput): ProjectDto
   // 名前が保存済みと同じなら更新しない（updatedAtも変えない）。
@@ -41,7 +41,8 @@ function toDto(row: ProjectRow): ProjectDto {
     name: row.name,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
-    completedAt: row.completedAt
+    done: row.done,
+    doneOn: row.doneOn
   }
 }
 
@@ -77,7 +78,8 @@ export function createProjectService(deps: {
           name: input.name,
           createdAt: timestamp,
           updatedAt: timestamp,
-          completedAt: null
+          done: false,
+          doneOn: null
         }
         repository.insert(row)
         deps.insertMilestone({
@@ -86,6 +88,8 @@ export function createProjectService(deps: {
           name: INITIAL_MILESTONE_NAME,
           createdAt: timestamp,
           updatedAt: timestamp,
+          done: false,
+          doneOn: null,
           // 新しいプロジェクトのカードには手動順がない（作成日時の順。フェーズ5.9）
           position: null
         })
@@ -105,14 +109,14 @@ export function createProjectService(deps: {
         // 1. 存在 → 2. 同じ状態なら変更なし → 3. 完了時は未完了タスクの有無 → 4. 更新
         const current = repository.findById(input.id)
         if (!current) throw projectNotFound()
-        if ((current.completedAt !== null) === input.completed) return toDto(current)
+        if (current.done === input.completed) return toDto(current)
         if (input.completed) {
           const openTaskCount = deps.countOpenTasks(input.id)
           if (openTaskCount > 0) throw projectHasOpenTasks(openTaskCount)
         }
         const timestamp = now().toISOString()
-        // 作成日時・名前は変えない。完了時は completedAt と updatedAt を同じ日時にする
-        const updated = repository.updateCompletedAt(input.id, input.completed ? timestamp : null, timestamp)
+        // 作成日時・名前は変えない。完了時は done = true と done_on・updatedAt を同じ日時に（同じ更新）。取り消しは false・NULL
+        const updated = repository.updateDone(input.id, input.completed ? timestamp : null, timestamp)
         if (!updated) throw projectNotFound()
         return toDto(updated)
       })
@@ -125,7 +129,8 @@ export function createProjectService(deps: {
         return {
           id: current.id,
           name: current.name,
-          completedAt: current.completedAt,
+          done: current.done,
+          doneOn: current.doneOn,
           milestoneCount: deps.countMilestones(input.id),
           taskCount: tasks.total,
           hiddenTaskCount: tasks.hidden

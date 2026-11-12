@@ -44,10 +44,10 @@ describe('タスクの更新（Service・一時DB）', () => {
     temp.cleanup()
   })
 
-  it('新規タスクは未完了（completedAt = null）', () => {
+  it('新規タスクは未完了（doneOn = null）', () => {
     const created = service.create({ title: '牛乳を買う' })
-    expect(created.completedAt).toBeNull()
-    expect(service.list()[0]?.completedAt).toBeNull()
+    expect(created.doneOn).toBeNull()
+    expect(service.list()[0]?.doneOn).toBeNull()
   })
 
   it('タイトルを編集するとupdatedAtだけが変わる（作成日時・完了日時は変えない）', () => {
@@ -55,7 +55,7 @@ describe('タスクの更新（Service・一時DB）', () => {
     const updated = service.updateTitle({ id: ID, title: '新タイトル' })
     expect(updated.title).toBe('新タイトル')
     expect(updated.createdAt).toBe(created.createdAt)
-    expect(updated.completedAt).toBeNull()
+    expect(updated.doneOn).toBeNull()
     expect(updated.updatedAt > created.updatedAt).toBe(true)
     expect(service.list()[0]).toEqual(updated)
   })
@@ -65,11 +65,11 @@ describe('タスクの更新（Service・一時DB）', () => {
     expect(service.updateTitle({ id: ID, title: '同じ' })).toEqual(created)
   })
 
-  it('完了するとcompletedAtとupdatedAtが同じ日時になり、作成日時は変わらない', () => {
+  it('完了するとdoneOnとupdatedAtが同じ日時になり、作成日時は変わらない', () => {
     const created = service.create({ title: 'a' })
     const done = service.setCompleted({ id: ID, completed: true })
-    expect(done.completedAt).not.toBeNull()
-    expect(done.updatedAt).toBe(done.completedAt)
+    expect(done.doneOn).not.toBeNull()
+    expect(done.updatedAt).toBe(done.doneOn)
     expect(done.createdAt).toBe(created.createdAt)
   })
 
@@ -79,11 +79,11 @@ describe('タスクの更新（Service・一時DB）', () => {
     expect(service.setCompleted({ id: ID, completed: true })).toEqual(done)
   })
 
-  it('完了を取り消すとcompletedAtがnullになり、updatedAtが進む', () => {
+  it('完了を取り消すとdoneOnがnullになり、updatedAtが進む', () => {
     service.create({ title: 'a' })
     const done = service.setCompleted({ id: ID, completed: true })
     const reopened = service.setCompleted({ id: ID, completed: false })
-    expect(reopened.completedAt).toBeNull()
+    expect(reopened.doneOn).toBeNull()
     expect(reopened.updatedAt > done.updatedAt).toBe(true)
     // 未完了への再要求でも日時を変えない
     expect(service.setCompleted({ id: ID, completed: false })).toEqual(reopened)
@@ -92,7 +92,7 @@ describe('タスクの更新（Service・一時DB）', () => {
   it('完了済みタスクのタイトルを編集しても完了日時は変わらない', () => {
     service.create({ title: 'a' })
     const done = service.setCompleted({ id: ID, completed: true })
-    expect(service.updateTitle({ id: ID, title: 'b' }).completedAt).toBe(done.completedAt)
+    expect(service.updateTitle({ id: ID, title: 'b' }).doneOn).toBe(done.doneOn)
   })
 
   it('存在しないIDは成功扱いしない（NOT_FOUND）', () => {
@@ -164,7 +164,7 @@ describe('タスク更新APIの入力検証とエラー（IPCハンドラー）'
     ['空白だけのタイトル', [{ id: ID, title: '   ' }]],
     ['上限超過のタイトル', [{ id: ID, title: 'x'.repeat(TASK_TITLE_MAX_LENGTH + 1) }]],
     ['UUIDでないID', [{ id: '1; DROP TABLE tasks', title: 'x' }]],
-    ['余分なキー（列の直接指定）', [{ id: ID, title: 'x', completedAt: '2026-01-01T00:00:00.000Z' }]],
+    ['余分なキー（列の直接指定）', [{ id: ID, title: 'x', doneOn: '2026-01-01T00:00:00.000Z' }]],
     ['引数なし', []]
   ])('タイトル更新: %s はINVALID_INPUTで、DBは変わらない', async (_label, args) => {
     expect(await updateTitle()(event, ...args)).toMatchObject({ ok: false, error: { code: 'INVALID_INPUT' } })
@@ -173,11 +173,11 @@ describe('タスク更新APIの入力検証とエラー（IPCハンドラー）'
 
   it.each<[string, unknown[]]>([
     ['completedが文字列', [{ id: ID, completed: 'true' }]],
-    ['完了日時の指定', [{ id: ID, completed: true, completedAt: '2020-01-01T00:00:00.000Z' }]],
+    ['完了日時の指定', [{ id: ID, completed: true, doneOn: '2020-01-01T00:00:00.000Z' }]],
     ['completedなし（トグル要求）', [{ id: ID }]]
   ])('完了状態の更新: %s はINVALID_INPUT', async (_label, args) => {
     expect(await setCompleted()(event, ...args)).toMatchObject({ ok: false, error: { code: 'INVALID_INPUT' } })
-    expect(service.list()[0]?.completedAt).toBeNull()
+    expect(service.list()[0]?.doneOn).toBeNull()
   })
 
   it('存在しないIDはNOT_FOUND（SQLや内部の詳細は返さない）', async () => {

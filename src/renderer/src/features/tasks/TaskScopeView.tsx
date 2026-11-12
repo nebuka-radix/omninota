@@ -160,7 +160,7 @@ export function TaskScopeView({
   )
   // マイルストン別のグループ＝カード（プロジェクト画面だけ）。Tableで絞り込み・ソートした順序のまま振り分ける
   const groups = project ? buildTaskGroups(visibleTasks, projectMilestones) : null
-  const projectCompleted = project !== undefined && project.completedAt !== null
+  const projectCompleted = project !== undefined && project.done
   const scopeCount = useMemo(() => data.filter((task) => isTaskInScope(task, stableScope)).length, [data, stableScope])
 
   // 表示対象から外れたID（絞り込み・削除・紐付けなど）は、見えないまま一括操作の対象に残さない

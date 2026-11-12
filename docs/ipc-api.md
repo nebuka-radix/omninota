@@ -48,7 +48,7 @@ type IpcErrorDetails =
 | `tasks.assignFromInbox(input)` | `tasks:assign-from-inbox` | `{ ids: string[], projectId, milestoneId }` | `TaskDto[]`（ids の順。フェーズ5.9） |
 | `tasks.deleteMany(input)` | `tasks:delete-many` | `{ ids: string[] }` | `{ ids }`（物理削除。フェーズ5.9） |
 | `tasks.setDue(input)` | `tasks:set-due` | `{ id, due: { kind: 'today' } \| { kind: 'tomorrow' } \| { kind: 'date', date: 'YYYY-MM-DD' } \| { kind: 'clear' } }` | `TaskDto`（保存後。フェーズ6） |
-| `summary.get()` | `summary:get` | なし | `SummaryReview`（`{ today, todayItems, tomorrowItems, thisWeekItems }`。フェーズ6。各行は `TaskDto` と `projectName`・`milestoneName`） |
+| `summary.get()` | `summary:get` | なし | `SummaryReview`（`{ today, todayItems, tomorrowItems, thisWeekItems, overdueItems }`。overdueItems は昨日以前すべて。フェーズ6。各行は `TaskDto` と `projectName`・`milestoneName`） |
 | `summary.today()` | `summary:today` | なし | `string`（Main のローカルの今日 "YYYY-MM-DD"。期限の表示に使う） |
 | `tasks.setFavorite(input)` | `tasks:set-favorite` | `{ id, favorite: boolean }` | `TaskDto`（保存後。お気に入りだけを更新。同じ値なら更新しない。非表示・削除済みは NOT_FOUND） |
 | `tasks.reorderInMilestone(input)` | `tasks:reorder-in-milestone` | `{ milestoneId, orderedIds: string[] }` | `TaskDto[]`（そのマイルストンの全件・新しい順。フェーズ5.9） |
@@ -84,7 +84,7 @@ type IpcErrorDetails =
 ### tasks.updateTitle
 
 - `id` はUUID、`title` は tasks.create と同じ規則（前後空白の除去・空は拒否・上限200文字）。
-- 余分なキー（`completedAt` など列の直接指定）は拒否する。
+- 余分なキー（`doneOn` など列の直接指定）は拒否する。
 - 前後空白を除いたタイトルが保存済みと同じなら更新せず、そのままのタスクを返す。
 - 存在しないIDは NOT_FOUND（成功扱いしない）。
 
@@ -129,7 +129,7 @@ projects.create:
   タスクは削除しない）→ マイルストンを物理削除。最後の1件でも削除でき、代わりのマイルストンは作らない。完了済みプロジェクトのマイルストンも削除できる。
 
 `projects.getDeletionSummary({ id })` / `projects.delete({ id, expectedMilestoneCount, expectedTaskCount })`:
-- 確認内容: `{ id, name, completedAt, milestoneCount, taskCount, hiddenTaskCount }`。taskCount は既に非表示の所属タスク（マイルストンの削除で
+- 確認内容: `{ id, name, done, doneOn, milestoneCount, taskCount, hiddenTaskCount }`。taskCount は既に非表示の所属タスク（マイルストンの削除で
   非表示になり project_id だけが残っているもの）を含む総数。
 - 削除は1つのトランザクションで: 存在（NOT_FOUND）→ 件数が確認時と同じか（違えば CONFLICT `deletion-scope-changed`）→
   所属タスク（既に非表示のものを含む）の project_id・milestone_id を NULL・hidden_at を設定（既にあれば維持）→
@@ -140,7 +140,7 @@ projects.create:
 
 ```ts
 type MilestoneDeletionSummary = { id: string; name: string; taskCount: number }
-type ProjectDeletionSummary = { id: string; name: string; completedAt: string | null; milestoneCount: number; taskCount: number; hiddenTaskCount: number }
+type ProjectDeletionSummary = { id: string; name: string; done: boolean; doneOn: string | null; milestoneCount: number; taskCount: number; hiddenTaskCount: number }
 // IpcErrorDetails に { kind: 'deletion-scope-changed' } を追加
 ```
 
@@ -196,7 +196,7 @@ Rendererから単体APIを件数分呼ぶ方式は使わない。
 - `tasks.deleteMany`: 表示中の複数タスクの物理削除。全件が存在し表示中でなければ NOT_FOUND で何も削除しない。
 - `tasks.reorderInMilestone`: `orderedIds` はそのマイルストンの表示中のタスク全件（完了済みを含む）の新しい順序。
   DBの所属タスクと一致しない（一部だけ・別のタスク・存在しないID）場合は CONFLICT（`details: { kind: 'order-changed' }`）。
-  順位（`position`）だけを書き換え、created_at・completed_at・updated_at は変えない。
+  順位（`position`）だけを書き換え、created_at・done_on・updated_at は変えない。
 - `milestones.reorder`: `orderedIds` はそのプロジェクトの表示中のマイルストン全件の新しい順序。一致しなければ CONFLICT（order-changed）。
   名前・日時は変えない。完了済みプロジェクトでも並べ替えられる。
 
@@ -208,7 +208,7 @@ type TaskDto = {
   title: string
   createdAt: string
   updatedAt: string
-  completedAt: string | null
+  doneOn: string | null // 完了日時（0010 で completedAt から名前を変更）。タスクの完了状態（done）は doneOn の有無で表す（done の列・項目はない）
   projectId: string | null // 所属するプロジェクト。nullは未所属（フェーズ5.2）
   milestoneId: string | null // 所属するマイルストン。nullは未設定（フェーズ5.4）
   position: number | null // マイルストン内の手動順（フェーズ5.9）。null は手動順なし（作成日時の古い順）
@@ -221,9 +221,9 @@ type TaskDto = {
 ### projects.list / projects.create / projects.rename（フェーズ5.1）
 
 - 名前: 前後空白を除去、空白のみは INVALID_INPUT、最大200文字（`PROJECT_NAME_MAX_LENGTH`）。同名を許可。
-- `create`: IDと日時はMain側で付与し、未完了（`completedAt: null`）で作成する。
+- `create`: IDと日時はMain側で付与し、未完了（`done: false`・`doneOn: null`）で作成する。
 - `rename`: `id` はUUID。存在しないIDは NOT_FOUND（「対象のプロジェクトが見つかりません。」）。同じ名前なら更新しない。
-- 余分なキー（`completedAt` など）は拒否する。
+- 余分なキー（`done`・`doneOn` など）は拒否する。
 
 ### projects.setCompleted（フェーズ5.3）
 
@@ -233,12 +233,13 @@ type TaskDto = {
   2. 既に目的の状態なら、変更しない成功（日時を変えない）
   3. 完了にする場合: 所属する未完了タスクの件数をDBで数える（画面の検索・表示フィルター・取得済みの件数には依存しない）。
      1件以上なら CONFLICT（`details: { kind: 'project-has-open-tasks', openTaskCount }`）。タスク0件・全件完了なら完了できる。
-  4. 更新: 完了は `completedAt` と `updatedAt` を同じ現在日時に、取り消しは `completedAt: null` と `updatedAt` を現在日時にする。
+  4. 更新: 完了は `done: true` と `doneOn`・`updatedAt` を同じ現在日時に（同じ更新）、取り消しは `done: false`・`doneOn: null` と `updatedAt` を現在日時にする。
      `createdAt`・名前は変えない。所属タスクの状態・日時・所属は変えない。
 - タスクが全件完了しても、プロジェクトを自動で完了しない。
 
 ```ts
-type ProjectDto = { id: string; name: string; createdAt: string; updatedAt: string; completedAt: string | null }
+type ProjectDto = { id: string; name: string; createdAt: string; updatedAt: string; done: boolean; doneOn: string | null } // 0010 で completedAt → doneOn、done を追加
+// MilestoneDto にも done: boolean・doneOn: string | null（0010。今回は完了の操作がなく常に false / null）
 ```
 
 ### workspace.get / workspace.save

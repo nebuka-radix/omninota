@@ -109,7 +109,7 @@ function useInboxBadge(): NavBadge {
   const tasks = useQuery(taskListQueryOptions)
   if (tasks.isPending) return { text: '…', description: 'タスクの件数を読み込み中' }
   if (tasks.isError) return { text: '!', description: 'タスクの件数を取得できません' }
-  const open = tasks.data.filter((task) => isTaskInScope(task, INBOX_SCOPE) && task.completedAt === null).length
+  const open = tasks.data.filter((task) => isTaskInScope(task, INBOX_SCOPE) && task.doneOn === null).length
   return { text: String(open), description: `未完了のタスク ${open} 件` }
 }
 
@@ -120,7 +120,7 @@ export function NavigationPane({ pathname }: { pathname: string }) {
   const projects = useQuery(projectListQueryOptions)
   const selectedProjectId = projectIdFromRoute(pathname)
   // 完了済みのプロジェクトはサイドバーに表示しないため、折りたたみ中の「選択中」にも出さない（フェーズ5.8）
-  const selectedProject = projects.data?.find((project) => project.id === selectedProjectId && project.completedAt === null)
+  const selectedProject = projects.data?.find((project) => project.id === selectedProjectId && !project.done)
   const inboxBadge = useInboxBadge()
 
   return (

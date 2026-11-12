@@ -23,7 +23,7 @@ const task = (id: string, title: string, projectId: string | null, completed = f
   title,
   createdAt,
   updatedAt: createdAt,
-  completedAt: completed ? '2026-11-10T01:00:00.000Z' : null,
+  doneOn: completed ? '2026-11-10T01:00:00.000Z' : null,
   projectId,
   milestoneId: null,
   position: null,
@@ -90,12 +90,13 @@ describe('Table: 表示範囲と状態・検索・ソートの組み合わせ', 
 })
 
 describe('詳細パネルの所属の選択肢（5.4でプロジェクト・マイルストンの1つの選択に拡張）', () => {
-  const project = (id: string, name: string, createdAt: string, completedAt: string | null = null): ProjectDto => ({
+  const project = (id: string, name: string, createdAt: string, doneOn: string | null = null): ProjectDto => ({
     id,
     name,
     createdAt,
     updatedAt: createdAt,
-    completedAt
+    done: doneOn !== null,
+    doneOn
   })
   const work1 = project('aaaaaaaa-0000-4000-8000-000000000001', '仕事', '2026-11-01T00:00:00.000Z')
   const work2 = project('bbbbbbbb-0000-4000-8000-000000000002', '仕事', '2026-11-02T00:00:00.000Z')
@@ -113,6 +114,8 @@ describe('詳細パネルの所属の選択肢（5.4でプロジェクト・マ�
     name: 'M',
     createdAt: '2026-11-06T00:00:00.000Z',
     updatedAt: '2026-11-06T00:00:00.000Z',
+    done: false,
+    doneOn: null,
     position: null
   })
   const mWork = milestoneOf(work1.id, 'ffffffff-0000-4000-8000-000000000011')

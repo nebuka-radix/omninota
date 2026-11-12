@@ -29,6 +29,7 @@ import { orderScenarios } from './scenarios-order.mjs'
 import { exitScenarios } from './scenarios-exit.mjs'
 import { dueSummaryScenarios } from './scenarios-due-summary.mjs'
 import { taskRowScenarios } from './scenarios-task-row.mjs'
+import { summaryLayoutScenarios } from './scenarios-summary-layout.mjs'
 
 const args = process.argv.slice(2)
 const mode = args[0]
@@ -135,7 +136,7 @@ const scenarios = [
         await c.enter()
         await c.waitFor(`document.querySelectorAll('[data-testid=task-list] [role=option]').length === 1`, 5000, '一覧に追加')
         const [task] = await tasks()
-        assert(task?.title === 'UIテストのタスク' && task.completedAt === null, '追加', task)
+        assert(task?.title === 'UIテストのタスク' && task.doneOn === null, '追加', task)
         // フェーズ5.9: Inboxでは行の選択だけでは詳細へ切り替えない（タブで切り替える）
         await clickRowShowDetail(c, `document.querySelector('[data-testid=task-list] [role=option]')`)
         await c.waitFor(`document.querySelector('[data-testid=task-editor] input')`, 3000, '詳細の表示')
@@ -148,10 +149,10 @@ const scenarios = [
         await c.focus('[data-testid=task-list]')
         await c.space()
         await sleep(500)
-        assert((await tasks())[0].completedAt !== null, 'Spaceで完了')
+        assert((await tasks())[0].doneOn !== null, 'Spaceで完了')
         await c.space()
         await sleep(500)
-        assert((await tasks())[0].completedAt === null, 'もう一度Spaceで未完了')
+        assert((await tasks())[0].doneOn === null, 'もう一度Spaceで未完了')
         const quit = await requestQuit(app)
         assert(quit?.code === 0, '正常終了', quit)
       })
@@ -297,6 +298,8 @@ scenarios.push(...orderScenarios({ withApp, root }))
 scenarios.push(...dueSummaryScenarios({ withApp, root }))
 // 共通のタスク行（TaskRow）: 3画面の行・お気に入り・クリック／ダブルクリック・紐付けアイコン・「…」の削除
 scenarios.push(...taskRowScenarios({ withApp, root }))
+// Summary Review の4区画・右サイドバーのプロジェクトのフィルター
+scenarios.push(...summaryLayoutScenarios({ withApp, root }))
 scenarios.push(...exitScenarios({ withApp, root }))
 
 console.log(`UIテスト（${mode}${displayId ? `、表示先 ${displayId}` : ''}）一時ディレクトリ: ${root}`)

@@ -209,7 +209,7 @@ export function dueSummaryScenarios({ withApp, root }) {
             { id: T(15), title: '7日後', createdAt: at(15), dueto: d(7) },
             { id: T(16), title: '8日後', createdAt: at(16), dueto: d(8) },
             { id: T(17), title: '期限なし', createdAt: at(17) },
-            { id: T(18), title: '完了済み', createdAt: at(18), dueto: d(0), completedAt: at(100) },
+            { id: T(18), title: '完了済み', createdAt: at(18), dueto: d(0), doneOn: at(100) },
             { id: T(19), title: '非表示', createdAt: at(19), dueto: d(0), projectId: P, hiddenAt: at(100) },
             // 同名・同じ期限の別のタスク（作成日時 → ID の順。消さない）
             { id: T(21), title: '同名', createdAt: at(20), dueto: d(3) },
@@ -220,7 +220,7 @@ export function dueSummaryScenarios({ withApp, root }) {
         const sections = (c) =>
           c.evaluate(`(() => {
             const by = (s) => [...document.querySelectorAll('[data-testid=summary-review] section[data-section=' + s + '] [role=option]')].sort((a, b) => a.getBoundingClientRect().top - b.getBoundingClientRect().top).map((e) => e.querySelector('[data-testid=task-title]').textContent)
-            return { today: by('todayItems'), tomorrow: by('tomorrowItems'), week: by('thisWeekItems'), empty: document.querySelectorAll('[data-testid=summary-empty]').length, day: document.querySelector('[data-testid=summary-scroll]')?.dataset.today }
+            return { today: by('todayItems'), tomorrow: by('tomorrowItems'), week: by('thisWeekItems'), overdue: by('overdueItems'), empty: document.querySelectorAll('[data-testid=summary-empty]').length, day: document.querySelector('[data-testid=summary-review]')?.dataset.today }
           })()`)
         const count = (c) => c.evaluate(`document.querySelector('[data-testid=status-center]')?.textContent ?? null`)
         const openSummary = async (c) => {
@@ -236,7 +236,7 @@ export function dueSummaryScenarios({ withApp, root }) {
           await openSummary(c)
           assert((await c.evaluate(`document.querySelector('nav button[aria-label="Summary Review"]').getAttribute('aria-current')`)) === 'page', '選択中の表示')
           const headings = await c.evaluate(`[...document.querySelectorAll('[data-testid=summary-heading]')].map((e) => e.textContent)`)
-          assert(JSON.stringify(headings) === JSON.stringify(['Actions for Today', 'Actions for Tomorrow', 'Actions for This Week']), '3つの見出しを順番に', headings)
+          assert(JSON.stringify(headings) === JSON.stringify(['Actions for Today', 'Actions for This Week', 'Actions for Tomorrow', 'Overdue Actions']), '4つの見出し（左上・右上・左下・右下の順）', headings)
           const visibleTitle = await c.evaluate(`[...document.querySelectorAll('main h1')].some((h) => h.getBoundingClientRect().height > 1)`)
           assert(!visibleTitle, '大きな画面タイトルを出さない')
           let s = await sections(c)
@@ -244,12 +244,13 @@ export function dueSummaryScenarios({ withApp, root }) {
           assert(JSON.stringify(s.today) === JSON.stringify(['今日の案件', '今日のInbox']), 'Today（作成日時の順・Inboxも含む）', s)
           assert(JSON.stringify(s.tomorrow) === JSON.stringify(['明日', '後で非表示になる']), 'Tomorrow', s)
           assert(JSON.stringify(s.week) === JSON.stringify(['明後日', '同名', '同名', '7日後']), '明後日〜7日後（両端を含む）・同名も別に表示', s)
+          assert(JSON.stringify(s.overdue) === JSON.stringify(['昨日']), 'Overdue は昨日以前だけ（今日は含めない）。8日後・期限なし・完了・非表示はどこにも出さない', s)
           const sameIds = await c.evaluate(`[...document.querySelectorAll('[data-testid=summary-review] [role=option]')].filter((e) => e.querySelector('[data-testid=task-title]').textContent === '同名').map((e) => e.dataset.taskId)`)
           assert(JSON.stringify(sameIds) === JSON.stringify([T(20), T(21)]), '同名・同時刻はIDの昇順で安定', sameIds)
           // 所属は紐付けアイコンのツールチップ・読み上げで示す（TaskRow の2行目は操作だけ）
           const context = await c.evaluate(`({ project: document.querySelector('[data-task-row-controls="${T(12)}"] [data-testid=task-assign]').title, inbox: document.querySelector('[data-task-row-controls="${T(11)}"] [data-testid=task-assign]').title })`)
-          assert(context.project.includes('案件 › 設計') && context.inbox.includes('Inbox'), '所属（プロジェクト › マイルストン・Inbox）を紐付けアイコンで示す', context)
-          assert((await count(c)) === '8 件', 'ステータスバーの中央に合計件数', await count(c))
+          assert(context.project.includes('案件 / 設計') && context.inbox.includes('Inbox'), '所属（プロジェクト / マイルストン・Inbox）を紐付けアイコンで示す', context)
+          assert((await count(c)) === '9 件', 'ステータスバーの中央に4区画の合計件数', await count(c))
           const top = await c.evaluate(`document.querySelector('[data-testid=top-bar-controls]').children.length`)
           assert(top === 0, 'トップバーに Inbox／Project の表示設定を出さない', top)
 
@@ -268,24 +269,29 @@ export function dueSummaryScenarios({ withApp, root }) {
           await api(c, `window.gtd.milestones.delete({ id: ${JSON.stringify(M2)}, expectedTaskCount: 1 })`)
           await openSummary(c)
           s = await sections(c)
-          assert(JSON.stringify(s.today) === JSON.stringify(['今日の案件']) && JSON.stringify(s.tomorrow) === JSON.stringify(['明日', '明後日']) && JSON.stringify(s.week) === JSON.stringify(['同名', '同名']), '完了・期限の変更・解除・非表示化を反映（画面へ戻ると取り直す）', s)
-          assert((await count(c)) === '5 件', '件数も更新', await count(c))
+          assert(JSON.stringify(s.today) === JSON.stringify(['今日の案件']) && JSON.stringify(s.tomorrow) === JSON.stringify(['明日', '明後日']) && JSON.stringify(s.week) === JSON.stringify(['同名', '同名']) && JSON.stringify(s.overdue) === JSON.stringify(['昨日']), '完了・期限の変更・解除・非表示化を反映（画面へ戻ると取り直す）', s)
+          assert((await count(c)) === '6 件', '件数も更新', await count(c))
 
           // 日付の変化: 再フォーカスで確かめる（東京 11/13 になる）
           setClock('2026-11-12T15:00:00.000Z') // 東京 11/13 00:00 ちょうど
           await c.evaluate(`window.dispatchEvent(new Event('focus'))`)
-          await c.waitFor(`document.querySelector('[data-testid=summary-scroll]')?.dataset.today === '2026-11-13'`, 5000, '再フォーカスで新しい日付')
+          await c.waitFor(`document.querySelector('[data-testid=summary-review]')?.dataset.today === '2026-11-13'`, 5000, '再フォーカスで新しい日付')
           s = await sections(c)
-          assert(JSON.stringify(s.today) === JSON.stringify(['明日', '明後日']) && JSON.stringify(s.tomorrow) === JSON.stringify([]) && s.empty === 1, '0時ちょうどで切り替わり、0件の見出しは「該当なし」', s)
+          assert(
+            JSON.stringify(s.today) === JSON.stringify(['明日', '明後日']) && JSON.stringify(s.tomorrow) === JSON.stringify([]) && s.empty === 1 && JSON.stringify(s.overdue) === JSON.stringify(['昨日', '今日の案件']),
+            '0時ちょうどで切り替わり（前日の Today は Overdue へ）、0件の見出しは「該当なし」',
+            s
+          )
           // スリープ復帰相当（表示の再開）
           setClock('2026-11-14T15:00:00.000Z') // 東京 11/15
           await c.evaluate(`(() => { Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => 'visible' }); document.dispatchEvent(new Event('visibilitychange')) })()`)
-          await c.waitFor(`document.querySelector('[data-testid=summary-scroll]')?.dataset.today === '2026-11-15'`, 5000, '表示の再開で新しい日付')
+          await c.waitFor(`document.querySelector('[data-testid=summary-review]')?.dataset.today === '2026-11-15'`, 5000, '表示の再開で新しい日付')
           s = await sections(c)
-          // 11/15: 今日は 11/15、This Week は 11/17〜11/22（期限 11/20 の「8日後」が入る）。昨日以前（11/12・11/13）は出さない
+          // 11/15: 今日は 11/15、This Week は 11/17〜11/22（期限 11/20 の「8日後」が入る）。昨日以前（11/11〜11/13）は Overdue（期限 → 作成日時の順）
           assert(
-            JSON.stringify(s.today) === JSON.stringify(['同名', '同名']) && JSON.stringify(s.week) === JSON.stringify(['8日後']) && s.empty === 1 && (await count(c)) === '3 件',
-            '期間が新しい日付で移る（昨日以前は出さず、新たに7日以内になったものを出す）',
+            JSON.stringify(s.today) === JSON.stringify(['同名', '同名']) && JSON.stringify(s.week) === JSON.stringify(['8日後']) && s.empty === 1 &&
+              JSON.stringify(s.overdue) === JSON.stringify(['昨日', '今日の案件', '明日', '明後日']) && (await count(c)) === '7 件',
+            '期間が新しい日付で移る（昨日以前は Overdue、新たに7日以内になったものを出す）',
             { s, count: await count(c) }
           )
 
@@ -323,8 +329,8 @@ export function dueSummaryScenarios({ withApp, root }) {
           await c.waitFor(`document.querySelector('[data-testid=summary-review] [role=option]')`, 10000, 'Summary Review')
           await sleep(300)
           const info = await c.evaluate(`({ rendered: document.querySelectorAll('[data-testid=summary-review] [role=option]').length, empty: document.querySelectorAll('[data-testid=summary-empty]').length, count: document.querySelector('[data-testid=status-center]').textContent })`)
-          assert(info.rendered > 0 && info.rendered < 100 && info.empty === 2 && info.count === '1500 件', '仮想化（描画は一部）・件数は全件・0件の見出しは「該当なし」', info)
-          await c.evaluate(`document.querySelector('[data-testid=summary-scroll]').scrollTop = 999999`)
+          assert(info.rendered > 0 && info.rendered < 100 && info.empty === 3 && info.count === '1500 件', '仮想化（描画は一部）・件数は全件・0件の見出しは「該当なし」', info)
+          await c.evaluate(`document.querySelector('section[data-section=thisWeekItems] [data-testid=task-list-scroll]').scrollTop = 999999`)
           await sleep(300)
           const last = await c.evaluate(`[...document.querySelectorAll('[data-testid=summary-review] [role=option]')].sort((a, b) => a.getBoundingClientRect().top - b.getBoundingClientRect().top).at(-1)?.dataset.taskId`)
           assert(last === U(301499), '末尾までスクロールできる（作成日時の順）', last)

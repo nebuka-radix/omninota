@@ -355,7 +355,7 @@ if (!app.requestSingleInstanceLock()) {
         transaction,
         now
       }),
-      summaryService: createSummaryService({ listDueBetween: taskRepository.listDueBetween, now }),
+      summaryService: createSummaryService({ listDueOnOrBefore: taskRepository.listDueOnOrBefore, now }),
       milestoneService: createMilestoneService({
         repository: milestoneRepository,
         findProject: projectRepository.findById,

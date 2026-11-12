@@ -7,8 +7,8 @@ import type { ProjectDto } from '../../../../shared/contracts/projects'
 const nameCollator = new Intl.Collator('ja', { numeric: true, sensitivity: 'base' })
 
 export function compareProjects(a: ProjectDto, b: ProjectDto): number {
-  const aCompleted = a.completedAt !== null
-  const bCompleted = b.completedAt !== null
+  const aCompleted = a.done
+  const bCompleted = b.done
   if (aCompleted !== bCompleted) return aCompleted ? 1 : -1
   const byName = nameCollator.compare(a.name, b.name)
   if (byName !== 0) return byName
@@ -24,7 +24,7 @@ export function sortProjects(projects: readonly ProjectDto[]): ProjectDto[] {
 export function groupProjects(projects: readonly ProjectDto[]): { open: ProjectDto[]; completed: ProjectDto[] } {
   const sorted = sortProjects(projects)
   return {
-    open: sorted.filter((project) => project.completedAt === null),
-    completed: sorted.filter((project) => project.completedAt !== null)
+    open: sorted.filter((project) => !project.done),
+    completed: sorted.filter((project) => project.done)
   }
 }

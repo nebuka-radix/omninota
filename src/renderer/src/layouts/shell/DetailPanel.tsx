@@ -8,6 +8,7 @@ import { ProjectCompletionControl } from '../../features/projects/ProjectComplet
 import { ProjectDeleteControl } from '../../features/projects/ProjectDeleteControl'
 import { projectListQueryOptions } from '../../features/projects/project-queries'
 import { formatTaskDateTime } from '../../features/tasks/TaskList'
+import { SummaryProjectFilter } from '../../features/summary/SummaryProjectFilter'
 import { AssignTargetTree } from '../../features/tasks/AssignTargetTree'
 import { TaskEditor } from '../../features/tasks/TaskEditor'
 import { taskListQueryOptions } from '../../features/tasks/task-queries'
@@ -147,6 +148,8 @@ function DetailBody({ pathname }: { pathname: string }) {
     // 新規プロジェクトは保存前なので、状態の表示・完了操作は出さない
     return <EmptyMessage>プロジェクト名を保存すると、ここにプロジェクトの状態を表示します。</EmptyMessage>
   }
+  // Summary Review: プロジェクトの表示のフィルター（右サイドバーは画面ごとに切り替え、追加はしない）
+  if (pathname === '/summary') return <SummaryProjectFilter />
   const scope = scopeOfPath(pathname)
   if (!scope) return <EmptyMessage>この画面に関連する詳細情報はありません。</EmptyMessage>
   if (scope.kind === 'project') {

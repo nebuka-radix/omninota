@@ -75,7 +75,7 @@ describe('お気に入り（Service・一時DB）', () => {
 
     const off = tasks.setFavorite({ id: task.id, favorite: false })
     expect(off.favorite).toBe(false)
-    expect(raw(task.id)).toMatchObject({ favorite: 0, title: 'A', dueto: before['dueto'], completed_at: before['completed_at'] })
+    expect(raw(task.id)).toMatchObject({ favorite: 0, title: 'A', dueto: before['dueto'], done_on: before['done_on'] })
     expect(tasks.list().find((item) => item.id === task.id)?.favorite).toBe(false)
   })
 
@@ -94,10 +94,10 @@ describe('お気に入り（Service・一時DB）', () => {
     const task = tasks.create({ title: 'A' })
     tasks.setDue({ id: task.id, due: { kind: 'today' } })
     tasks.setFavorite({ id: task.id, favorite: true })
-    const summary = createSummaryService({ listDueBetween: createTaskRepository(db).listDueBetween, now: () => clock })
+    const summary = createSummaryService({ listDueOnOrBefore: createTaskRepository(db).listDueOnOrBefore, now: () => clock })
     const today = summary.get().todayItems
     expect(today).toHaveLength(1)
-    expect(today[0]).toMatchObject({ id: task.id, title: 'A', favorite: true, completedAt: null, projectName: null, milestoneName: null })
+    expect(today[0]).toMatchObject({ id: task.id, title: 'A', favorite: true, doneOn: null, projectName: null, milestoneName: null })
     expect(summary.today()).toBe(summary.get().today)
   })
 })
@@ -175,7 +175,7 @@ const task = (id: string, patch: Partial<TaskDto> = {}): TaskDto => ({
   title: id,
   createdAt: '2026-11-01T00:00:00.000Z',
   updatedAt: '2026-11-01T00:00:00.000Z',
-  completedAt: null,
+  doneOn: null,
   projectId: null,
   milestoneId: null,
   position: null,
@@ -197,7 +197,7 @@ describe('Summary の振り分け（Main・Renderer 共通）', () => {
         item('c', { dueto: '2026-11-19' }),
         item('d', { dueto: '2026-11-20' }),
         item('e', { dueto: '2026-11-11' }),
-        item('f', { dueto: '2026-11-12', completedAt: '2026-11-11T00:00:00.000Z' }),
+        item('f', { dueto: '2026-11-12', doneOn: '2026-11-11T00:00:00.000Z' }),
         item('g', { dueto: '2026-11-13' }),
         item('h', { dueto: '2026-11-12', createdAt: '2026-10-01T00:00:00.000Z' }),
         item('i', { dueto: '2026-11-12' })
@@ -213,7 +213,7 @@ describe('Summary の振り分け（Main・Renderer 共通）', () => {
     const summary = splitSummary([item('a'), item('b'), item('c'), item('d'), item('e', { dueto: '2026-11-13' })], '2026-11-12')
     const later = '2026-11-12T00:00:00.000Z'
     const merged = mergeSummary(summary, [
-      task('a', { completedAt: later, updatedAt: later }),
+      task('a', { doneOn: later, updatedAt: later }),
       task('b', { dueto: '2026-11-15', updatedAt: later }),
       task('c', { projectId: 'p', milestoneId: 'm', updatedAt: later }),
       // d は削除済み（一覧にない）

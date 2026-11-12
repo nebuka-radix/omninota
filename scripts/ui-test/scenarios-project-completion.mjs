@@ -69,7 +69,7 @@ export function projectCompletionScenarios({ withApp, root }) {
           await c.waitFor(`document.querySelector('[data-testid=project-completion-error]')`, 5000, '拒否の表示')
           const rejected = await c.evaluate(`document.querySelector('[data-testid=project-completion-error]').textContent`)
           assert(rejected.includes('未完了のタスクが 2 件あるため完了できません'), '件数つきの理由（画面の絞り込みに依存しない件数）', rejected)
-          assert((await project(c, ids.p)).completedAt === null && (await statusText(c)) === '未完了', '拒否時は状態を変えない')
+          assert((await project(c, ids.p)).doneOn === null && (await statusText(c)) === '未完了', '拒否時は状態を変えない')
 
           await c.click(`document.querySelector('[data-testid=reveal-open-tasks]')`)
           await sleep(400)
@@ -84,11 +84,11 @@ export function projectCompletionScenarios({ withApp, root }) {
           await sleep(500)
           await c.space()
           await sleep(500)
-          assert((await task(c, ids.a)).completedAt !== null && (await task(c, ids.b)).completedAt !== null, 'Spaceで完了（回帰）')
+          assert((await task(c, ids.a)).doneOn !== null && (await task(c, ids.b)).doneOn !== null, 'Spaceで完了（回帰）')
           await clickCompletion(c)
           await c.waitFor(`document.querySelector('[data-testid=project-status]')?.textContent.startsWith('完了済み')`, 5000, '完了の確定表示')
           const done = await project(c, ids.p)
-          assert(done.completedAt !== null && done.updatedAt === done.completedAt, '完了日時と更新日時', done)
+          assert(done.doneOn !== null && done.updatedAt === done.doneOn, '完了日時と更新日時', done)
           assert((await c.evaluate('location.hash')) === `#/projects/${ids.p}`, '完了しても同じプロジェクトの画面に留まる')
           // フェーズ5.8: 完了したプロジェクトはサイドバーから除外する（開いている画面はそのまま。完了済みの区分はない）
           await c.waitFor(`!document.querySelector('[data-testid=navigation] [data-project-id="${ids.p}"]')`, 3000, 'サイドバーから除外')
@@ -97,7 +97,7 @@ export function projectCompletionScenarios({ withApp, root }) {
           assert(await pressed(c, 'open'), '同じ画面のまま完了しても、表示フィルターは変えない')
           const add = await c.evaluate(`({ disabled: document.querySelector('[data-testid=milestone-card] [data-testid^=new-task-][data-testid$=-button]').disabled, text: document.querySelector('[data-testid=project-completed-notice]')?.textContent ?? '' })`)
           assert(add.disabled && add.text.includes('完了済み'), 'NEW TASK は無効で理由を表示', add)
-          assert((await task(c, ids.inbox)).completedAt === null, '他のタスクは変わらない')
+          assert((await task(c, ids.inbox)).doneOn === null, '他のタスクは変わらない')
 
           // 別の画面へ移って戻ると、完了済みプロジェクトは「完了」を初期表示
           await c.click(`document.querySelector('nav button[aria-label="Inbox"]')`)
@@ -119,7 +119,7 @@ export function projectCompletionScenarios({ withApp, root }) {
           assert(notice?.includes('先にプロジェクトを未完了に戻してください'), '一覧のSpaceでも理由を表示', notice)
           const reopen = await apiRaw(c, `window.gtd.tasks.setCompleted({ id: ${JSON.stringify(ids.a)}, completed: false })`)
           assert(!reopen.ok && reopen.error.code === 'CONFLICT', 'Main側でも拒否（UIの無効化だけに頼らない）', reopen)
-          assert((await task(c, ids.a)).completedAt !== null && (await task(c, ids.b)).completedAt !== null, 'タスクは完了のまま')
+          assert((await task(c, ids.a)).doneOn !== null && (await task(c, ids.b)).doneOn !== null, 'タスクは完了のまま')
 
           // タイトル編集・プロジェクト名の編集は許可。
           // タイトルをEnterで保存した直後（保存の後処理の前）に名前の編集を始めても、保存済みのタイトルを未保存と誤認しない
@@ -134,14 +134,14 @@ export function projectCompletionScenarios({ withApp, root }) {
           await c.focus('[data-testid=project-name-editor] input')
           await c.enter()
           await c.waitFor(`document.querySelector('[data-testid=project-name]')?.textContent === 'リリース（完了後に改名）'`, 5000, '名前の保存')
-          assert((await project(c, ids.p)).completedAt !== null, '改名しても完了のまま')
+          assert((await project(c, ids.p)).doneOn !== null && (await project(c, ids.p)).done === true, '改名しても完了のまま（done と done_on）')
 
           // 取り消し: 表示フィルター（完了）はそのまま、一覧も突然空にならない。区分は未完了へ戻り、選択を維持
           // （タスクを選択中なので、詳細パネルをプロジェクトの詳細へ戻してから操作する）
           await backToProject(c)
           await clickCompletion(c)
           await c.waitFor(`document.querySelector('[data-testid=project-status]')?.textContent === '未完了'`, 5000, '取り消しの確定表示')
-          assert((await project(c, ids.p)).completedAt === null, '取り消し')
+          assert((await project(c, ids.p)).doneOn === null && (await project(c, ids.p)).done === false, '取り消し（done = false・done_on = null）')
           assert(await pressed(c, 'completed'), '取り消してもフィルターは変えない')
           assert((await listIds(c)).length === 3, '一覧は変わらない')
           await c.waitFor(`document.querySelector('[data-testid=project-list] [data-project-id="${ids.p}"]')`, 3000, 'サイドバーへ戻る')
@@ -151,9 +151,9 @@ export function projectCompletionScenarios({ withApp, root }) {
           await c.focus('[data-testid=task-list]')
           await c.key('Home', 36)
           await c.space()
-          await c.waitFor(`(async () => (await window.gtd.tasks.list()).data.filter((t) => t.projectId === ${JSON.stringify(ids.p)} && t.completedAt === null).length === 1)()`, 5000, '未完了に戻す')
+          await c.waitFor(`(async () => (await window.gtd.tasks.list()).data.filter((t) => t.projectId === ${JSON.stringify(ids.p)} && t.doneOn === null).length === 1)()`, 5000, '未完了に戻す')
           // 最後は完了状態にしておく（再起動後の復元の確認用）
-          const reopened = (await api(c, 'window.gtd.tasks.list()')).find((t) => t.projectId === ids.p && t.completedAt === null)
+          const reopened = (await api(c, 'window.gtd.tasks.list()')).find((t) => t.projectId === ids.p && t.doneOn === null)
           await api(c, `window.gtd.tasks.setCompleted({ id: ${JSON.stringify(reopened.id)}, completed: true })`)
           await reload(c)
           await openProject(c, ids.p)
@@ -181,7 +181,7 @@ export function projectCompletionScenarios({ withApp, root }) {
           assert((await dialogCount()) === 1, '確認ダイアログは1つだけ')
           await c.click(c.byText('[role=dialog] button', 'キャンセル'))
           await sleep(400)
-          assert((await project(c, ids.r)).completedAt === null, 'キャンセルなら完了しない')
+          assert((await project(c, ids.r)).doneOn === null, 'キャンセルなら完了しない')
           assert((await c.evaluate(`document.querySelector('[data-testid=project-name-editor] input')?.value`)) === 'ドラフト確認2', '入力を保持')
 
           // 保存失敗（空白の名前）: 完了しない・入力を保持
@@ -190,7 +190,7 @@ export function projectCompletionScenarios({ withApp, root }) {
           await c.waitFor(`document.querySelector('[role=dialog]')`, 3000, '名前の確認（空白）')
           await c.click(c.byText('[role=dialog] button', '保存'))
           await sleep(800)
-          assert((await project(c, ids.r)).completedAt === null, '名前の保存に失敗したら完了しない')
+          assert((await project(c, ids.r)).doneOn === null, '名前の保存に失敗したら完了しない')
           assert((await c.evaluate(`document.querySelector('[data-testid=project-name-editor] input')?.value`)) === '   ', '入力を保持')
           assert((await dialogCount()) === 0, 'ダイアログは閉じる')
 
@@ -201,7 +201,7 @@ export function projectCompletionScenarios({ withApp, root }) {
           await c.click(c.byText('[role=dialog] button', '保存'))
           await c.waitFor(`document.querySelector('[data-testid=project-status]')?.textContent.startsWith('完了済み')`, 5000, '保存後に完了')
           const saved = await project(c, ids.r)
-          assert(saved.name === 'ドラフト確認2' && saved.completedAt !== null, '名前の保存と完了の両方', saved)
+          assert(saved.name === 'ドラフト確認2' && saved.doneOn !== null, '名前の保存と完了の両方', saved)
 
           // タスクのタイトルを編集中に取り消し → 破棄 → 取り消しを続行（タイトルは保存しない）
           await clickCompletion(c) // 未完了に戻す（ドラフトなし）
@@ -226,7 +226,7 @@ export function projectCompletionScenarios({ withApp, root }) {
           await clickCompletion(c)
           await c.waitFor(`document.querySelector('[data-testid=project-completion-error]')`, 5000, '完了を要求 → 未完了タスクで拒否')
           assert((await task(c, ids.rTask)).title === 'Rのタスク', '破棄したタイトルは保存しない')
-          assert((await project(c, ids.r)).completedAt === null, '未完了タスクがあるため完了しない')
+          assert((await project(c, ids.r)).doneOn === null, '未完了タスクがあるため完了しない')
 
           // 名前の保存と完了の同時要求: 同じプロジェクトの更新は順番に実行され、どちらの新しい値も失わない
           await api(c, `window.gtd.tasks.setCompleted({ id: ${JSON.stringify(ids.rTask)}, completed: true })`)
@@ -240,11 +240,11 @@ export function projectCompletionScenarios({ withApp, root }) {
           for (let i = 0; i < 30; i++) {
             if (await c.evaluate(`!!document.querySelector('[role=dialog]')`)) await c.click(c.byText('[role=dialog] button', '保存'))
             const current = await project(c, ids.r)
-            if (current.name === 'ドラフト確認3' && current.completedAt !== null) break
+            if (current.name === 'ドラフト確認3' && current.doneOn !== null) break
             await sleep(200)
           }
           const both = await project(c, ids.r)
-          assert(both.name === 'ドラフト確認3' && both.completedAt !== null, '名前と完了の両方を保存', both)
+          assert(both.name === 'ドラフト確認3' && both.doneOn !== null, '名前と完了の両方を保存', both)
           await sleep(300)
           const view = await c.evaluate(`({ name: document.querySelector('[data-testid=project-name]')?.textContent, status: document.querySelector('[data-testid=project-status]')?.textContent, sidebar: !!document.querySelector('[data-testid=navigation] [data-project-id="${ids.r}"]') })`)
           // フェーズ5.8: 完了済みはサイドバーに表示しない
@@ -261,7 +261,7 @@ export function projectCompletionScenarios({ withApp, root }) {
           await c.waitFor(`location.hash === ${JSON.stringify(`#/projects/${ids.r}`)}`, 5000, '最後の画面の復元')
           await c.waitFor(`document.querySelector('[data-testid=project-status]')?.textContent.startsWith('完了済み')`, 5000, '完了状態の表示')
           assert(await pressed(c, 'completed'), '完了済みプロジェクトは「完了」を初期表示')
-          const stored = await c.evaluate(`window.gtd.projects.list().then((r) => r.data.filter((p) => [${JSON.stringify(ids.p)}, ${JSON.stringify(ids.r)}].includes(p.id)).map((p) => p.completedAt !== null))`)
+          const stored = await c.evaluate(`window.gtd.projects.list().then((r) => r.data.filter((p) => [${JSON.stringify(ids.p)}, ${JSON.stringify(ids.r)}].includes(p.id)).map((p) => p.doneOn !== null))`)
           assert(stored.length === 2 && stored.every(Boolean), '完了済みのプロジェクトのデータは残る', stored)
           for (const id of [ids.p, ids.r]) assert((await sidebarItemOf(c, id)) === null, '完了済みはサイドバーに表示しない', id)
           assert(await noSections(c), '完了済みの区分・未完了の見出しはない')

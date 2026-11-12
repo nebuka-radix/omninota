@@ -32,7 +32,7 @@ export function taskRowScenarios({ withApp, root }) {
   const projects = [
     { id: P1, name: '案件A', createdAt: at(1) },
     { id: P2, name: '案件B', createdAt: at(2) },
-    { id: P3, name: '完了済み案件', createdAt: at(3), completedAt: at(50) },
+    { id: P3, name: '完了済み案件', createdAt: at(3), doneOn: at(50) },
     { id: P4, name: '空の案件', createdAt: at(4) }
   ]
   const milestones = [
@@ -93,9 +93,15 @@ export function taskRowScenarios({ withApp, root }) {
         order: buttons.map((b) => b.dataset.testid),
         line1: check.top < rowRect.top + 30 && title.top < rowRect.top + 30 && check.right <= title.left + 0.5,
         line2: rects.every((x) => x.top >= title.bottom - 0.5 && x.bottom <= rowRect.bottom + 0.5),
-        rightAligned: rects.length > 0 && rowRect.right - rects.at(-1).right < 8,
+        // 2行目は左寄せ: 星のアイコンの左端 = タスク名の文字の左端
+        starIconLeft: r(controls.querySelector('[data-testid=task-favorite] svg')).left,
+        titleTextLeft: title.left + parseFloat(getComputedStyle(row.querySelector('[data-testid=task-title]')).paddingLeft),
+        assignment: (() => { const a = controls.querySelector('[data-testid=task-assignment]'); if (!a) return null; const ar = r(a); return { text: a.textContent, title: a.title, left: ar.left, right: ar.right, truncated: a.scrollWidth > a.clientWidth, top: ar.top } })(),
+        lastButtonRight: rects.length > 0 ? rects.at(-1).right : null,
+        buttonWidths: rects.map((x) => Math.round(x.width)),
         overlap,
         titleInside: title.right <= rowRect.right + 0.5,
+        rowRight: rowRect.right,
         controlsInListbox: !!controls.closest('[role=listbox]'),
         controlsInOption: !!controls.closest('[role=option]'),
         focusableInOption: row.querySelectorAll('button, [role=button], a[href], [tabindex="0"]').length,
@@ -107,7 +113,9 @@ export function taskRowScenarios({ withApp, root }) {
     assert(s !== null, `${label}: 行がある`)
     const order = ['task-favorite', due, 'task-assign', 'task-row-menu-button']
     assert(JSON.stringify(s.order) === JSON.stringify(order), `${label}: 2行目の操作の順（星・期限・紐付け・…）`, s)
-    assert(s.line1 && s.line2 && s.rightAligned && !s.overlap && s.titleInside, `${label}: 2行構成（1行目 チェック・タスク名、2行目 右寄せ）で重ならない`, s)
+    assert(s.line1 && s.line2 && Math.abs(s.starIconLeft - s.titleTextLeft) <= 0.5 && !s.overlap && s.titleInside, `${label}: 2行構成（1行目 チェック・タスク名、2行目 左寄せで星とタスク名の左端が揃う）で重ならない`, s)
+    if (s.assignment) assert(s.assignment.left >= s.lastButtonRight - 0.5 && s.assignment.right <= s.rowRight + 0.5, `${label}: 所属は「…」の右・行の中`, s)
+    assert(s.buttonWidths.filter((w, i) => s.order[i] !== 'task-due').every((w) => w === 20), `${label}: 操作アイコンの幅は保つ`, s)
     assert(!s.controlsInListbox && !s.controlsInOption && s.focusableInOption === 0, `${label}: 操作ボタンは listbox/option の外`, s)
     assert(!s.dateText, `${label}: 作成日時を表示しない`, s)
     if (handle) assert(s.handleLeft === true, `${label}: 手動順のハンドルは左側に独立`, s)
@@ -141,6 +149,8 @@ export function taskRowScenarios({ withApp, root }) {
           // Inbox
           for (const n of [1, 2, 3, 4, 6]) expectRow(await structure(c, T(n)), `Inbox ${n}`, { due: n === 6 ? 'task-due-set' : 'task-due' })
           expectRow(await structure(c, T(5)), 'Inbox 期限なし', { due: 'task-due-set' })
+          const inboxAssignment = await c.evaluate(`({ el: !!document.querySelector('[data-task-row-controls="${T(5)}"] [data-testid=task-assignment]'), text: document.querySelector('[data-task-row-controls="${T(5)}"]').textContent })`)
+          assert(!inboxAssignment.el && !inboxAssignment.text.includes('/') && !inboxAssignment.text.includes('null'), '所属のない Inbox のタスクは所属を表示しない（区切り文字・null なし）', inboxAssignment)
           assert((await structure(c, T(1))).variant === 'table', 'Inbox の一覧')
           const header = await c.evaluate(`[...document.querySelectorAll('main button[aria-label*="並べ替え"]')].map((b) => b.textContent)`)
           assert(header.includes('作成日時'), '作成日時での並べ替えは残す（列は表示しない）', header)
@@ -168,7 +178,26 @@ export function taskRowScenarios({ withApp, root }) {
           await c.focus('[data-testid=card-resize-handle]')
           await keyWith(c, 'Home', 36)
           await sleep(400)
-          expectRow(await structure(c, T(7)), 'カード（最小幅）', { handle: true })
+          let narrow = await structure(c, T(7))
+          expectRow(narrow, 'カード（最小幅）', { handle: true })
+          assert(narrow.assignment?.text === '案件A / 設計' && narrow.assignment.title === '案件A / 設計', '「…」の右に {プロジェクト名} / {マイルストン名}', narrow.assignment)
+          // 名前の変更を反映し、狭い幅では右端を省略（全文はツールチップ）。操作アイコンの幅は保つ
+          const renameProject = async (name) => {
+            await c.click(`document.querySelector('button[aria-label="プロジェクト名を変更"]')`)
+            await c.waitFor(`document.querySelector('[data-testid=project-name-editor] input')`, 3000, 'プロジェクト名の編集')
+            await c.setInput('[data-testid=project-name-editor] input', name)
+            await c.focus('[data-testid=project-name-editor] input')
+            await c.enter()
+            await c.waitFor(`document.querySelector('[data-testid=project-name]')?.textContent === ${JSON.stringify(name)}`, 5000, '名前の保存')
+          }
+          await renameProject('名前を変えたとても長いプロジェクトの名前')
+          await c.waitFor(`document.querySelector('[data-task-row-controls="${T(7)}"] [data-testid=task-assignment]')?.textContent === '名前を変えたとても長いプロジェクトの名前 / 設計'`, 5000, '所属の名前の更新')
+          narrow = await structure(c, T(7))
+          expectRow(narrow, 'カード（最小幅・長い所属）', { handle: true })
+          assert(narrow.assignment.truncated && narrow.assignment.title === '名前を変えたとても長いプロジェクトの名前 / 設計', '1行で右端を省略し、全文はツールチップ', narrow.assignment)
+          const rowHeight = await c.evaluate(`document.querySelector('[data-task-row][data-task-id="${T(7)}"]').getBoundingClientRect().height`)
+          assert(Math.round(rowHeight) === 52, '所属を折り返さず2行のまま', rowHeight)
+          await renameProject('案件A')
           // row レイアウト
           await c.click(`document.querySelector('[data-testid=view-layout] button[value=row]')`)
           await sleep(500)
@@ -189,7 +218,7 @@ export function taskRowScenarios({ withApp, root }) {
           // 日付の変化（再フォーカス）: 東京 11/13 になる。行ごとのタイマーではなく、アプリ全体の日付で表示を更新する
           setClock('2026-11-12T15:10:00.000Z')
           await c.evaluate(`window.dispatchEvent(new Event('focus'))`)
-          await c.waitFor(`document.querySelector('[data-testid=summary-scroll]')?.dataset.today === '2026-11-13'`, 5000, '新しい日付')
+          await c.waitFor(`document.querySelector('[data-testid=summary-review]')?.dataset.today === '2026-11-13'`, 5000, '新しい日付')
           await sleep(300)
           await openInbox(c)
           const after = {}
@@ -226,7 +255,7 @@ export function taskRowScenarios({ withApp, root }) {
           await c.click(`document.querySelector('[data-task-id="${T(21)}"] input[type=checkbox]')`)
           await c.waitFor(`!document.querySelector('[data-task-id="${T(21)}"]')`, 5000, '完了して未完了の一覧から外れる')
           await sleep(500)
-          assert(dbRow(dir, T(21)).completed_at !== null && (await editOpened(c)) === 0 && (await selected(c)).length === 0, 'チェックは完了だけ（モーダル・選択なし）', { opened: await editOpened(c) })
+          assert(dbRow(dir, T(21)).done_on !== null && (await editOpened(c)) === 0 && (await selected(c)).length === 0, 'チェックは完了だけ（モーダル・選択なし）', { opened: await editOpened(c) })
 
           // タスク名のシングルクリック → 編集モーダル（タイトルに初期フォーカス・既存の名前）。右の詳細は開かない
           await c.click(titleOf(T(22)))
@@ -352,7 +381,7 @@ export function taskRowScenarios({ withApp, root }) {
           await c.click(`document.querySelector('[data-task-row][data-task-id="${T(32)}"] input[type=checkbox]')`)
           await c.waitFor(`!document.querySelector('[data-task-row][data-task-id="${T(32)}"]')`, 5000, '完了したタスクは Summary から外れる')
           const countAfter = await c.evaluate(`document.querySelector('[data-testid=status-center]').textContent`)
-          assert(dbRow(dir, T(32)).completed_at !== null && countBefore === '3 件' && countAfter === '2 件', '完了を保存し、件数も更新', { countBefore, countAfter })
+          assert(dbRow(dir, T(32)).done_on !== null && countBefore === '3 件' && countAfter === '2 件', '完了を保存し、件数も更新', { countBefore, countAfter })
           assert((await requestQuit(app))?.code === 0, '正常終了')
         })
       }
@@ -397,7 +426,7 @@ export function taskRowScenarios({ withApp, root }) {
           assert((await pressed(c, T(41))) === 'true', '押した直後に塗りつぶし')
           await sleep(400)
           const after = dbRow(dir, T(41))
-          assert(after.favorite === 1 && after.title === before.title && after.dueto === before.dueto && after.completed_at === before.completed_at && after.updated_at !== before.updated_at, 'お気に入りだけを保存', { before, after })
+          assert(after.favorite === 1 && after.title === before.title && after.dueto === before.dueto && after.done_on === before.done_on && after.updated_at !== before.updated_at, 'お気に入りだけを保存', { before, after })
           assert((await c.evaluate(`document.activeElement === document.body || document.activeElement?.dataset.testid !== 'task-favorite'`)), '星を押してもフォーカスは星へ移らない')
 
           // 連打: 5回押す（true → false → true → false → true → false）→ 最後の状態（false）を保存する
@@ -510,14 +539,14 @@ export function taskRowScenarios({ withApp, root }) {
           await openSummary(c)
           await openAssign(c, T(52))
           await choose(c, P1, M1)
-          await c.waitFor(`${control(T(52), 'task-assign')}?.title.includes('案件A › 設計')`, 5000, '所属の表示の更新')
+          await c.waitFor(`${control(T(52), 'task-assign')}?.title.includes('案件A / 設計')`, 5000, '所属の表示の更新')
           await sleep(300)
           const kept = await c.evaluate(`!!document.querySelector('section[data-section=todayItems] [data-task-row][data-task-id="${T(52)}"]')`)
           assert(kept && JSON.stringify(assignOf(T(52))) === JSON.stringify({ project_id: P1, milestone_id: M1 }), '所属の変更だけでは Summary から外れない', assignOf(T(52)))
           // 続けて別のマイルストンへ（単体の所属変更API）
           await openAssign(c, T(52))
           await choose(c, P1, M2)
-          await c.waitFor(`${control(T(52), 'task-assign')}?.title.includes('案件A › 実装')`, 5000, '所属変更')
+          await c.waitFor(`${control(T(52), 'task-assign')}?.title.includes('案件A / 実装')`, 5000, '所属変更')
           assert(JSON.stringify(assignOf(T(52))) === JSON.stringify({ project_id: P1, milestone_id: M2 }), 'Summary から単体の所属変更', assignOf(T(52)))
 
           // 「…」は削除だけ・確認なし（Summary）。Delete キーも1件
@@ -534,7 +563,7 @@ export function taskRowScenarios({ withApp, root }) {
           await keyWith(c, 'Delete', 46)
           await c.waitFor(`!document.querySelector('[data-task-row][data-task-id="${T(54)}"]')`, 5000, 'Delete で削除')
           const summaryState = await c.evaluate(`({ count: document.querySelector('[data-testid=status-center]').textContent, dialog: window.__dialogSeen, empty: document.querySelectorAll('[data-testid=summary-empty]').length })`)
-          assert(summaryState.count === '1 件' && summaryState.dialog === false && summaryState.empty === 2, '確認なしで削除し、件数・「該当なし」を更新', summaryState)
+          assert(summaryState.count === '1 件' && summaryState.dialog === false && summaryState.empty === 3, '確認なしで削除し、件数・「該当なし」を更新', summaryState)
           assert((await requestQuit(app))?.code === 0, '正常終了')
         })
       }

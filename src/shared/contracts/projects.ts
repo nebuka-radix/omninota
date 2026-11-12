@@ -20,20 +20,23 @@ export type SetProjectCompletedInput = {
   completed: boolean
 }
 
-// 日時はUTCのISO 8601文字列。completedAt: 未完了ならnull（完了・取り消しはフェーズ5.3の projects.setCompleted）
+// 日時はUTCのISO 8601文字列。done: 完了状態（0010。永続化した列）。doneOn: 完了日時（未完了なら null）。
+// done = true なら doneOn あり、false なら null（完了・取り消しはフェーズ5.3の projects.setCompleted）
 export type ProjectDto = {
   id: string
   name: string
   createdAt: string
   updatedAt: string
-  completedAt: string | null
+  done: boolean
+  doneOn: string | null
 }
 
 // 削除の確認内容（フェーズ5.6）。件数はDBで数える。taskCount は既に非表示のタスク（マイルストンの削除で非表示になったもの）を含む総数
 export type ProjectDeletionSummary = {
   id: string
   name: string
-  completedAt: string | null
+  done: boolean
+  doneOn: string | null
   milestoneCount: number
   taskCount: number
   hiddenTaskCount: number

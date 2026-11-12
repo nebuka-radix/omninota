@@ -1,4 +1,4 @@
-import { and, asc, between, count, desc, eq, inArray, isNotNull, isNull, max, sql } from 'drizzle-orm'
+import { and, asc, count, desc, eq, inArray, isNotNull, isNull, lte, max, sql } from 'drizzle-orm'
 import type { AppDatabase } from '../db/client'
 import { milestones, projects, tasks, type NewTaskRow, type TaskRow } from '../db/schema'
 
@@ -14,7 +14,7 @@ export type TaskRepository = {
   listAll(): TaskRow[]
   // 更新した行を返す。対象がない・非表示ならundefined。
   updateTitle(id: string, title: string, updatedAt: string): TaskRow | undefined
-  updateCompletedAt(id: string, completedAt: string | null, updatedAt: string): TaskRow | undefined
+  updateDoneOn(id: string, doneOn: string | null, updatedAt: string): TaskRow | undefined
   // 所属（プロジェクト・マイルストン）の変更・解除を1回の更新で行う（フェーズ5.4）。
   // 存在・組み合わせ・完了状態の確認はServiceで行う（存在は外部キーでも保証される）
   // フェーズ5.9: 手動順（position）も同じ更新で書き換える（移動先の末尾、またはInboxへ戻す時のNULL）
@@ -48,14 +48,14 @@ export type TaskRepository = {
   listVisibleByMilestone(milestoneId: string): TaskRow[]
   // マイルストンに所属する表示中のタスクの手動順の最大値。手動順がなければ null
   maxPositionInMilestone(milestoneId: string): number | null
-  // 手動順だけを書き換える（updated_at・created_at・completed_at は変えない）。表示中の行だけ。更新した件数を返す
+  // 手動順だけを書き換える（updated_at・created_at・done_on は変えない）。表示中の行だけ。更新した件数を返す
   updatePosition(id: string, position: number): number
   // --- フェーズ6: 期限・Summary Review ---
   // 期限だけを書き換える（表示中の行だけ）。更新した行を返す。対象がない・非表示なら undefined
   updateDue(id: string, dueto: string | null, updatedAt: string): TaskRow | undefined
-  // 未完了・表示中・期限が from〜to（両端を含む。"YYYY-MM-DD"）のタスクと、所属のプロジェクト名・マイルストン名。
+  // 未完了・表示中・期限が to 以前（to を含む。"YYYY-MM-DD"。過去の下限なし）のタスクと、所属のプロジェクト名・マイルストン名。
   // 期限の昇順 → 作成日時の昇順 → IDの昇順（索引 tasks_dueto_idx）
-  listDueBetween(from: string, to: string): DueTaskRow[]
+  listDueOnOrBefore(to: string): DueTaskRow[]
   // お気に入りだけを書き換える（表示中の行だけ）。更新した行を返す。対象がない・非表示なら undefined
   updateFavorite(id: string, favorite: boolean, updatedAt: string): TaskRow | undefined
 }
@@ -77,8 +77,8 @@ export function createTaskRepository(db: AppDatabase): TaskRepository {
     updateTitle(id, title, updatedAt) {
       return db.update(tasks).set({ title, updatedAt }).where(visible(id)).returning().get()
     },
-    updateCompletedAt(id, completedAt, updatedAt) {
-      return db.update(tasks).set({ completedAt, updatedAt }).where(visible(id)).returning().get()
+    updateDoneOn(id, doneOn, updatedAt) {
+      return db.update(tasks).set({ doneOn, updatedAt }).where(visible(id)).returning().get()
     },
     updateAssignment(id, projectId, milestoneId, position, updatedAt) {
       return db.update(tasks).set({ projectId, milestoneId, position, updatedAt }).where(visible(id)).returning().get()
@@ -87,7 +87,7 @@ export function createTaskRepository(db: AppDatabase): TaskRepository {
       const row = db
         .select({ value: count() })
         .from(tasks)
-        .where(and(eq(tasks.projectId, projectId), isNull(tasks.completedAt), isNull(tasks.hiddenAt)))
+        .where(and(eq(tasks.projectId, projectId), isNull(tasks.doneOn), isNull(tasks.hiddenAt)))
         .get()
       return row?.value ?? 0
     },
@@ -151,13 +151,13 @@ export function createTaskRepository(db: AppDatabase): TaskRepository {
     updateDue(id, dueto, updatedAt) {
       return db.update(tasks).set({ dueto, updatedAt }).where(visible(id)).returning().get()
     },
-    listDueBetween(from, to) {
+    listDueOnOrBefore(to) {
       const rows = db
         .select({ task: tasks, projectName: projects.name, milestoneName: milestones.name })
         .from(tasks)
         .leftJoin(projects, eq(tasks.projectId, projects.id))
         .leftJoin(milestones, eq(tasks.milestoneId, milestones.id))
-        .where(and(isNull(tasks.completedAt), isNull(tasks.hiddenAt), isNotNull(tasks.dueto), between(tasks.dueto, from, to)))
+        .where(and(isNull(tasks.doneOn), isNull(tasks.hiddenAt), isNotNull(tasks.dueto), lte(tasks.dueto, to)))
         .orderBy(asc(tasks.dueto), asc(tasks.createdAt), asc(tasks.id))
         .all()
       return rows.map((row) => ({ ...row.task, dueto: row.task.dueto as string, projectName: row.projectName, milestoneName: row.milestoneName }))

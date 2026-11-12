@@ -30,7 +30,7 @@ export function AssignTargetTree() {
   if (projects.isError || milestones.isError) {
     return <Message>プロジェクト・マイルストンを読み込めませんでした。</Message>
   }
-  const openProjects = sortProjects(projects.data).filter((project) => project.completedAt === null)
+  const openProjects = sortProjects(projects.data).filter((project) => !project.done)
   const projectLabels = disambiguatedNames(openProjects)
 
   const toggle = (projectId: string) =>

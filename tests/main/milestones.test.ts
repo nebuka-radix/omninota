@@ -165,7 +165,7 @@ describe('マイルストンと所属（Service・一時DB）', () => {
     const done = tasks.setCompleted({ id: created.id, completed: true })
 
     const toP = tasks.setAssignment({ id: created.id, projectId: p.id, milestoneId: initialOf(p.id).id })
-    expect(toP).toMatchObject({ id: created.id, projectId: p.id, milestoneId: initialOf(p.id).id, createdAt: created.createdAt, completedAt: done.completedAt })
+    expect(toP).toMatchObject({ id: created.id, projectId: p.id, milestoneId: initialOf(p.id).id, createdAt: created.createdAt, doneOn: done.doneOn })
     expect(toP.updatedAt > done.updatedAt).toBe(true)
     const toM = tasks.setAssignment({ id: created.id, projectId: p.id, milestoneId: m.id })
     expect(toM).toMatchObject({ projectId: p.id, milestoneId: m.id })
@@ -173,7 +173,7 @@ describe('マイルストンと所属（Service・一時DB）', () => {
     const toQ = tasks.setAssignment({ id: created.id, projectId: q.id, milestoneId: initialOf(q.id).id })
     expect(toQ).toMatchObject({ projectId: q.id, milestoneId: initialOf(q.id).id })
     const inbox = tasks.setAssignment({ id: created.id, projectId: null, milestoneId: null })
-    expect(inbox).toMatchObject({ projectId: null, milestoneId: null, title: 't', createdAt: created.createdAt, completedAt: done.completedAt })
+    expect(inbox).toMatchObject({ projectId: null, milestoneId: null, title: 't', createdAt: created.createdAt, doneOn: done.doneOn })
   })
 
   it('同じ所属（プロジェクト・マイルストンの両方）への再要求は変更なしの成功', () => {
@@ -233,7 +233,7 @@ describe('マイルストンと所属（Service・一時DB）', () => {
     const t = tasks.create({ title: 't', projectId: p.id, milestoneId: initialOf(p.id).id })
     expect(() => createTaskRepository(db).updateAssignment(t.id, p.id, MISSING_ID, null, '2026-11-10T10:00:00.000Z')).toThrow(/FOREIGN KEY/)
     expect(() =>
-      createMilestoneRepository(db).insert({ id: ANY_ID, projectId: MISSING_ID, name: 'x', createdAt: 'a', updatedAt: 'a', position: null })
+      createMilestoneRepository(db).insert({ id: ANY_ID, projectId: MISSING_ID, name: 'x', createdAt: 'a', updatedAt: 'a', done: false, doneOn: null, position: null })
     ).toThrow(/FOREIGN KEY/)
   })
 

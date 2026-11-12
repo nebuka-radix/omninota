@@ -71,6 +71,13 @@
       "when": 1794390043263,
       "tag": "0009_task_favorite",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "6",
+      "when": 1794390044263,
+      "tag": "0010_done_and_done_on",
+      "breakpoints": true
     }
   ]
 }

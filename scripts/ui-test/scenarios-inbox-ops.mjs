@@ -24,15 +24,15 @@ const at = (base, seconds) => new Date(Date.parse(base) + seconds * 1000).toISOS
 // 一時DBへ事前データを入れる（アプリの起動前だけ）
 export async function seedDatabase(dir, { projects = [], milestones = [], tasks = [] }) {
   const db = await createDatabaseAt(join(dir, 'gtd.sqlite'))
-  const insertProject = db.prepare('INSERT INTO projects (id, name, created_at, updated_at, completed_at) VALUES (?, ?, ?, ?, ?)')
+  const insertProject = db.prepare('INSERT INTO projects (id, name, created_at, updated_at, done_on, done) VALUES (?, ?, ?, ?, ?, ?)')
   const insertMilestone = db.prepare('INSERT INTO milestones (id, project_id, name, created_at, updated_at, position) VALUES (?, ?, ?, ?, ?, ?)')
   const insertTask = db.prepare(
-    'INSERT INTO tasks (id, title, created_at, updated_at, completed_at, project_id, milestone_id, hidden_at, position, dueto, favorite) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+    'INSERT INTO tasks (id, title, created_at, updated_at, done_on, project_id, milestone_id, hidden_at, position, dueto, favorite) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
   )
   db.transaction(() => {
-    for (const p of projects) insertProject.run(p.id, p.name, p.createdAt, p.createdAt, p.completedAt ?? null)
+    for (const p of projects) insertProject.run(p.id, p.name, p.createdAt, p.createdAt, p.doneOn ?? null, p.doneOn ? 1 : 0)
     for (const m of milestones) insertMilestone.run(m.id, m.projectId, m.name, m.createdAt, m.createdAt, m.position ?? null)
-    for (const t of tasks) insertTask.run(t.id, t.title, t.createdAt, t.createdAt, t.completedAt ?? null, t.projectId ?? null, t.milestoneId ?? null, t.hiddenAt ?? null, t.position ?? null, t.dueto ?? null, t.favorite ? 1 : 0)
+    for (const t of tasks) insertTask.run(t.id, t.title, t.createdAt, t.createdAt, t.doneOn ?? null, t.projectId ?? null, t.milestoneId ?? null, t.hiddenAt ?? null, t.position ?? null, t.dueto ?? null, t.favorite ? 1 : 0)
   })()
   db.close()
 }
@@ -114,7 +114,7 @@ export function inboxOpsScenarios({ withApp, root }) {
             { id: P1, name: '案件', createdAt: at(BASE, 1) },
             { id: P2, name: '案件', createdAt: at(BASE, 2) },
             { id: P3, name: '空の案件', createdAt: at(BASE, 3) },
-            { id: P4, name: '完了した案件', createdAt: at(BASE, 4), completedAt: at(BASE, 5) }
+            { id: P4, name: '完了した案件', createdAt: at(BASE, 4), doneOn: at(BASE, 5) }
           ],
           milestones: [
             { id: M1, projectId: P1, name: '設計', createdAt: at(BASE, 10) },

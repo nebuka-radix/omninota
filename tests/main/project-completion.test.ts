@@ -27,7 +27,7 @@ describe('プロジェクトの完了（入力検証）', () => {
     ['UUIDでないID', [{ id: 'x', completed: true }]],
     ['completedなし（トグルにしない）', [{ id: MISSING_ID }]],
     ['completedが文字列', [{ id: MISSING_ID, completed: 'true' }]],
-    ['余分なキー（日時の指定）', [{ id: MISSING_ID, completed: true, completedAt: '2026-01-01T00:00:00.000Z' }]]
+    ['余分なキー（日時の指定）', [{ id: MISSING_ID, completed: true, doneOn: '2026-01-01T00:00:00.000Z' }]]
   ])('不正な形（%s）を拒否する', (_label, args) => {
     expect(projectsSetCompletedArgsSchema.safeParse(args).success).toBe(false)
   })
@@ -65,12 +65,12 @@ describe('プロジェクトの完了ルール（Service・一時DB）', () => {
   const row = (id: string) => createProjectRepository(db).findById(id)
   const taskRows = () => createTaskRepository(db).listAll()
 
-  it('タスク0件のプロジェクトは完了できる。completedAt と updatedAt を同じ日時にし、createdAt・名前は変えない', () => {
+  it('タスク0件のプロジェクトは完了できる。doneOn と updatedAt を同じ日時にし、createdAt・名前は変えない', () => {
     const project = projects.create({ name: '空' })
     const done = projects.setCompleted({ id: project.id, completed: true })
     expect(done).toMatchObject({ id: project.id, name: '空', createdAt: project.createdAt })
-    expect(done.completedAt).not.toBeNull()
-    expect(done.updatedAt).toBe(done.completedAt)
+    expect(done.doneOn).not.toBeNull()
+    expect(done.updatedAt).toBe(done.doneOn)
     expect(done.updatedAt > project.updatedAt).toBe(true)
     expect(row(project.id)).toEqual(done)
   })
@@ -116,28 +116,28 @@ describe('プロジェクトの完了ルール（Service・一時DB）', () => {
       expect.objectContaining({ details: { kind: 'project-has-open-tasks', openTaskCount: 1 } })
     )
     tasks.setCompleted({ id: mine.id, completed: true })
-    expect(projects.setCompleted({ id: p.id, completed: true }).completedAt).not.toBeNull()
+    expect(projects.setCompleted({ id: p.id, completed: true }).doneOn).not.toBeNull()
   })
 
   it('外へ移したタスクは数えない（移動後に完了できる）', () => {
     const p = projects.create({ name: 'P' })
     const t = tasks.create({ title: 'open', ...inProject(db, p.id) })
     tasks.setAssignment({ id: t.id, projectId: null, milestoneId: null })
-    expect(projects.setCompleted({ id: p.id, completed: true }).completedAt).not.toBeNull()
+    expect(projects.setCompleted({ id: p.id, completed: true }).doneOn).not.toBeNull()
   })
 
   it('全タスクを完了しても、プロジェクトは自動では完了しない', () => {
     const p = projects.create({ name: 'P' })
     const t = tasks.create({ title: 't', ...inProject(db, p.id) })
     tasks.setCompleted({ id: t.id, completed: true })
-    expect(row(p.id)?.completedAt).toBeNull()
+    expect(row(p.id)?.doneOn).toBeNull()
   })
 
-  it('完了の取り消し: completedAt を null にし updatedAt を更新する（createdAtは変えない）', () => {
+  it('完了の取り消し: doneOn を null にし updatedAt を更新する（createdAtは変えない）', () => {
     const p = projects.create({ name: 'P' })
     const done = projects.setCompleted({ id: p.id, completed: true })
     const reopened = projects.setCompleted({ id: p.id, completed: false })
-    expect(reopened).toMatchObject({ completedAt: null, createdAt: p.createdAt, name: 'P' })
+    expect(reopened).toMatchObject({ doneOn: null, createdAt: p.createdAt, name: 'P' })
     expect(reopened.updatedAt > done.updatedAt).toBe(true)
   })
 
@@ -178,13 +178,13 @@ describe('プロジェクトの完了ルール（Service・一時DB）', () => {
     expect({ ...tasks.setCompleted({ id: t1.id, completed: true }), hiddenAt: null }).toEqual(beforeReopen)
 
     expect(tasks.updateTitle({ id: t1.id, title: 't1（編集）' }).title).toBe('t1（編集）')
-    expect(projects.rename({ id: p.id, name: 'P（編集）' })).toMatchObject({ name: 'P（編集）', completedAt: expect.any(String) })
+    expect(projects.rename({ id: p.id, name: 'P（編集）' })).toMatchObject({ name: 'P（編集）', doneOn: expect.any(String) })
     expect(tasks.setAssignment({ id: t2.id, ...inProject(db, q.id) }).projectId).toBe(q.id)
 
     // 外へ移したタスクは未完了に戻せる。プロジェクトを未完了に戻せば、所属タスクも未完了に戻せる
-    expect(tasks.setCompleted({ id: t2.id, completed: false }).completedAt).toBeNull()
-    expect(projects.setCompleted({ id: p.id, completed: false }).completedAt).toBeNull()
-    expect(tasks.setCompleted({ id: t1.id, completed: false }).completedAt).toBeNull()
+    expect(tasks.setCompleted({ id: t2.id, completed: false }).doneOn).toBeNull()
+    expect(projects.setCompleted({ id: p.id, completed: false }).doneOn).toBeNull()
+    expect(tasks.setCompleted({ id: t1.id, completed: false }).doneOn).toBeNull()
   })
 
   it('確認と更新は1つのトランザクション: 更新に失敗したら何も残らない', () => {
@@ -193,7 +193,7 @@ describe('プロジェクトの完了ルール（Service・一時DB）', () => {
       ...projectServiceDeps(db),
       repository: {
         ...createProjectRepository(db),
-        updateCompletedAt: () => {
+        updateDone: () => {
           db.$client.prepare('UPDATE projects SET name = ? WHERE id = ?').run('途中の変更', p.id)
           throw new Error('書き込み失敗')
         }

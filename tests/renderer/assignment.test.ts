@@ -11,12 +11,13 @@ import type { TaskDto } from '../../src/shared/contracts/tasks'
 
 const P = 'aaaaaaaa-0000-4000-8000-000000000001'
 const Q = 'bbbbbbbb-0000-4000-8000-000000000002'
-const project = (id: string, name: string, completedAt: string | null = null): ProjectDto => ({
+const project = (id: string, name: string, doneOn: string | null = null): ProjectDto => ({
   id,
   name,
   createdAt: '2026-11-01T00:00:00.000Z',
   updatedAt: '2026-11-01T00:00:00.000Z',
-  completedAt
+  done: doneOn !== null,
+  doneOn
 })
 const milestone = (id: string, projectId: string, name: string, createdAt: string): MilestoneDto => ({
   id,
@@ -24,6 +25,8 @@ const milestone = (id: string, projectId: string, name: string, createdAt: strin
   name,
   createdAt,
   updatedAt: createdAt,
+  done: false,
+  doneOn: null,
   position: null
 })
 const task = (id: string, milestoneId: string | null, projectId: string | null = P): TaskDto => ({
@@ -31,7 +34,7 @@ const task = (id: string, milestoneId: string | null, projectId: string | null =
   title: id,
   createdAt: '2026-11-10T00:00:00.000Z',
   updatedAt: '2026-11-10T00:00:00.000Z',
-  completedAt: null,
+  doneOn: null,
   projectId,
   milestoneId,
   position: null,

@@ -494,7 +494,7 @@ export function MilestoneBoard({
   const [orderError, setOrderError] = useState<string | null>(null)
   const [reorderNotice, setReorderNotice] = useState<string | null>(null)
   const boardRef = useRef<HTMLDivElement>(null)
-  const completed = project.completedAt !== null
+  const completed = project.done
   const disabledReason = completed ? `「${project.name}」は完了済みのため、追加できません。` : undefined
   const row = layout === 'row'
   // カードのドラッグ中の状態（挿入位置 0..カード数）

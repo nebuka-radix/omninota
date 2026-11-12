@@ -60,8 +60,8 @@ export const taskColumns = helper.columns([
     enableGlobalFilter: false,
     sortFn: (rowA, rowB) => compareManualOrder(rowA.original, rowB.original)
   }),
-  // 表示しない列。未完了／完了／すべての切り替えに使う（完了状態はcompletedAtから導出）
-  helper.accessor((task) => (task.completedAt === null ? 'open' : 'completed'), {
+  // 表示しない列。未完了／完了／すべての切り替えに使う（完了状態はdoneOnから導出）
+  helper.accessor((task) => (task.doneOn === null ? 'open' : 'completed'), {
     id: TASK_COLUMN_IDS.status,
     enableSorting: false,
     enableGlobalFilter: false,

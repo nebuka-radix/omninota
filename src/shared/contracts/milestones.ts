@@ -42,6 +42,9 @@ export type MilestoneDto = {
   name: string
   createdAt: string
   updatedAt: string
+  // 完了状態と完了日時（0010）。今回は完了の操作がなく、常に false / null。done = true なら doneOn あり
+  done: boolean
+  doneOn: string | null
   // プロジェクト内のカードの手動順（フェーズ5.9。小さいほど先）。null は手動順がない（作成日時の古い順）。
   // 同じプロジェクトの表示中のマイルストンは、全件に値があるか、全件 null のどちらか（Mainが保つ）
   position: number | null

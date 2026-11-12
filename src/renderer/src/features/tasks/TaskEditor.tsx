@@ -121,7 +121,7 @@ export function TaskEditor({ task, autoFocusTitle = false }: { task: TaskDto; au
   const dates: [string, string | null][] = [
     ['作成日時', task.createdAt],
     ['更新日時', task.updatedAt],
-    ['完了日時', task.completedAt]
+    ['完了日時', task.doneOn]
   ]
 
   return (

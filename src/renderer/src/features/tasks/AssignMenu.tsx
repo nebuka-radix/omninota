@@ -35,7 +35,7 @@ export function AssignMenu({
   const milestones = useQuery(milestoneListQueryOptions)
   const [projectId, setProjectId] = useState<string | null>(null)
 
-  const openProjects = sortProjects(projects.data ?? []).filter((project) => project.completedAt === null)
+  const openProjects = sortProjects(projects.data ?? []).filter((project) => !project.done)
   const milestoneCount = (projectId: string) => milestonesOf(milestones.data ?? [], projectId).length
   const projectLabels = disambiguatedNames(projects.data ?? [])
   const chosenProject = openProjects.find((project) => project.id === projectId)

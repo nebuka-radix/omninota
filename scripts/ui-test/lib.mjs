@@ -322,7 +322,7 @@ export async function goToProject(c, projectId) {
     return
   }
   const completed = await c.evaluate(
-    `window.gtd.projects.list().then((r) => r.data.find((p) => p.id === ${JSON.stringify(projectId)})?.completedAt != null)`
+    `window.gtd.projects.list().then((r) => r.data.find((p) => p.id === ${JSON.stringify(projectId)})?.doneOn != null)`
   )
   // 未完了なのにサイドバーにない場合は失敗にする（ルートで開いて隠さない）
   if (!completed) throw new TestFailure(`未完了のプロジェクトがサイドバーにありません: ${projectId}`)

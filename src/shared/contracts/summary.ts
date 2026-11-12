@@ -18,4 +18,6 @@ export type SummaryReview = {
   tomorrowItems: SummaryItem[]
   // 明後日〜7日後（両端を含む。暦週ではない）
   thisWeekItems: SummaryItem[]
+  // 期限超過（期限が今日より前。過去の日数の制限なし。期限 → 作成日時 → ID の昇順）
+  overdueItems: SummaryItem[]
 }

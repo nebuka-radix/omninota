@@ -144,7 +144,7 @@ export function ProjectDeleteControl({ project }: { project: ProjectDto }) {
         {dialog && (
           <>
             <Typography sx={{ fontSize: 13, fontWeight: 600, wordBreak: 'break-all' }} data-testid="project-delete-dialog-target">
-              「{dialog.summary.name}」{dialog.summary.completedAt !== null ? '（完了済み）' : ''}
+              「{dialog.summary.name}」{dialog.summary.done ? '（完了済み）' : ''}
             </Typography>
             <Typography sx={{ fontSize: 13, mt: 1 }} data-testid="project-delete-dialog-count">
               マイルストン: {dialog.summary.milestoneCount} 件、タスク: {dialog.summary.taskCount} 件

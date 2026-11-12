@@ -87,7 +87,7 @@ describe('期限の設定・変更・解除と Summary Review（Service・一時
   let milestones: MilestoneService
   let clock = new Date('2026-11-11T03:00:00.000Z')
   let n = 0
-  const summary = () => createSummaryService({ listDueBetween: createTaskRepository(db).listDueBetween, now: () => clock }).get()
+  const summary = () => createSummaryService({ listDueOnOrBefore: createTaskRepository(db).listDueOnOrBefore, now: () => clock }).get()
   const raw = (id: string) => db.$client.prepare('SELECT * FROM tasks WHERE id = ?').get(id) as Record<string, unknown>
 
   beforeEach(() => {

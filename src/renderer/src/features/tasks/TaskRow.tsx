@@ -10,7 +10,9 @@ import { InlineTitleInput, type InlineTitleEditController } from './inline-title
 // タスクの行（Inbox の一覧・プロジェクトのマイルストンカード・Summary Review のセクションで共通）。
 // 2行構成:
 // - 1行目（左寄せ）: 完了チェックボックス・タスク名
-// - 2行目（右寄せ）: お気に入りの星・期限（未設定なら期限設定アイコン）・紐付けアイコン・「…」メニュー
+// - 2行目（左寄せ）: お気に入りの星・期限（未設定なら期限設定アイコン）・紐付けアイコン・「…」メニュー・所属（{プロジェクト名} / {マイルストン名}）
+//   星のアイコンの左端は、1行目のタスク名の文字の左端と同じ位置（TEXT_INSET。ハンドルの有無によらず、タスク名の列の左端から同じ距離）。
+//   所属は残りの幅を使い、1行で右端を「…」で省略する（全文はツールチップ）。所属がなければ（Inbox）何も出さない。
 // 作成日時は表示しない（データ・並べ替えの条件は変えない）。
 //
 // アクセシビリティの構造:
@@ -29,6 +31,11 @@ const LINE2_HEIGHT = 24
 // 並べ替えのハンドルの列（プロジェクトのカードだけ）とチェックボックスの列
 export const HANDLE_COLUMN_WIDTH = 18
 const CHECK_COLUMN_WIDTH = 32
+// タスク名の列の左端から、タスク名の文字・2行目の星のアイコンの左端までの距離（1行目と2行目で共通）
+const TEXT_INSET = 4
+// 2行目の操作ボタンの大きさ。最小のカード幅（144px・並べ替えのハンドルあり）でも4つの操作が収まる大きさにする
+const ICON_BUTTON = 20
+const LINE2_RIGHT = 2
 const STAR_ON = '#e2c541'
 // 白抜きの星（未設定）。背景（#1e1e1e・#252526）に対して操作できると分かるコントラスト（3:1以上）を保つ淡い灰色
 const STAR_OFF = '#9a9a9a'
@@ -46,8 +53,8 @@ export type TaskRowActions = {
   openAssign: (task: TaskDto, anchor: HTMLElement) => void
   openMenu: (task: TaskDto, anchor: HTMLElement) => void
   openEditor: (task: TaskDto, anchor: HTMLElement) => void
-  // 現在の所属（紐付けアイコンのツールチップ・読み上げ）。Inbox なら「Inbox」
-  assignmentLabel: (task: TaskDto) => string
+  // 現在の所属（「{プロジェクト名} / {マイルストン名}」）。所属がない（Inbox）・名前を取得できない時は null
+  assignmentLabel: (task: TaskDto) => string | null
   inlineEdit: InlineTitleEditController
 }
 
@@ -108,12 +115,13 @@ export function TaskRow({
   const editing = actions.inlineEdit.state?.taskId === task.id
   const editError = editing ? actions.inlineEdit.state?.error ?? null : null
   const assignment = actions.assignmentLabel(task)
+  const assignmentText = assignment ?? 'Inbox'
   const opacity = pending || dimmed ? 0.5 : 1
   const titleQuoted = `「${task.title}」`
 
   const iconButton = {
-    width: 22,
-    height: 22,
+    width: ICON_BUTTON,
+    height: ICON_BUTTON,
     flexShrink: 0,
     borderRadius: 1,
     color: 'text.secondary',
@@ -145,17 +153,17 @@ export function TaskRow({
           {handle}
         </Box>
       )}
-      {/* 2行目（右寄せ）: 星・期限・紐付け・「…」 */}
+      {/* 2行目（左寄せ）: 星・期限・紐付け・…・所属。左端はタスク名の列の左端 */}
       <Box
         sx={{
           position: 'absolute',
           top: LINE2_TOP,
           height: LINE2_HEIGHT,
           left: leftEdge,
-          right: 4,
+          right: LINE2_RIGHT,
           display: 'flex',
           alignItems: 'center',
-          justifyContent: 'flex-end',
+          justifyContent: 'flex-start',
           gap: '2px',
           minWidth: 0
         }}
@@ -168,7 +176,8 @@ export function TaskRow({
           data-testid="task-favorite"
           data-favorite={favorite ? 'true' : 'false'}
           onClick={() => actions.toggleFavorite(task)}
-          sx={{ ...iconButton, color: favorite ? STAR_ON : STAR_OFF, '&:hover': { bgcolor: vscodeColors.listHover, color: favorite ? STAR_ON : 'text.primary' } }}
+          // アイコンの左端をタスク名の文字の左端に揃える（ボタンの左の余白 = TEXT_INSET）
+          sx={{ ...iconButton, justifyContent: 'flex-start', pl: `${TEXT_INSET}px`, color: favorite ? STAR_ON : STAR_OFF, '&:hover': { bgcolor: vscodeColors.listHover, color: favorite ? STAR_ON : 'text.primary' } }}
         >
           <Star size={14} aria-hidden fill={favorite ? STAR_ON : 'none'} strokeWidth={favorite ? 1.5 : 1.75} />
         </ButtonBase>
@@ -220,8 +229,8 @@ export function TaskRow({
         <ButtonBase
           tabIndex={-1}
           aria-haspopup="menu"
-          aria-label={`${titleQuoted}の紐付け（現在: ${assignment}）`}
-          title={`紐付け（現在: ${assignment}）`}
+          aria-label={`${titleQuoted}の紐付け（現在: ${assignmentText}）`}
+          title={`紐付け（現在: ${assignmentText}）`}
           data-testid="task-assign"
           data-assign-task-id={task.id}
           disabled={pending}
@@ -242,6 +251,28 @@ export function TaskRow({
         >
           <MoreHorizontal size={14} aria-hidden />
         </ButtonBase>
+        {assignment && (
+          // 所属（読み上げは行の名前に含めるため、ここは読み上げない）。操作の領域を先に確保し、残りの幅で省略表示する
+          <Box
+            component="span"
+            aria-hidden
+            title={assignment}
+            data-testid="task-assignment"
+            sx={{
+              flex: '0 1000 auto',
+              minWidth: 0,
+              ml: 0.5,
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+              fontSize: 11,
+              color: 'text.secondary',
+              pointerEvents: 'auto'
+            }}
+          >
+            {assignment}
+          </Box>
+        )}
       </Box>
       {/* インライン編集（タスク名の位置に重ねる。状態は画面単位で持ち、一覧は編集中の行を常に描画する） */}
       {editing && (
@@ -286,7 +317,7 @@ export function TaskRow({
         aria-selected={selected}
         aria-busy={pending || undefined}
         // 読み上げ名: タスク名・完了状態・お気に入り・期限（チェックボックス・操作ボタンは option の外）
-        aria-label={`${task.title}、${completed ? '完了' : '未完了'}${favorite ? '、お気に入り' : ''}${due ? `、${due.description}` : ''}${pending ? '、保存中' : ''}`}
+        aria-label={`${task.title}、${completed ? '完了' : '未完了'}${favorite ? '、お気に入り' : ''}${due ? `、${due.description}` : ''}${assignment ? `、${assignment}` : ''}${pending ? '、保存中' : ''}`}
         data-task-id={task.id}
         data-task-row=""
         data-pending={pending || undefined}
@@ -345,7 +376,7 @@ export function TaskRow({
               display: 'inline-block',
               maxWidth: '100%',
               fontSize: 13,
-              pl: 0.5,
+              pl: `${TEXT_INSET}px`,
               pr: 0.5,
               borderRadius: 0.5,
               cursor: 'pointer',

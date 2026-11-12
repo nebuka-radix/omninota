@@ -72,7 +72,7 @@ export function orderScenarios({ withApp, root }) {
             // 作成日時の順と、IDの順・タイトルの順をずらしておく
             { id: C, title: 'C', createdAt: at(BASE, 103), projectId: P, milestoneId: M1 },
             { id: A, title: 'A', createdAt: at(BASE, 101), projectId: P, milestoneId: M1 },
-            { id: E, title: 'E', createdAt: at(BASE, 105), projectId: P, milestoneId: M1, completedAt: at(BASE, 200) },
+            { id: E, title: 'E', createdAt: at(BASE, 105), projectId: P, milestoneId: M1, doneOn: at(BASE, 200) },
             { id: B, title: 'B', createdAt: at(BASE, 102), projectId: P, milestoneId: M1 },
             { id: D, title: 'D', createdAt: at(BASE, 104), projectId: P, milestoneId: M1 },
             { id: U(7301), title: 'M2-1', createdAt: at(BASE, 110), projectId: P, milestoneId: M2 },
@@ -83,7 +83,7 @@ export function orderScenarios({ withApp, root }) {
             { id: U(7401), title: 'Inbox から', createdAt: at(BASE, 120) }
           ]
         })
-        const created = readDb(dir, 'SELECT id, created_at, completed_at, updated_at FROM tasks ORDER BY id')
+        const created = readDb(dir, 'SELECT id, created_at, done_on, updated_at FROM tasks ORDER BY id')
         await withApp({ label: 'task-order', userDataDir: dir }, async (app) => {
           const c = app.cdp
           await openProject(c)
@@ -126,8 +126,8 @@ export function orderScenarios({ withApp, root }) {
           await c.waitFor(`[...document.querySelectorAll('[data-card-list="group:${M1}"] [role=option]')].map((e) => e.dataset.taskId).join() === ${JSON.stringify([D, B, A, C, E].join())}`, 5000, 'Alt+↓')
           assert(dbTaskOrder(M1).map((t) => name[t.id]).join('') === 'DBACE', 'キーボードの並べ替えを保存')
           // 並べ替えで日時（作成・完了・更新）は変えない
-          const after = readDb(dir, 'SELECT id, created_at, completed_at, updated_at FROM tasks ORDER BY id')
-          assert(JSON.stringify(after) === JSON.stringify(created), '並べ替えでは createdAt・completedAt・updatedAt を変えない')
+          const after = readDb(dir, 'SELECT id, created_at, done_on, updated_at FROM tasks ORDER BY id')
+          assert(JSON.stringify(after) === JSON.stringify(created), '並べ替えでは createdAt・doneOn・updatedAt を変えない')
 
           // 手動順以外（作成日時が古い順）でハンドルを使う → 手動順へ切り替わることを示し、保存後に切り替える
           await chooseSort(c, 'created-asc')

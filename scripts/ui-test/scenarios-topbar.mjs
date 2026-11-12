@@ -399,7 +399,7 @@ export function topBarScenarios({ withApp, root }) {
           assert(nav.items.includes(ids.p) && nav.items.includes(ids.long) && !nav.items.includes(ids.done) && nav.listParent && nav.lastIsNew, '未完了のプロジェクトは Project 配下にそのまま、完了済みは混ぜない、NEW PROJECT は最下段', nav)
           assert(nav.dup[0] !== nav.dup[1] && nav.dup.every((t) => t?.startsWith('同名')), '同名のプロジェクトは識別できる', nav.dup)
           const stored = await api(c, 'window.gtd.projects.list()')
-          assert(stored.some((p) => p.id === ids.done && p.completedAt !== null), '完了済みのプロジェクトのデータは残る')
+          assert(stored.some((p) => p.id === ids.done && p.doneOn !== null), '完了済みのプロジェクトのデータは残る')
 
           // サイドバーの最小幅: 境界線をドラッグして最小（108px）まで。保存・はみ出しなし・操作は利用可能
           await openProject(c, ids.p)
@@ -501,10 +501,10 @@ export function topBarScenarios({ withApp, root }) {
       'ステータスバーの件数（大量データ・非表示データ）: 仮想化で描画した行数ではなく全表示対象（Inbox 2,000件・プロジェクト 1,200件）で数え、削除由来の非表示タスクは含めない',
       async () => {
         const db = await createDatabaseAt(join(bulkDir, 'gtd.sqlite'))
-        const insert = db.prepare('INSERT INTO tasks (id, title, created_at, updated_at, completed_at, project_id, milestone_id, hidden_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
+        const insert = db.prepare('INSERT INTO tasks (id, title, created_at, updated_at, done_on, project_id, milestone_id, hidden_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
         const projectId = randomUUID()
         const milestones = [randomUUID(), randomUUID(), randomUUID()]
-        db.prepare('INSERT INTO projects (id, name, created_at, updated_at, completed_at) VALUES (?, ?, ?, ?, NULL)').run(projectId, '大量の案件', 'a', 'a')
+        db.prepare('INSERT INTO projects (id, name, created_at, updated_at, done_on) VALUES (?, ?, ?, ?, NULL)').run(projectId, '大量の案件', 'a', 'a')
         milestones.forEach((id, i) =>
           db.prepare('INSERT INTO milestones (id, project_id, name, created_at, updated_at) VALUES (?, ?, ?, ?, ?)').run(id, projectId, `M${i + 1}`, `2026-11-0${i + 1}T00:00:00.000Z`, 'a')
         )

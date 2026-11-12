@@ -22,6 +22,8 @@ export const vscodeColors = {
   badgeBackground: '#4d4d4d',
   // ペインの境界線（ドラッグ・ホバー・フォーカス時はfocusBorder）
   sash: '#2b2b2b',
+  // 区画の罫線（Summary Review の「田」の字の外枠・中央の罫線）。背景（#1e1e1e）と判別できる灰色
+  gridLine: '#5a5a5a',
   scrollbarThumb: 'rgba(121, 121, 121, 0.4)',
   scrollbarThumbHover: 'rgba(100, 100, 100, 0.7)'
 } as const

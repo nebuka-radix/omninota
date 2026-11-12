@@ -237,7 +237,7 @@ export function deletionScenarios({ withApp, root }) {
           assert(rawTask(other) === undefined, 'キーボードで削除')
           await sleep(300)
           const status = await c.evaluate(`document.querySelector('#detail-panel [data-testid=project-status]')?.textContent`)
-          assert(status === '未完了' && (await projects(c)).find((p) => p.id === ids.p).completedAt === null, '未完了タスクが0件になっても自動で完了しない', status)
+          assert(status === '未完了' && (await projects(c)).find((p) => p.id === ids.p).doneOn === null, '未完了タスクが0件になっても自動で完了しない', status)
           const quit = await requestQuit(app)
           assert(quit?.code === 0, '正常終了', quit)
         })
@@ -309,7 +309,7 @@ export function deletionScenarios({ withApp, root }) {
             const row = rawTask(id)
             assert(row && row.project_id === ids.mp && row.milestone_id === null && row.hidden_at !== null, 'タスクは残り、project_id 維持・milestone_id NULL・非表示', row)
           }
-          assert(rawTask(m1a).title === 'M1の未完了' && rawTask(m1a).completed_at === null && rawTask(m1b).completed_at !== null, 'タイトル・完了状態は変えない（ドラフトは保存しない）')
+          assert(rawTask(m1a).title === 'M1の未完了' && rawTask(m1a).done_on === null && rawTask(m1b).done_on !== null, 'タイトル・完了状態は変えない（ドラフトは保存しない）')
 
           // 最後のマイルストンを削除した後: カードはなく、NEW MILESTONE だけ。タスクの追加・紐付けはできない（作り直さない）
           const board = await c.evaluate(`({ cards: document.querySelectorAll('[data-testid=milestone-card]').length, note: !!document.querySelector('[data-testid=no-milestone-note]'), newTask: !!document.querySelector('[data-testid^=new-task-]'), newMilestone: document.querySelector('[data-testid=new-milestone-button]')?.disabled })`)
@@ -475,8 +475,8 @@ export function deletionScenarios({ withApp, root }) {
         old.close()
         await withApp({ label: 'migration-56', userDataDir: migrationDir }, async (app) => {
           const c = app.cdp
-          // フェーズ5.9で 0007（手動順）、フェーズ6で 0008（期限）、TaskRow で 0009（お気に入り）が加わったため、0006〜0009 を適用する
-          assert(app.logs.some((line) => line.includes('migrations applied: 6 -> 10')), '0006〜0009を適用する', app.logs.filter((l) => l.includes('[db]')))
+          // フェーズ5.9で 0007（手動順）、フェーズ6で 0008（期限）、TaskRow で 0009（お気に入り）、完了管理で 0010 が加わったため、0006〜0010 を適用する
+          assert(app.logs.some((line) => line.includes('migrations applied: 6 -> 11')), '0006〜0010を適用する', app.logs.filter((l) => l.includes('[db]')))
           const visible = (await tasks(c)).map((t) => t.id).sort()
           assert(JSON.stringify(visible) === JSON.stringify([T[2], T[3], T[4]].sort()), '残したタスクだけを表示', visible)
           await openProject(c, p)
@@ -488,7 +488,7 @@ export function deletionScenarios({ withApp, root }) {
         readDb(file, (db) => {
           assert(!db.prepare('SELECT 1 FROM tasks WHERE id IN (?, ?)').get(T[0], T[1]), 'プロジェクトだけに所属するタスクを削除（完了済みを含む）')
           const kept = db.prepare('SELECT * FROM tasks WHERE id IN (?, ?, ?) ORDER BY id').all(T[2], T[3], T[4])
-          assert(JSON.stringify(kept) === JSON.stringify(keep.map((row) => ({ ...row, hidden_at: null, position: null, dueto: null, favorite: 0 }))), 'Inbox・マイルストン所属済みは全列そのまま（0007の手動順・0008の期限はNULL、0009のお気に入りは false）', kept)
+          assert(JSON.stringify(kept) === JSON.stringify(keep.map((row) => ({ ...Object.fromEntries(Object.entries(row).map(([k, v]) => [k === 'completed_at' ? 'done_on' : k, v])), hidden_at: null, position: null, dueto: null, favorite: 0 }))), 'Inbox・マイルストン所属済みは全列そのまま（0007の手動順・0008の期限はNULL、0009のお気に入りは false、0010で completed_at を done_on へ名前の変更・値はそのまま）', kept)
           assert(db.prepare('SELECT COUNT(*) AS c FROM milestones').get().c === 1 && db.prepare('SELECT COUNT(*) AS c FROM projects').get().c === 1, 'プロジェクト・マイルストンは保持')
         })
       }

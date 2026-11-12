@@ -73,10 +73,10 @@ WAL使用中は、稼働中のDBファイルを単純コピーしてもバック
   削除（フェーズ5.6）は、Serviceが先に参照を外してから親を削除する（外部キーの連鎖で残すべき行を消さない）。
 - 一覧の並び順: `created_at DESC, id DESC`（同じ作成日時でも常に同じ順序）
 - 日時は固定長・UTC固定のため、文字列の大小比較が時刻順と一致する。
-- 完了状態は completed_at だけから導出する（isCompleted のような列は持たない）。
+- タスクの完了状態は done_on（0010 で completed_at から名前を変更）だけから導出する（タスクには done の列を持たない）。
 - 日時はすべてMain側で生成する。Rendererから任意の日時は指定できない。
 
-| 操作 | completed_at | updated_at | created_at |
+| 操作 | done_on（0010 までは completed_at） | updated_at | created_at |
 |---|---|---|---|
 | 作成 | NULL | 作成日時 | 作成日時 |
 | タイトル編集（前後空白を除いて保存済みと異なる場合のみ） | 変えない | 更新 | 変えない |
@@ -178,13 +178,13 @@ WAL使用中は、稼働中のDBファイルを単純コピーしてもバック
 - DBからの取得順は作成日時・IDの昇順。画面の表示順（未完了 → 完了、名前順）はRendererで決める。
 - 完了・取り消し（フェーズ5.3。マイグレーションなし。既存の completed_at を使う）:
 
-| 操作 | completed_at | updated_at | created_at |
+| 操作 | done_on（0010 までは completed_at） | updated_at | created_at |
 |---|---|---|---|
 | 完了（所属タスクがすべて完了済み、または0件の場合のみ） | 現在日時 | 同じ現在日時 | 変えない |
 | 完了の取り消し | NULL | 現在日時 | 変えない |
 | 既に目的の状態 | 変えない | 変えない | 変えない |
 
-- 未完了タスクの件数は `tasks` を `project_id = ? AND completed_at IS NULL` で数える（索引 `tasks_project_id_idx`）。
+- 未完了タスクの件数は `tasks` を `project_id = ? AND done_on IS NULL` で数える（索引 `tasks_project_id_idx`）。
   確認と更新は1つのトランザクション（BEGIN IMMEDIATE）。所属タスクの行は変更しない。
 - 完了済みプロジェクトに所属するタスクは未完了に戻せない（tasks.setCompleted で確認。同じトランザクション）。
 - フェーズ5.3ではマイグレーションを追加していない（DBのバージョンは0004のまま）。
@@ -287,6 +287,20 @@ WAL使用中は、稼働中のDBファイルを単純コピーしてもバック
 | 削除時の所属解除・非表示化・削除は全部成功するか何も変えない | Service（1つのトランザクション・BEGIN IMMEDIATE） |
 | 確認後に配下の件数が変わったら削除しない | Service（確認時の件数と比べて CONFLICT） |
 
+### 0010_done_and_done_on（完了管理。2026-11-12）
+
+- 手書きのSQL（drizzle-kit の列名の変更は対話式の確認が必要なため）。スナップショット `0010_snapshot.json` は schema と一致することを
+  `db:generate`（「No schema changes」）で確認した。過去のマイグレーションは変更していない。
+- `tasks.completed_at` → `tasks.done_on`（`ALTER TABLE ... RENAME COLUMN`。値・形式（UTC の ISO 8601 文字列の TEXT）はそのまま）。
+  タスクには done の列を追加しない。完了状態（done = true / false）は done_on の有無に対応する論理上の状態。
+- `projects.completed_at` → `projects.done_on`（値はそのまま）。`projects.done`（INTEGER の 0 / 1。Drizzle の boolean。NOT NULL・既定 false）を追加し、
+  `UPDATE projects SET done = (done_on IS NOT NULL)` で既存の完了済みを true に移行する（updated_at・created_at は変えない）。
+- `milestones.done`（NOT NULL・既定 false）・`milestones.done_on`（TEXT・NULL）を追加。既存の行は false / NULL。今回は完了の操作・自動完了・制約を追加しない。
+- done = true なら done_on あり、false なら NULL（プロジェクトは Repository が同じ更新で書き換える）。SQLite の CHECK 制約は付けていない
+  （既存テーブルへの CHECK の追加はテーブルの再作成が必要なため）。DATETIME の型宣言はしていない（SQLite は型を検証しない。形式は Main が付与）。
+- RENAME COLUMN は索引・外部キーの参照を合わせて変える（テーブルの再作成なし）。移行のテストで `PRAGMA foreign_key_check`・`integrity_check` を確認。
+- **既存のDB（通常利用 GTD・開発 GTD-dev）は、次にアプリを通常起動した時に未適用の 0007〜0010 が適用される。** 起動前にバックアップを取ること。
+
 ### 0009_task_favorite（共通のタスク行。2026-11-11）
 
 - 生成SQL（`db:generate --name task_favorite` の結果に説明を追記）: `ALTER TABLE tasks ADD favorite integer DEFAULT false NOT NULL`。過去のマイグレーションは変更していない。
@@ -319,7 +333,7 @@ WAL使用中は、稼働中のDBファイルを単純コピーしてもバック
 |---|---|
 | 同じマイルストンの表示中のタスク（同じプロジェクトの表示中のマイルストン）は、全件に順位があるか全件 NULL | Service（並べ替えは全件を指定した時だけ保存。追加・移動は末尾） |
 | 手動順のあるマイルストンへの追加・移動は末尾（最大値+1）。Inboxへ戻すと NULL | Service（create・setAssignment・assignFromInbox） |
-| 並べ替えは順位だけを変える（created_at・completed_at・updated_at は変えない） | Repository（position だけを更新） |
+| 並べ替えは順位だけを変える（created_at・done_on・updated_at は変えない） | Repository（position だけを更新） |
 | 一括紐付け・一括削除・並べ替えは全件成功か何も変えない | Service（1つのトランザクション） |
 | 削除由来の非表示タスク・非表示のマイルストンは、並べ替え・一括操作の対象にしない | Repository（hidden_at・project_id の条件）＋ Service |
 

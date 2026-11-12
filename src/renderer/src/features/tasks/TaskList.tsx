@@ -97,13 +97,6 @@ export type ReorderOptions = {
   onBlocked: (reason: string) => void
 }
 
-// 外部のスクロール領域で仮想化する一覧（Summary Review のセクション。複数の一覧で1つのスクロール領域を共有する）
-export type ExternalScroll = {
-  element: HTMLElement | null
-  // スクロール領域の内容の先頭から、この一覧の先頭までの距離（px）
-  offset: number
-}
-
 // タスクの一覧（role="listbox"）。各行は共通の TaskRow（Inbox・プロジェクトのカード・Summary Review）。
 // DOMフォーカスはリスト本体に置き、現在行は aria-activedescendant で示す（仮想化で行要素が入れ替わってもフォーカスを失わない）。
 // - 上下キー・Home/End・PageUp/PageDown: 現在行の移動（選択は変えない）
@@ -121,7 +114,7 @@ export type ExternalScroll = {
 // マウス:
 // - 行の背景のクリック: 選択（既存どおり）。タスク名のクリック: 少し待ってから編集モーダル（ダブルクリックならモーダルを開かずインライン編集）。
 //   保留中のクリックは、ドラッグの開始・他の操作・アンマウントで取り消す（pending-click.ts）。ドラッグはクリックとして扱わない。
-// variant: table（Inbox。並べ替えの見出しあり）/ card（マイルストンのカード。← → で隣のカードへ）/ section（Summary Review。外部のスクロール領域）
+// variant: table（Inbox。並べ替えの見出しあり）/ card（マイルストンのカード。← → で隣のカードへ）/ section（Summary Review の区画。区画ごとに独立してスクロール）
 export function TaskList({
   tasks,
   actions,
@@ -130,7 +123,6 @@ export function TaskList({
   cardKey,
   emptyLabel,
   maxVisibleRows,
-  externalScroll,
   onNavigateCard,
   onRequestAssignKey,
   onRequestDelete,
@@ -156,8 +148,6 @@ export function TaskList({
   emptyLabel?: string
   // 行数に合わせて高さを決める場合の最大行数（row レイアウトのカード。フェーズ5.9）。省略時は親の高さいっぱい
   maxVisibleRows?: number
-  // variant="section" の外部のスクロール領域
-  externalScroll?: ExternalScroll
   onNavigateCard?: (direction: -1 | 1) => void
   // M キー（Inbox: 選択中のタスクの一括紐付け）。省略時は現在行の1件の紐付けメニュー
   onRequestAssignKey?: (task: TaskDto, anchor: HTMLElement) => void
@@ -181,7 +171,6 @@ export function TaskList({
   const [activeTaskId, setActiveTaskId] = useState<string | null>(null)
   const [listFocused, setListFocused] = useState(false)
   const card = variant === 'card'
-  const section = variant === 'section'
   const withHandle = card && reorder !== undefined
   const inlineEdit = actions.inlineEdit
   const today = useLocalDay()
@@ -189,8 +178,6 @@ export function TaskList({
   // 行の操作ボタン（TaskRow がポータルで描画する重ね合わせ層）
   const [controlsLayer, setControlsLayer] = useState<HTMLElement | null>(null)
   const pendingClick = usePendingClick()
-  // 外部のスクロール領域を使う場合（section）の位置
-  const scrollOffset = section ? externalScroll?.offset ?? 0 : 0
   // キーボード移動の対象となるタスクの並び（行の並びと同じ）
   const orderedTasks = tasks
   const order = tasks.map((task) => task.id)
@@ -202,8 +189,8 @@ export function TaskList({
 
   const virtualizer = useVirtualizer({
     count: tasks.length,
-    getScrollElement: () => (section ? externalScroll?.element ?? null : scrollRef.current),
-    scrollMargin: scrollOffset,
+    // スクロール領域の寸法の変化（区画・カードの大きさの変更）は virtualizer が監視して測り直す
+    getScrollElement: () => scrollRef.current,
     estimateSize: () => TASK_ROW_HEIGHT,
     // 安定したキー（タスクID）。1つのタスクは1つのカードにだけ表示されるため、カード間でも衝突しない
     getItemKey: (index) => tasks[index]?.id ?? index,
@@ -221,8 +208,8 @@ export function TaskList({
 
   // 条件（resetScrollKey）が変わった時だけ先頭へ戻す。virtualizerは毎回同じインスタンス。
   useEffect(() => {
-    if (!section) virtualizer.scrollToOffset(0)
-  }, [resetScrollKey, virtualizer, section])
+    virtualizer.scrollToOffset(0)
+  }, [resetScrollKey, virtualizer])
 
   const scrollToTask = (taskIndex: number) => {
     virtualizer.scrollToIndex(taskIndex, { align: 'auto' })
@@ -464,12 +451,11 @@ export function TaskList({
   const handleFocus = () => {
     setListFocused(true)
     if (activeIndex >= 0 || orderedTasks.length === 0) return
-    const scroller = section ? externalScroll?.element : scrollRef.current
-    const scrollTop = (scroller?.scrollTop ?? 0) - scrollOffset
+    const scrollTop = scrollRef.current?.scrollTop ?? 0
     const items = virtualizer.getVirtualItems()
     const taskOf = (index: number) => tasks[index]
     const selectedItem = items.find((item) => taskOf(item.index)?.id === selectedTaskId)
-    const firstInView = items.find((item) => item.end - scrollOffset > scrollTop)
+    const firstInView = items.find((item) => item.end > scrollTop)
     const chosen = selectedItem ?? firstInView ?? items[0]
     const target = chosen ? taskOf(chosen.index) : orderedTasks[0]
     if (target) setActiveTaskId(target.id)
@@ -641,8 +627,7 @@ export function TaskList({
   const activeId = activeRendered && activeTask ? taskOptionId(activeTask.id) : undefined
 
   const selectedIds = multiSelect?.selection.ids
-  const fixedHeight =
-    section ? tasks.length * TASK_ROW_HEIGHT : maxVisibleRows !== undefined ? Math.max(1, Math.min(maxVisibleRows, tasks.length)) * TASK_ROW_HEIGHT : undefined
+  const fixedHeight = maxVisibleRows !== undefined ? Math.max(1, Math.min(maxVisibleRows, tasks.length)) * TASK_ROW_HEIGHT : undefined
 
   const reorderHandle = (task: TaskDto, index: number) => {
     if (!withHandle || !reorder) return undefined
@@ -693,8 +678,7 @@ export function TaskList({
           flex: fixedHeight === undefined ? 1 : '0 0 auto',
           height: fixedHeight,
           minHeight: 0,
-          // section は外部のスクロール領域を使う（ここではスクロールしない）
-          overflowY: section ? 'visible' : 'auto',
+          overflowY: 'auto',
           overflowX: 'hidden'
         }}
       >
@@ -731,7 +715,7 @@ export function TaskList({
                 <TaskRow
                   key={task.id}
                   task={task}
-                  top={item.start - scrollOffset}
+                  top={item.start}
                   listId={listId}
                   controlsLayer={controlsLayer}
                   today={today}

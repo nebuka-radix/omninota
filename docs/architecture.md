@@ -510,6 +510,21 @@ check → unsaved-draft → ダイアログ（保存して終了 / 保存せず�
 - Summary: Main の取得結果に一覧の Query の新しい方の値を重ね、`shared/summary-sections.ts`（Main と共通）で振り分け直す
   （`features/summary/summary-merge.ts`）。完了・期限の変更・削除は保存の直後から反映し、所属の変更だけでは外さない。
 
+### Summary Review の4区画・プロジェクトのフィルター・完了管理（2026-11-12）
+
+- `routes/SummaryPage.tsx`: CSS グリッド（2列×2行・`minmax(0, 1fr)`）。外枠はグリッドの枠線、中央の罫線は左の列の右・上の行の下だけ（二重線にしない。
+  色は `theme.ts` の `vscodeColors.gridLine`）。各区画は見出しと `TaskList`（variant="section"。区画ごとに独立したスクロールと仮想化。
+  区画の寸法の変化は virtualizer がスクロール領域の大きさを監視して測り直す）。
+- 取得: `summary.get` が7日後までの未完了・表示中・期限ありを取得し、`shared/summary-sections.ts` で Today／Tomorrow／This Week／Overdue に振り分ける
+  （Renderer の保存直後の振り分け直しも同じ関数）。
+- プロジェクトのフィルター: `features/summary/summary-project-filter.ts`（OFF にしたプロジェクトの ID の集合。Renderer のモジュールの状態でセッション中だけ）、
+  右サイドバー `features/summary/SummaryProjectFilter.tsx`（`DetailPanel` の `/summary` の内容。右サイドバーは画面ごとに切り替える）、
+  `summary-merge.ts` の `filterSummaryByProjects`・`summaryTotal`（件数はフィルター後の対象の数）。
+- TaskRow の2行目: 左寄せ。タスク名の列の左端から同じ距離（`TEXT_INSET`）にタスク名の文字と星のアイコンを置く。操作ボタン（20px）を先に確保し、
+  所属（`useTaskRowActions` の `assignmentLabel`。プロジェクト・マイルストンの一覧の Query から名前を引く）は残りの幅で省略表示。
+- 完了管理: タスクは `done_on`（完了状態はその有無）。プロジェクトは `done`・`done_on`（`ProjectRepository.updateDone` が同じ更新で書き換える）。
+  完了済みプロジェクトの判定（サイドバー・紐付け先・追加の制限・タスクの再開の制限）は `done` に統一。マイルストンは `done`・`done_on` を持つだけ。
+
 ### タスク一覧の表示範囲と所属（フェーズ5.2）
 
 - 表示範囲 `TaskScope`: `{ kind: 'inbox' }`（プロジェクトに属さないタスク）/ `{ kind: 'project', projectId }`
@@ -608,7 +623,7 @@ MUIによる描画
 - 取得した全件に対して、クライアント側で絞り込み・ソートを行う（DBページング・サーバー側ソートはしない）。
   仮想化は描画量を減らすだけで、DBからの取得件数は減らない。
 - 絞り込み: 表示範囲（所属。非表示列 `scope`。フェーズ5.2）、タイトルの部分一致（大文字・小文字を区別しない `includesString`）、
-  未完了／完了／すべて（completedAtから導出する非表示列への列フィルター）。初期表示は未完了。
+  未完了／完了／すべて（doneOn から導出する非表示列への列フィルター）。初期表示は未完了。
 - ソート: 作成日時（初期は降順。同じ日時はIDで比較し、DBと同じ順序）とタイトル（日本語照合・数字は数値として比較）。
 - 検索・表示切り替え・ソートは画面内の状態で、保存しない。条件が変わった時だけ先頭へスクロールし、
   更新後のキャッシュ反映では戻さない。

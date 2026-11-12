@@ -92,7 +92,7 @@ export function buildAssignmentOptions(
   const projectLabels = disambiguatedNames(projects)
   const groups: AssignmentOptionGroup[] = []
   for (const project of sortProjects(projects)) {
-    const completed = project.completedAt !== null
+    const completed = project.done
     const isCurrent = project.id === current.projectId
     if (completed && !isCurrent) continue
     const name = `${projectLabels.get(project.id) ?? project.name}${completed ? '（完了済み）' : ''}`

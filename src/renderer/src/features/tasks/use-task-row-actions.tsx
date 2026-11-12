@@ -86,8 +86,8 @@ export function useTaskRowActions(options: {
     // 未保存の編集があるタスクは、完了操作の前に確認する（入力を黙って失わない）
     if (!(await confirmLeave({ target: { kind: 'task', id: task.id } }))) return
     setCompleted.mutate(
-      { id: task.id, completed: task.completedAt === null },
-      { onSuccess: (saved) => announce(`「${saved.title}」を${saved.completedAt === null ? '未完了に戻しました' : '完了にしました'}`) }
+      { id: task.id, completed: task.doneOn === null },
+      { onSuccess: (saved) => announce(`「${saved.title}」を${saved.doneOn === null ? '未完了に戻しました' : '完了にしました'}`) }
     )
   }
 
@@ -120,11 +120,16 @@ export function useTaskRowActions(options: {
     }
   }
 
-  const assignmentLabel = (task: TaskDto) => {
-    if (task.projectId === null) return 'Inbox'
-    const projectName = projectsQuery.data?.find((item) => item.id === task.projectId)?.name ?? '（プロジェクト）'
-    const milestoneName = milestonesQuery.data?.find((item) => item.id === task.milestoneId)?.name ?? '（マイルストン）'
-    return `${projectName} › ${milestoneName}`
+  // 所属の表示（「{プロジェクト名} / {マイルストン名}」）。一覧の Query（全件）から名前を引く（行ごとに IPC を発行しない）。
+  // 所属がない（Inbox）・名前を取得できない時は null（「null / null」や空の「 / 」を出さない）
+  const projectNames = new Map((projectsQuery.data ?? []).map((item) => [item.id, item.name]))
+  const milestoneNames = new Map((milestonesQuery.data ?? []).map((item) => [item.id, item.name]))
+  const assignmentLabel = (task: TaskDto): string | null => {
+    if (task.projectId === null) return null
+    const projectName = projectNames.get(task.projectId)
+    const milestoneName = task.milestoneId === null ? undefined : milestoneNames.get(task.milestoneId)
+    if (projectName === undefined) return null
+    return milestoneName === undefined ? projectName : `${projectName} / ${milestoneName}`
   }
 
   // 行へ渡す操作

@@ -324,7 +324,7 @@ export function milestoneScenarios({ withApp, root }) {
       async () => {
         const db = await createDatabaseAt(join(bulkDir, 'gtd.sqlite'))
         const projectId = randomUUID()
-        db.prepare('INSERT INTO projects (id, name, created_at, updated_at, completed_at) VALUES (?, ?, ?, ?, NULL)').run(projectId, '大量', 'a', 'a')
+        db.prepare('INSERT INTO projects (id, name, created_at, updated_at, done_on) VALUES (?, ?, ?, ?, NULL)').run(projectId, '大量', 'a', 'a')
         const milestoneIds = []
         // 5.6: プロジェクトのタスクは必ずマイルストンに所属する（5.5までの「未設定」の代わりに6つ目のマイルストン）
         for (let i = 0; i < 6; i++) {
@@ -334,7 +334,7 @@ export function milestoneScenarios({ withApp, root }) {
           db.prepare('INSERT INTO milestones (id, project_id, name, created_at, updated_at) VALUES (?, ?, ?, ?, ?)').run(id, projectId, `M${i + 1}`, at, at)
         }
         const rows = []
-        const insert = db.prepare('INSERT INTO tasks (id, title, created_at, updated_at, completed_at, project_id, milestone_id) VALUES (?, ?, ?, ?, ?, ?, ?)')
+        const insert = db.prepare('INSERT INTO tasks (id, title, created_at, updated_at, done_on, project_id, milestone_id) VALUES (?, ?, ?, ?, ?, ?, ?)')
         db.transaction(() => {
           for (let i = 0; i < 3000; i++) {
             const id = randomUUID()
@@ -342,10 +342,10 @@ export function milestoneScenarios({ withApp, root }) {
             const at = new Date(Date.UTC(2026, 9, 1) + i * 1000).toISOString()
             // 6件ごとに全グループへ1件ずつ配る。状態・題名は6件単位で変え、どのグループにも全組み合わせができるようにする
             const k = Math.floor(i / 6)
-            const completedAt = k % 3 === 0 ? at : null
+            const doneOn = k % 3 === 0 ? at : null
             const title = `${k % 2 === 0 ? '報告' : '連絡'} ${i}`
-            insert.run(id, title, at, at, completedAt, projectId, milestoneId)
-            rows.push({ id, title, createdAt: at, completedAt, milestoneId })
+            insert.run(id, title, at, at, doneOn, projectId, milestoneId)
+            rows.push({ id, title, createdAt: at, doneOn, milestoneId })
           }
         })()
         db.close()
@@ -355,7 +355,7 @@ export function milestoneScenarios({ withApp, root }) {
           await c.waitFor(`document.querySelectorAll('[data-testid=task-list] [role=option]').length > 0`, 10000, '一覧')
           await c.waitFor(`[...document.querySelectorAll('[data-testid=milestone-card]')].length === 6 && [...document.querySelectorAll('[data-testid=milestone-card]')].every((e) => e.querySelector('[role=option]'))`, 10000, 'すべてのカードの描画（カードごとの仮想リストは別々に測定される）')
           await sleep(200)
-          const open = rows.filter((r) => r.completedAt === null)
+          const open = rows.filter((r) => r.doneOn === null)
           assert((await c.evaluate(`document.querySelector('[data-testid=task-count]').textContent`)) === `${open.length} 件表示 / 全 3000 件`, '件数')
           let cards = await cardRows(c)
           assert(cards.length === 6 && cards[0].key === `group:${milestoneIds[0]}` && cards.every((x) => x.tasks.length > 0 && x.tasks.length < 60), 'カードごとに一部だけ描画・先頭はM1', cards.map((x) => [x.key, x.tasks.length]))
@@ -368,7 +368,7 @@ export function milestoneScenarios({ withApp, root }) {
           await chooseProjectSort(c, 'title')
           await sleep(200)
           const collator = new Intl.Collator('ja', { numeric: true, sensitivity: 'base' })
-          const filtered = rows.filter((r) => r.completedAt !== null && r.title.includes('報告'))
+          const filtered = rows.filter((r) => r.doneOn !== null && r.title.includes('報告'))
           assert((await c.evaluate(`document.querySelector('[data-testid=task-count]').textContent`)) === `${filtered.length} 件表示 / 全 3000 件`, '組み合わせた件数')
           const lastCardSorted = filtered.filter((r) => r.milestoneId === milestoneIds[5]).sort((a, b) => collator.compare(a.title, b.title))
           cards = await cardRows(c)

@@ -46,7 +46,7 @@ describe('タスクの所属（入力検証）', () => {
   it.each<[string, unknown[]]>([
     ['UUIDでないprojectId', [{ title: 'a', projectId: 'x' }]],
     ['数値のprojectId', [{ title: 'a', projectId: 1 }]],
-    ['余分なキー', [{ title: 'a', projectId, completedAt: null }]]
+    ['余分なキー', [{ title: 'a', projectId, doneOn: null }]]
   ])('作成: 不正な形（%s）を拒否する', (_label, args) => {
     expect(tasksCreateArgsSchema.safeParse(args).success).toBe(false)
   })
@@ -73,7 +73,7 @@ describe('タスクの所属（Service・一時DB）', () => {
   // 完了済みのプロジェクトを、実際の操作（所属タスクを完了 → プロジェクトを完了。フェーズ5.3のAPI）で作る
   const complete = (projectId: string) => {
     for (const task of tasks.list()) {
-      if (task.projectId === projectId && task.completedAt === null) tasks.setCompleted({ id: task.id, completed: true })
+      if (task.projectId === projectId && task.doneOn === null) tasks.setCompleted({ id: task.id, completed: true })
     }
     return projects.setCompleted({ id: projectId, completed: true })
   }
@@ -103,7 +103,7 @@ describe('タスクの所属（Service・一時DB）', () => {
   it('プロジェクトを指定して作成できる', () => {
     const project = projects.create({ name: '仕事' })
     const task = tasks.create({ title: '資料', ...inProject(db, project.id) })
-    expect(task).toMatchObject({ title: '資料', projectId: project.id, completedAt: null })
+    expect(task).toMatchObject({ title: '資料', projectId: project.id, doneOn: null })
     expect(createTaskRepository(db).findById(task.id)?.projectId).toBe(project.id)
   })
 
@@ -132,11 +132,11 @@ describe('タスクの所属（Service・一時DB）', () => {
     expect(toA.updatedAt > done.updatedAt).toBe(true)
 
     const toB = tasks.setAssignment({ id: created.id, ...inProject(db, b.id) })
-    expect(toB).toMatchObject({ id: created.id, title: 'タスク', createdAt: created.createdAt, completedAt: done.completedAt, ...inProject(db, b.id) })
+    expect(toB).toMatchObject({ id: created.id, title: 'タスク', createdAt: created.createdAt, doneOn: done.doneOn, ...inProject(db, b.id) })
     expect(toB.updatedAt > toA.updatedAt).toBe(true)
 
     const unassigned = tasks.setAssignment({ id: created.id, projectId: null, milestoneId: null })
-    expect(unassigned).toMatchObject({ projectId: null, completedAt: done.completedAt, createdAt: created.createdAt })
+    expect(unassigned).toMatchObject({ projectId: null, doneOn: done.doneOn, createdAt: created.createdAt })
     expect(unassigned.updatedAt > toB.updatedAt).toBe(true)
   })
 

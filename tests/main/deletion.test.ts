@@ -39,7 +39,7 @@ type RawTask = {
   title: string
   created_at: string
   updated_at: string
-  completed_at: string | null
+  done_on: string | null
   project_id: string | null
   milestone_id: string | null
   hidden_at: string | null
@@ -243,7 +243,7 @@ describe('削除・非表示（Service・一時DB）', () => {
           id: before[key].id,
           title: before[key].title,
           created_at: before[key].created_at,
-          completed_at: before[key].completed_at,
+          done_on: before[key].done_on,
           project_id: p.id,
           milestone_id: null
         })
@@ -264,7 +264,7 @@ describe('削除・非表示（Service・一時DB）', () => {
       tasks.create({ title: 'open', ...at(p.id) })
       expect(() => projects.setCompleted({ id: p.id, completed: true })).toThrow(expect.objectContaining({ code: 'CONFLICT' }))
       milestones.delete({ id: initialOf(p.id).id, expectedTaskCount: 1 })
-      expect(projects.setCompleted({ id: p.id, completed: true }).completedAt).not.toBeNull()
+      expect(projects.setCompleted({ id: p.id, completed: true }).doneOn).not.toBeNull()
     })
 
     it('完了済みプロジェクトのマイルストンも削除できる（プロジェクトの完了状態は変えない）', () => {
@@ -338,7 +338,8 @@ describe('削除・非表示（Service・一時DB）', () => {
       expect(projects.getDeletionSummary({ id: p.id })).toEqual({
         id: p.id,
         name: 'P',
-        completedAt: null,
+        done: false,
+        doneOn: null,
         milestoneCount: 2,
         taskCount: 4,
         hiddenTaskCount: 1
@@ -358,8 +359,8 @@ describe('削除・非表示（Service・一時DB）', () => {
         expect(after).toMatchObject({ id: t.id, title: t.title, created_at: t.createdAt, project_id: null, milestone_id: null })
         expect(after.hidden_at).not.toBeNull()
       }
-      expect(rawTask(t2.id)?.completed_at).not.toBeNull()
-      expect(rawTask(t1.id)?.completed_at).toBeNull()
+      expect(rawTask(t2.id)?.done_on).not.toBeNull()
+      expect(rawTask(t1.id)?.done_on).toBeNull()
       // 最初に非表示になった日時は保つ。所属が変わるので updated_at は操作日時
       expect(rawTask(t3.id)?.hidden_at).toBe(t3Hidden.hidden_at)
       expect(rawTask(t1.id)!.updated_at > beforeT1.updated_at).toBe(true)
@@ -387,7 +388,7 @@ describe('削除・非表示（Service・一時DB）', () => {
       const t = tasks.create({ title: 't', ...at(done.id) })
       tasks.setCompleted({ id: t.id, completed: true })
       projects.setCompleted({ id: done.id, completed: true })
-      expect(projects.getDeletionSummary({ id: done.id }).completedAt).not.toBeNull()
+      expect(projects.getDeletionSummary({ id: done.id }).doneOn).not.toBeNull()
       projects.delete({ id: done.id, expectedMilestoneCount: 1, expectedTaskCount: 1 })
       expect(projects.list()).toEqual([])
 
@@ -526,12 +527,18 @@ describe('移行（0005 → 0006）: プロジェクトだけに所属するタ�
     expect(runMigrations(upgraded, MIGRATIONS_DIR)).toEqual({ appliedBefore: 6, appliedAfter: MIGRATION_COUNT })
     const after = upgraded.$client.prepare('SELECT * FROM tasks ORDER BY id').all()
     // 残すタスクは全列（updated_at を含む）そのまま。hidden_at はNULL（表示対象）
-    expect(after).toEqual(before.filter((t) => t.id !== T(1) && t.id !== T(2)).map((t) => ({ ...t, hidden_at: null, position: null, dueto: null, favorite: 0 })))
+    // 0010 で completed_at は done_on へ名前を変える（値はそのまま）
+    const renamed = ({ completed_at: doneOn, ...rest }: Record<string, unknown>) => ({ ...rest, done_on: doneOn })
+    expect(after).toEqual(
+      before.filter((t) => t.id !== T(1) && t.id !== T(2)).map((t) => ({ ...renamed(t), hidden_at: null, position: null, dueto: null, favorite: 0 }))
+    )
     // 0007（フェーズ5.9）で手動順の列が加わる（既存の行はNULL）。それ以外の列は変えない
     expect(upgraded.$client.prepare('SELECT * FROM milestones').all()).toEqual(
-      (beforeMilestones as Record<string, unknown>[]).map((m) => ({ ...m, position: null }))
+      (beforeMilestones as Record<string, unknown>[]).map((m) => ({ ...m, position: null, done: 0, done_on: null }))
     )
-    expect(upgraded.$client.prepare('SELECT * FROM projects').all()).toEqual(beforeProjects)
+    expect(upgraded.$client.prepare('SELECT * FROM projects').all()).toEqual(
+      (beforeProjects as Record<string, unknown>[]).map((p) => ({ ...renamed(p), done: p['completed_at'] === null ? 0 : 1 }))
+    )
     // milestones.project_id はNULL可。外部キー（tasks → milestones・milestones → projects）と索引は維持
     const columns = upgraded.$client.prepare('PRAGMA table_info(milestones)').all() as { name: string; notnull: number }[]
     expect(columns.find((c) => c.name === 'project_id')).toMatchObject({ notnull: 0 })

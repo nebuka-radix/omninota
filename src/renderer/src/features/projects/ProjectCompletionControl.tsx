@@ -26,7 +26,7 @@ export function ProjectCompletionControl({
   // 確認ダイアログの表示中に重ねて押されても、要求は1回だけにする
   const confirmingRef = useRef(false)
 
-  const completed = project.completedAt !== null
+  const completed = project.done
   const busy = pendingProjectIds.has(project.id)
 
   const toggle = async () => {
@@ -52,7 +52,7 @@ export function ProjectCompletionControl({
       </Typography>
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap' }}>
         <Typography variant="body2" sx={{ fontWeight: 600 }} data-testid="project-status">
-          {completed ? `完了済み（${formatTaskDateTime(project.completedAt as string)}）` : '未完了'}
+          {completed ? `完了済み（${formatTaskDateTime(project.doneOn as string)}）` : '未完了'}
         </Typography>
         <Button
           size="small"

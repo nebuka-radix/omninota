@@ -2,12 +2,13 @@ import { describe, expect, it } from 'vitest'
 import { sortProjects } from '../../src/renderer/src/features/projects/project-order'
 import type { ProjectDto } from '../../src/shared/contracts/projects'
 
-const p = (id: string, name: string, createdAt: string, completedAt: string | null = null): ProjectDto => ({
+const p = (id: string, name: string, createdAt: string, doneOn: string | null = null): ProjectDto => ({
   id,
   name,
   createdAt,
   updatedAt: createdAt,
-  completedAt
+  done: doneOn !== null,
+  doneOn
 })
 
 describe('プロジェクト一覧の表示順', () => {

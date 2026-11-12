@@ -30,14 +30,14 @@ function insertOldTasks(db: AppDatabase): void {
   for (const task of oldTasks) insert.run(task.id, task.title, task.at, task.at)
 }
 const expectedAfterUpgrade = oldTasks
-  .map((task) => ({ id: task.id, title: task.title, createdAt: task.at, updatedAt: task.at, completedAt: null, projectId: null, milestoneId: null, hiddenAt: null, position: null, dueto: null, favorite: false }))
+  .map((task) => ({ id: task.id, title: task.title, createdAt: task.at, updatedAt: task.at, doneOn: null, projectId: null, milestoneId: null, hiddenAt: null, position: null, dueto: null, favorite: false }))
   .reverse() // 新しい順（既存タスクは未所属で移行される）
 
 // 旧スキーマのDBから、当時の列だけでタスクを読む（現在のRepositoryは新しい列も選択するため使わない）
 function readOldTasks(db: AppDatabase) {
   return db.$client
     .prepare(
-      'SELECT id, title, created_at AS createdAt, updated_at AS updatedAt, completed_at AS completedAt FROM tasks ORDER BY created_at DESC, id DESC'
+      'SELECT id, title, created_at AS createdAt, updated_at AS updatedAt, completed_at AS doneOn FROM tasks ORDER BY created_at DESC, id DESC'
     )
     .all() as Record<string, unknown>[]
 }
@@ -144,7 +144,9 @@ describe('既存データを保持したマイグレーション', () => {
       updatedAt: '2026-11-09T03:00:00.000Z'
     })
     const columns = upgraded.$client.prepare('PRAGMA table_info(tasks)').all() as { name: string; notnull: number }[]
-    expect(columns.find((column) => column.name === 'completed_at')).toMatchObject({ notnull: 0 })
+    // 0002 で追加した completed_at は 0010 で done_on へ名前を変える
+    expect(columns.find((column) => column.name === 'done_on')).toMatchObject({ notnull: 0 })
+    expect(columns.some((column) => column.name === 'completed_at')).toBe(false)
     closeDatabase(upgraded)
 
     const restarted = openDatabase(dbFile)
@@ -168,8 +170,8 @@ describe('既存データを保持したマイグレーション', () => {
       lastRoute: `/projects/${projectId}`
     })
     const projectRows = [
-      { id: projectId, name: '仕事', at: '2026-11-09T04:00:00.000Z', completedAt: null },
-      { id: '44444444-4444-4444-8444-444444444444', name: '完了済み', at: '2026-11-09T04:30:00.000Z', completedAt: '2026-11-09T06:00:00.000Z' }
+      { id: projectId, name: '仕事', at: '2026-11-09T04:00:00.000Z', doneOn: null },
+      { id: '44444444-4444-4444-8444-444444444444', name: '完了済み', at: '2026-11-09T04:30:00.000Z', doneOn: '2026-11-09T06:00:00.000Z' }
     ]
 
     const old = openDatabase(dbFile)
@@ -179,7 +181,7 @@ describe('既存データを保持したマイグレーション', () => {
     const insertProject = old.$client.prepare(
       'INSERT INTO projects (id, name, created_at, updated_at, completed_at) VALUES (?, ?, ?, ?, ?)'
     )
-    for (const project of projectRows) insertProject.run(project.id, project.name, project.at, project.at, project.completedAt)
+    for (const project of projectRows) insertProject.run(project.id, project.name, project.at, project.at, project.doneOn)
     createSettingsRepository(old).upsert({ key: 'workspace', value: workspaceValue, updatedAt: '2026-11-09T03:00:00.000Z' })
     const beforeTasks = readOldTasks(old)
     const beforeProjects = old.$client.prepare('SELECT * FROM projects ORDER BY id').all()
@@ -189,7 +191,10 @@ describe('既存データを保持したマイグレーション', () => {
     expect(runMigrations(upgraded, MIGRATIONS_DIR)).toEqual({ appliedBefore: 4, appliedAfter: MIGRATION_COUNT })
     // 既存タスクはID・タイトル・日時・完了日時を保持し、未所属（projectId = null）になる
     expect(createTaskRepository(upgraded).listAll()).toEqual(beforeTasks.map((task) => ({ ...task, projectId: null, milestoneId: null, hiddenAt: null, position: null, dueto: null, favorite: false })))
-    expect(upgraded.$client.prepare('SELECT * FROM projects ORDER BY id').all()).toEqual(beforeProjects)
+    // 0010: completed_at → done_on（値・updated_at はそのまま）、done は完了日時の有無から
+    expect(upgraded.$client.prepare('SELECT * FROM projects ORDER BY id').all()).toEqual(
+      (beforeProjects as Record<string, unknown>[]).map(({ completed_at: doneOn, ...rest }) => ({ ...rest, done_on: doneOn, done: doneOn === null ? 0 : 1 }))
+    )
     expect(createSettingsRepository(upgraded).get('workspace')?.value).toBe(workspaceValue)
 
     // 外部キー（projects.id）と索引

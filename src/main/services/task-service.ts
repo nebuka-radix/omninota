@@ -77,7 +77,7 @@ export function toTaskDto(row: TaskRow): TaskDto {
     title: row.title,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
-    completedAt: row.completedAt,
+    doneOn: row.doneOn,
     projectId: row.projectId,
     milestoneId: row.milestoneId,
     position: row.position,
@@ -123,7 +123,7 @@ export function createTaskService(deps: {
     const milestone = deps.findMilestone(milestoneId)
     if (!milestone || milestone.projectId === null) throw targetMilestoneNotFound()
     if (milestone.projectId !== projectId) throw milestoneProjectMismatch()
-    if (project.completedAt !== null) throw projectCompletedConflict()
+    if (project.done) throw projectCompletedConflict()
   }
 
   // 移動先のマイルストンに追加する時の手動順（フェーズ5.9）。手動順がなければ null（作成日時の順に従う）、あれば末尾（最大値+1）
@@ -145,7 +145,7 @@ export function createTaskService(deps: {
           title: input.title,
           createdAt: timestamp,
           updatedAt: timestamp,
-          completedAt: null,
+          doneOn: null,
           projectId,
           milestoneId,
           hiddenAt: null,
@@ -173,14 +173,14 @@ export function createTaskService(deps: {
       return transaction(() => {
         // 1. タスクの存在 → 2. 同じ状態なら変更なし → 3. 未完了に戻す場合は所属プロジェクトが未完了か → 4. 更新
         const current = findOrThrow(input.id)
-        const isCompleted = current.completedAt !== null
+        const isCompleted = current.doneOn !== null
         if (isCompleted === input.completed) return toDto(current)
         if (!input.completed && current.projectId !== null) {
           const project = deps.findProject(current.projectId)
-          if (project && project.completedAt !== null) throw taskInCompletedProjectConflict()
+          if (project && project.done) throw taskInCompletedProjectConflict()
         }
         const timestamp = now().toISOString()
-        const updated = repository.updateCompletedAt(input.id, input.completed ? timestamp : null, timestamp)
+        const updated = repository.updateDoneOn(input.id, input.completed ? timestamp : null, timestamp)
         if (!updated) throw taskNotFound()
         return toDto(updated)
       })

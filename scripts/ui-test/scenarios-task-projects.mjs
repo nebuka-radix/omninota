@@ -110,8 +110,8 @@ export function taskProjectScenarios({ withApp, root }) {
         })
         const db = openDatabaseReadOnly(dbFile)
         try {
-          const after = db.prepare('SELECT id, title, created_at, updated_at, completed_at, project_id FROM tasks ORDER BY id').all()
-          assert(JSON.stringify(after) === JSON.stringify(before.map((row) => ({ ...row, project_id: null }))), 'タスクのID・タイトル・日時を保持', after)
+          const after = db.prepare('SELECT id, title, created_at, updated_at, done_on, project_id FROM tasks ORDER BY id').all()
+          assert(JSON.stringify(after) === JSON.stringify(before.map(({ completed_at: doneOn, ...row }) => ({ ...row, done_on: doneOn, project_id: null }))), 'タスクのID・タイトル・日時を保持', after)
           assert(db.prepare('SELECT COUNT(*) AS c FROM projects').get().c === 1, 'プロジェクトを保持')
         } finally {
           db.close()
@@ -303,7 +303,7 @@ export function taskProjectScenarios({ withApp, root }) {
         const db = await createDatabaseAt(dbFile)
         const projectA = randomUUID()
         const projectB = randomUUID()
-        const insertProject = db.prepare('INSERT INTO projects (id, name, created_at, updated_at, completed_at) VALUES (?, ?, ?, ?, NULL)')
+        const insertProject = db.prepare('INSERT INTO projects (id, name, created_at, updated_at, done_on) VALUES (?, ?, ?, ?, NULL)')
         insertProject.run(projectA, 'A', '2026-11-01T00:00:00.000Z', '2026-11-01T00:00:00.000Z')
         insertProject.run(projectB, 'B', '2026-11-01T00:00:01.000Z', '2026-11-01T00:00:01.000Z')
         // フェーズ5.6: プロジェクトのタスクは必ずマイルストンに所属する（各プロジェクトに1件）
@@ -312,16 +312,16 @@ export function taskProjectScenarios({ withApp, root }) {
         insertMilestone.run(milestoneOf[projectA], projectA, 'MA', '2026-11-01T00:00:02.000Z', '2026-11-01T00:00:02.000Z')
         insertMilestone.run(milestoneOf[projectB], projectB, 'MB', '2026-11-01T00:00:03.000Z', '2026-11-01T00:00:03.000Z')
         const rows = []
-        const insertTask = db.prepare('INSERT INTO tasks (id, title, created_at, updated_at, completed_at, project_id, milestone_id) VALUES (?, ?, ?, ?, ?, ?, ?)')
+        const insertTask = db.prepare('INSERT INTO tasks (id, title, created_at, updated_at, done_on, project_id, milestone_id) VALUES (?, ?, ?, ?, ?, ?, ?)')
         db.transaction(() => {
           for (let i = 0; i < 5000; i++) {
             const projectId = i % 3 === 0 ? null : i % 3 === 1 ? projectA : projectB
             const at = new Date(Date.UTC(2026, 9, 1) + i * 1000).toISOString()
-            const completedAt = i % 4 === 0 ? at : null
+            const doneOn = i % 4 === 0 ? at : null
             const title = `${i % 2 === 0 ? '報告' : '連絡'} ${i}`
             const id = randomUUID()
-            insertTask.run(id, title, at, at, completedAt, projectId, projectId === null ? null : milestoneOf[projectId])
-            rows.push({ id, title, createdAt: at, completedAt, projectId })
+            insertTask.run(id, title, at, at, doneOn, projectId, projectId === null ? null : milestoneOf[projectId])
+            rows.push({ id, title, createdAt: at, doneOn, projectId })
           }
         })()
         db.close()
@@ -334,7 +334,7 @@ export function taskProjectScenarios({ withApp, root }) {
 
           // Inbox（未所属・未完了・作成日時の降順）
           await c.waitFor(`document.querySelectorAll('[data-testid=task-list] [role=option]').length > 0`, 10000, '一覧の表示')
-          const inboxOpen = expect(null, (row) => row.completedAt === null).sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1))
+          const inboxOpen = expect(null, (row) => row.doneOn === null).sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1))
           const inboxAll = expect(null, () => true)
           assert((await countText(c)) === `${inboxOpen.length} 件表示 / 全 ${inboxAll.length} 件`, 'Inboxの件数', await countText(c))
           let shown = await rendered()
@@ -350,7 +350,7 @@ export function taskProjectScenarios({ withApp, root }) {
           await c.click(c.byText('button', '完了'))
           await chooseProjectSort(c, 'title')
           await sleep(200)
-          const filtered = expect(projectA, (row) => row.completedAt !== null && row.title.includes('報告')).sort((a, b) => collator.compare(a.title, b.title))
+          const filtered = expect(projectA, (row) => row.doneOn !== null && row.title.includes('報告')).sort((a, b) => collator.compare(a.title, b.title))
           assert((await countText(c)) === `${filtered.length} 件表示 / 全 ${expect(projectA, () => true).length} 件`, '組み合わせた件数', await countText(c))
           shown = await rendered()
           assert(shown.length < 80, '描画行数', shown.length)

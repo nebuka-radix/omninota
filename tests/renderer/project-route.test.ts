@@ -8,8 +8,9 @@ const project: ProjectDto = {
   id: ID,
   name: '仕事',
   createdAt: '2026-11-09T00:00:00.000Z',
+  done: false,
   updatedAt: '2026-11-09T00:00:00.000Z',
-  completedAt: null
+  doneOn: null
 }
 
 describe('起動時の画面の復元（ルート未指定の場合）', () => {

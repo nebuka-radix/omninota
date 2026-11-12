@@ -100,7 +100,7 @@ export function cardScenarios({ withApp, root }) {
           await c.enter()
           await c.waitFor(`document.querySelector('[data-testid=nav-inbox-badge]').textContent === '1'`, 5000, 'Inboxで追加して1')
           ids.badgeTask = (await tasks(c)).find((t) => t.title === 'バッジ2').id
-          assert((await task(c, t1)).completedAt !== null, '完了した')
+          assert((await task(c, t1)).doneOn !== null, '完了した')
 
           // NEW PROJECT はプロジェクト一覧の後、Project配下の最後（フェーズ5.8: 区分はなく、完了済みのプロジェクトは表示しない）
           ids.a = (await api(c, `window.gtd.projects.create({ name: 'A案件' })`)).id
@@ -333,10 +333,10 @@ export function cardScenarios({ withApp, root }) {
           await c.waitFor(`document.querySelector('[data-testid=project-status]')?.textContent.startsWith('完了済み')`, 5000, '完了')
           const done = await c.evaluate(`({ button: document.querySelector('[data-testid=project-completion-button]').textContent, notice: !!document.querySelector('[data-testid=project-completed-notice]'), newTask: [...document.querySelectorAll('[data-testid$=-button][data-testid^=new-]')].map((b) => [b.dataset.testid, b.disabled]) })`)
           assert(done.button.includes('未完了に戻す') && done.notice && done.newTask.every(([, disabled]) => disabled), '完了済み: 取り消し操作を表示し、NEW TASK・NEW MILESTONE を無効化', done)
-          assert((await projects(c)).find((p) => p.id === ids.p).completedAt !== null, 'DBも完了')
+          assert((await projects(c)).find((p) => p.id === ids.p).doneOn !== null, 'DBも完了')
           await c.click(`document.querySelector('[data-testid=project-completion-button]')`)
           await c.waitFor(`document.querySelector('[data-testid=project-status]')?.textContent === '未完了'`, 5000, '取り消し')
-          assert((await projects(c)).find((p) => p.id === ids.p).completedAt === null, 'DBも未完了')
+          assert((await projects(c)).find((p) => p.id === ids.p).doneOn === null, 'DBも未完了')
           const quit = await requestQuit(app)
           assert(quit?.code === 0, '正常終了', quit)
         })
@@ -488,7 +488,7 @@ export function cardScenarios({ withApp, root }) {
           await c.focus(`[data-card-list="group:${ids.m1}"]`)
           await c.key('Home', 36)
           await c.space()
-          await c.waitFor(`(async () => (await window.gtd.tasks.list()).data.find((t) => t.id === ${JSON.stringify(ids.c1)}).completedAt !== null)()`, 5000, 'Spaceで完了')
+          await c.waitFor(`(async () => (await window.gtd.tasks.list()).data.find((t) => t.id === ${JSON.stringify(ids.c1)}).doneOn !== null)()`, 5000, 'Spaceで完了')
           await c.enter()
           await c.waitFor(`document.querySelector('[data-testid=task-editor]')`, 3000, 'Enterで選択して詳細')
           // 所属変更（詳細パネル）: M1 → M3。タイトルのドラフトを失わない
@@ -634,7 +634,7 @@ export function cardScenarios({ withApp, root }) {
       async () => {
         const db = await createDatabaseAt(join(bulkDir, 'gtd.sqlite'))
         const projectId = randomUUID()
-        db.prepare('INSERT INTO projects (id, name, created_at, updated_at, completed_at) VALUES (?, ?, ?, ?, NULL)').run(projectId, '大量', 'a', 'a')
+        db.prepare('INSERT INTO projects (id, name, created_at, updated_at, done_on) VALUES (?, ?, ?, ?, NULL)').run(projectId, '大量', 'a', 'a')
         const milestoneIds = []
         // 5.6: プロジェクトのタスクは必ずマイルストンに所属する（5.5までの「未設定」の代わりに6つ目のマイルストン）
         for (let i = 0; i < 6; i++) {
@@ -644,7 +644,7 @@ export function cardScenarios({ withApp, root }) {
           db.prepare('INSERT INTO milestones (id, project_id, name, created_at, updated_at) VALUES (?, ?, ?, ?, ?)').run(id, projectId, `M${i + 1}`, at, at)
         }
         const rows = []
-        const insert = db.prepare('INSERT INTO tasks (id, title, created_at, updated_at, completed_at, project_id, milestone_id) VALUES (?, ?, ?, ?, ?, ?, ?)')
+        const insert = db.prepare('INSERT INTO tasks (id, title, created_at, updated_at, done_on, project_id, milestone_id) VALUES (?, ?, ?, ?, ?, ?, ?)')
         db.transaction(() => {
           for (let i = 0; i < 4000; i++) {
             const id = randomUUID()

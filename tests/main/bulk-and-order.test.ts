@@ -70,7 +70,7 @@ describe('一括紐付け・一括削除・手動順（Service・一時DB）', (
       expect(result.map((t) => t.id)).toEqual([c!.id, a!.id])
       expect(result.every((t) => t.projectId === p.id && t.milestoneId === m.id && t.position === null)).toBe(true)
       // タイトル・完了状態・作成日時は変えない
-      expect(result[0]).toMatchObject({ title: 'c', createdAt: c!.createdAt, completedAt: null })
+      expect(result[0]).toMatchObject({ title: 'c', createdAt: c!.createdAt, doneOn: null })
       expect(tasks.list().find((t) => t.id === b!.id)).toMatchObject({ projectId: null, milestoneId: null })
     })
 

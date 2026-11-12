@@ -50,6 +50,8 @@ function toDto(row: VisibleMilestoneRow): MilestoneDto {
     name: row.name,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
+    done: row.done,
+    doneOn: row.doneOn,
     position: row.position
   }
 }
@@ -82,7 +84,7 @@ export function createMilestoneService(deps: {
       return deps.transaction(() => {
         const project = deps.findProject(input.projectId)
         if (!project) throw targetProjectNotFound()
-        if (project.completedAt !== null) throw milestoneInCompletedProjectConflict()
+        if (project.done) throw milestoneInCompletedProjectConflict()
         const timestamp = now().toISOString()
         // カードに手動順があれば末尾（最大値+1）、なければ null（作成日時の順で末尾になる。フェーズ5.9）
         const maxPosition = repository.maxPositionInProject(input.projectId)
@@ -92,6 +94,9 @@ export function createMilestoneService(deps: {
           name: input.name,
           createdAt: timestamp,
           updatedAt: timestamp,
+          // 完了の列（0010）。今回は完了の操作がなく、常に未完了で作成する
+          done: false,
+          doneOn: null,
           position: maxPosition === null ? null : maxPosition + 1
         }
         repository.insert(row)

@@ -14,19 +14,20 @@ import type { TaskDto } from '../../src/shared/contracts/tasks'
 
 const P = '00000000-0000-4000-8000-000000000001'
 const Q = '00000000-0000-4000-8000-000000000002'
-const project = (id: string, name: string, createdAt: string, completedAt: string | null = null): ProjectDto => ({
+const project = (id: string, name: string, createdAt: string, doneOn: string | null = null): ProjectDto => ({
   id,
   name,
   createdAt,
   updatedAt: createdAt,
-  completedAt
+  done: doneOn !== null,
+  doneOn
 })
 const task = (title: string, projectId: string | null, completed = false): TaskDto => ({
   id: `${title}-id`,
   title,
   createdAt: '2026-11-10T00:00:00.000Z',
   updatedAt: '2026-11-10T00:00:00.000Z',
-  completedAt: completed ? '2026-11-10T01:00:00.000Z' : null,
+  doneOn: completed ? '2026-11-10T01:00:00.000Z' : null,
   projectId,
   milestoneId: null,
   position: null,
@@ -51,22 +52,22 @@ describe('サイドバーの区分（未完了・完了済み）', () => {
   it('完了すると完了済みの区分へ移り、取り消すと未完了へ戻る（IDは変わらない）', () => {
     const open = project('a', 'A', '2026-11-01T00:00:00.000Z')
     expect(groupProjects([open]).open.map((p) => p.id)).toEqual(['a'])
-    const done = { ...open, completedAt: '2026-11-10T00:00:00.000Z' }
+    const done = { ...open, done: true, doneOn: '2026-11-10T00:00:00.000Z' }
     expect(groupProjects([done])).toEqual({ open: [], completed: [done] })
   })
 })
 
 describe('プロジェクト画面の状態フィルターの初期値', () => {
   it('未完了のプロジェクトは「未完了」、完了済みは「完了」', () => {
-    expect(initialStatusForProject({ completedAt: null })).toBe('open')
-    expect(initialStatusForProject({ completedAt: '2026-11-10T00:00:00.000Z' })).toBe('completed')
+    expect(initialStatusForProject({ done: false })).toBe('open')
+    expect(initialStatusForProject({ done: true })).toBe('completed')
   })
 })
 
 describe('完了済みプロジェクトのタスクを未完了に戻せない理由', () => {
   const projects = [
-    { id: P, completedAt: '2026-11-10T00:00:00.000Z' },
-    { id: Q, completedAt: null }
+    { id: P, done: true },
+    { id: Q, done: false }
   ]
   it('完了済みプロジェクトに所属する完了タスクだけ理由を返す', () => {
     expect(reopenBlockedReason(task('a', P, true), projects)).toBe(REOPEN_BLOCKED_REASON)
@@ -108,11 +109,11 @@ describe('プロジェクトの更新（名前・完了状態）の直列化', (
       order.push('rename:start')
       await renameDone
       order.push('rename:end')
-      return { name: '新しい名前', completedAt: null }
+      return { name: '新しい名前', doneOn: null }
     })
     const complete = queue.run(projectSaveKey(P), async () => {
       order.push('complete')
-      return { name: '新しい名前', completedAt: '2026-11-10T00:00:00.000Z' }
+      return { name: '新しい名前', doneOn: '2026-11-10T00:00:00.000Z' }
     })
     // 同じIDのタスクの更新は待たない
     await expect(queue.run(P, async () => 'task')).resolves.toBe('task')
@@ -120,7 +121,7 @@ describe('プロジェクトの更新（名前・完了状態）の直列化', (
     releaseRename()
     const results = await Promise.all([rename, complete])
     expect(order).toEqual(['rename:start', 'rename:end', 'complete'])
-    expect(results.at(-1)).toEqual({ name: '新しい名前', completedAt: '2026-11-10T00:00:00.000Z' })
+    expect(results.at(-1)).toEqual({ name: '新しい名前', doneOn: '2026-11-10T00:00:00.000Z' })
     expect(projectSaveKey(P)).not.toBe(P)
   })
 })

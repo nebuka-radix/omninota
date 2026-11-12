@@ -75,13 +75,13 @@ export type ReorderMilestoneTasksInput = {
 
 // 日時はUTCのISO 8601文字列（例: 2026-11-09T10:00:00.000Z）
 // 一覧・更新の対象は表示中のタスクだけ（削除由来の非表示タスクはAPIから返さない。フェーズ5.6）
-// completedAt: 未完了ならnull。完了状態はcompletedAtだけから導出する。
+// doneOn: 未完了ならnull。完了状態はdoneOnだけから導出する。
 export type TaskDto = {
   id: string
   title: string
   createdAt: string
   updatedAt: string
-  completedAt: string | null
+  doneOn: string | null
   // 所属するプロジェクトのID。nullは未所属（フェーズ5.2）
   projectId: string | null
   // 所属するマイルストンのID（フェーズ5.4）。表示中のタスクでは、projectId があれば必ずあり、projectId が null なら null
@@ -111,6 +111,6 @@ export type SetTaskFavoriteInput = {
   favorite: boolean
 }
 
-export function isTaskCompleted(task: Pick<TaskDto, 'completedAt'>): boolean {
-  return task.completedAt !== null
+export function isTaskCompleted(task: Pick<TaskDto, 'doneOn'>): boolean {
+  return task.doneOn !== null
 }

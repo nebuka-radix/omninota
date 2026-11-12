@@ -50,7 +50,7 @@ describe('プロジェクト名の入力検証', () => {
 
   it.each<[string, unknown[]]>([
     ['引数なし', []],
-    ['余分なキー', [{ name: 'a', completedAt: '2026-01-01T00:00:00.000Z' }]],
+    ['余分なキー', [{ name: 'a', doneOn: '2026-01-01T00:00:00.000Z' }]],
     ['文字列以外', [{ name: 1 }]],
     ['余分な引数', [{ name: 'a' }, { name: 'b' }]]
   ])('作成: 不正な形（%s）を拒否する', (_label, args) => {
@@ -96,14 +96,15 @@ describe('プロジェクトの保存（Service・一時DB）', () => {
     temp.cleanup()
   })
 
-  it('未完了（completedAt = null）で作成し、日時とIDはMain側で付与する', () => {
+  it('未完了（done = false・doneOn = null）で作成し、日時とIDはMain側で付与する', () => {
     const created = service.create({ name: '仕事' })
     expect(created).toEqual({
       id: '00000000-0000-4000-8000-000000000001',
       name: '仕事',
       createdAt: '2026-11-09T00:00:00.000Z',
       updatedAt: '2026-11-09T00:00:00.000Z',
-      completedAt: null
+      done: false,
+      doneOn: null
     })
   })
 
@@ -116,7 +117,7 @@ describe('プロジェクトの保存（Service・一時DB）', () => {
   it('名前を変更するとupdatedAtだけが変わり、同じ名前なら更新しない', () => {
     const created = service.create({ name: '旧' })
     const renamed = service.rename({ id: created.id, name: '新' })
-    expect(renamed).toMatchObject({ name: '新', createdAt: created.createdAt, completedAt: null })
+    expect(renamed).toMatchObject({ name: '新', createdAt: created.createdAt, doneOn: null })
     expect(renamed.updatedAt > created.updatedAt).toBe(true)
     expect(service.rename({ id: created.id, name: '新' })).toEqual(renamed)
   })

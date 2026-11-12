@@ -6,7 +6,8 @@ import { projects } from './projects'
 // - id: crypto.randomUUID() で生成するUUID v4（文字列）
 // - created_at / updated_at: UTCのISO 8601文字列（例: 2026-11-09T10:00:00.000Z）
 //   固定長・UTC固定なので、文字列の大小比較が時刻順と一致する。
-// - completed_at: 完了日時（UTCのISO 8601文字列）。未完了ならNULL。完了状態はこの列だけから導出する（フェーズ4）。
+// - done_on: 完了日時（UTCのISO 8601文字列）。未完了ならNULL。0010 で completed_at から名前を変更（値・形式はそのまま）。
+//   タスクには done の列を持たない。完了状態（done = true / false）は done_on の有無から導出する論理上の状態（フェーズ4から同じ）。
 // - project_id: 所属するプロジェクト（0件または1件）。NULLは未所属（フェーズ5.2）。
 //   ON DELETE は指定しない（既定の NO ACTION）。プロジェクトの削除（フェーズ5.6）では、Serviceが先に所属を外してから削除する
 //   （外部キーの連鎖でタスクを消さない）。
@@ -21,7 +22,7 @@ import { projects } from './projects'
 // - position: マイルストン内の手動順（フェーズ5.9。0007で追加）。NULLは手動順なし（作成日時の古い順・IDの昇順で表示）。
 //   同じマイルストンの表示中のタスクは「全件に値がある」か「全件NULL」のどちらか（Serviceが保つ）。
 //   並べ替えで初めて値が入る。手動順のあるマイルストンへの追加・移動は末尾（最大値+1）、Inboxへ戻すとNULL。
-//   並べ替えでは created_at・completed_at・updated_at を変えない。
+//   並べ替えでは created_at・done_on・updated_at を変えない。
 // - dueto: 期限（フェーズ6。0008で追加）。日付のみ "YYYY-MM-DD" の TEXT（時刻・タイムゾーンなし。UTC日時へ変換しない）。NULLは未設定。
 //   SQLiteは型を検証しないため、実在する暦日かは Main の入力検証で確かめる。固定長のため文字列の比較が日付の前後と一致する。
 // - favorite: お気に入り（0009で追加）。論理型。SQLiteには真偽値の型がないため、Drizzle の boolean モードで INTEGER の 0 / 1 として格納する。
@@ -33,7 +34,7 @@ export const tasks = sqliteTable(
     title: text('title').notNull(),
     createdAt: text('created_at').notNull(),
     updatedAt: text('updated_at').notNull(),
-    completedAt: text('completed_at'),
+    doneOn: text('done_on'),
     projectId: text('project_id').references(() => projects.id),
     milestoneId: text('milestone_id').references(() => milestones.id),
     hiddenAt: text('hidden_at'),
