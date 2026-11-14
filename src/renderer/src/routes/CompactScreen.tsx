@@ -4,7 +4,7 @@ import { useQuery } from '@tanstack/react-query'
 import { ListChevronsDownUp, ListChevronsUpDown, ListTree, Flag } from 'lucide-react'
 import { useDraftGuard } from '../features/drafts/DraftGuard'
 import { projectListQueryOptions } from '../features/projects/project-queries'
-import { sortProjects } from '../features/projects/project-order'
+import { compareFavoriteProjects, sortProjects } from '../features/projects/project-order'
 import { milestoneListQueryOptions } from '../features/milestones/milestone-queries'
 import { buildTaskGroups, compareManualOrder, disambiguatedNames } from '../features/tasks/assignment'
 import { TaskQuickAdd } from '../features/tasks/TaskQuickAdd'
@@ -127,7 +127,7 @@ function CompactTaskBrowser({ kind, selectedMilestone, onSelectMilestone }: {
   const pendingTaskIds = usePendingTaskIds()
   const allTasks = tasksQuery.data ?? EMPTY_TASKS
   const rowActions = useTaskRowActions({ tasks: allTasks, onAnnounce: setAnnouncement })
-  const projects = sortProjects(projectsQuery.data ?? []).filter((project) => !project.done)
+  const projects = sortProjects(projectsQuery.data ?? []).filter((project) => !project.done).sort(compareFavoriteProjects)
   const projectLabels = disambiguatedNames(projects)
   const inboxTasks = allTasks.filter((task) => task.projectId === null && task.doneOn === null).sort(compareManualOrder)
   const tasksByProject = new Map<string, TaskDto[]>()
