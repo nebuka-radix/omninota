@@ -19,7 +19,7 @@ const TOLERANCE_PX = 1
 
 type Measured = { sidebar: number; main: number; detail: number | null; available: number }
 
-export function usePaneLayout() {
+export function usePaneLayout(compact = false) {
   const { settings, setSidebarWidth, setDetailWidth } = useWorkspace()
   const groupRef = useGroupRef()
   const groupElementRef = useRef<HTMLDivElement>(null)
@@ -102,6 +102,7 @@ export function usePaneLayout() {
 
   // ウィンドウサイズの変更でも再計算する（ライブラリの通知の有無に依存しない）。
   useEffect(() => {
+    if (compact) return
     const element = groupElementRef.current
     if (!element) return
     let frame = 0
@@ -114,13 +115,13 @@ export function usePaneLayout() {
       cancelAnimationFrame(frame)
       observer.disconnect()
     }
-  }, [reconcile])
+  }, [reconcile, compact])
 
   // 詳細パネルの開閉後も再計算する（希望幅は変えない）。
   useEffect(() => {
     const frame = requestAnimationFrame(reconcile)
     return () => cancelAnimationFrame(frame)
-  }, [settings.detailVisible, reconcile])
+  }, [settings.detailVisible, reconcile, compact])
 
   // 境界線の操作開始（ポインター・キー）を記録する。
   const markOperated = useCallback((pane: PaneKey) => {
@@ -155,3 +156,4 @@ export function usePaneLayout() {
     resetToDefault
   }
 }
+

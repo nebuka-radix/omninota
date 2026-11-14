@@ -9,6 +9,7 @@ import { usePaneLayout } from '../../features/workspace/use-pane-layout'
 import { useWorkspace } from '../../features/workspace/WorkspaceContext'
 import { vscodeColors } from '../../theme'
 import { ShellSlotsProvider } from '../../components/ShellSlots'
+import { SummaryPage } from '../../routes/SummaryPage'
 import { TaskDragProvider } from '../../features/tasks/TaskDragContext'
 import { DetailPanel } from './DetailPanel'
 import { MainPanel } from './MainPanel'
@@ -97,7 +98,18 @@ export function AppShell() {
   const { settings, setDetailVisible } = useWorkspace()
   const { confirmLeave } = useDraftGuard()
   const pathname = useRouterState({ select: (state) => state.location.pathname })
-  const pane = usePaneLayout()
+  const [compact, setCompact] = useState(false)
+  const switchingRef = useRef(false)
+  const changeMode = async (next: boolean) => {
+    if (switchingRef.current || next === compact) return
+    switchingRef.current = true
+    try {
+      if (await confirmLeave()) setCompact(next)
+    } finally {
+      switchingRef.current = false
+    }
+  }
+  const pane = usePaneLayout(compact)
   const [initialSidebarWidth] = useState(settings.sidebarWidth)
 
   const toggleButtonRef = useRef<HTMLButtonElement>(null)
@@ -132,9 +144,14 @@ export function AppShell() {
           color: 'text.primary'
         }}
       >
-        <TopBar detailVisible={settings.detailVisible} onToggleDetail={() => void toggleDetail()} toggleButtonRef={toggleButtonRef} />
+        <TopBar compact={compact} detailVisible={settings.detailVisible} onToggleDetail={() => void toggleDetail()} toggleButtonRef={toggleButtonRef} />
 
         <Box sx={{ gridArea: 'body', display: 'flex', minWidth: 0, minHeight: 0, ...separatorStyles }}>
+          {compact ? (
+            <Box component="main" aria-label="メインパネル" data-testid="compact-screen" sx={{ flex: 1, minWidth: 0, minHeight: 0, overflow: 'hidden' }}>
+              <SummaryPage compact />
+            </Box>
+          ) : (
           <Group
             id="workspace-panes"
             orientation="horizontal"
@@ -190,11 +207,13 @@ export function AppShell() {
               </>
             )}
           </Group>
+          )}
         </Box>
 
-        <StatusBar pathname={pathname} />
+        <StatusBar pathname={pathname} compact={compact} onChangeMode={(next) => void changeMode(next)} />
       </Box>
       </TaskDragProvider>
     </ShellSlotsProvider>
   )
 }
+

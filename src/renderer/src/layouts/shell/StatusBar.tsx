@@ -1,4 +1,5 @@
-import { Box, Typography } from '@mui/material'
+import { useState } from 'react'
+import { Box, ButtonBase, Menu, MenuItem, Typography } from '@mui/material'
 import { useIsMutating, useQuery } from '@tanstack/react-query'
 import { useShellSlotRef } from '../../components/ShellSlots'
 import { appInfoQueryOptions } from '../../features/app-info/app-info-query'
@@ -11,7 +12,8 @@ import { SCREENS, screenOf } from './screens'
 // 「すべて保存済み」のような根拠のない表示はしない。長いパスは設定画面に集約する。
 // フェーズ5.8: 中央に現在の画面のタスク件数の差し込み先を置く（件数は一覧の部品が描画する。対象外の画面では空）。
 // 左右を同じ幅の列（minmax(0, 1fr)）にして、左右の文字の長さで中央の位置がずれないようにする。狭い時は左右を省略表示する。
-export function StatusBar({ pathname }: { pathname: string }) {
+export function StatusBar({ pathname, compact, onChangeMode }: { pathname: string; compact: boolean; onChangeMode: (compact: boolean) => void }) {
+  const [anchor, setAnchor] = useState<HTMLElement | null>(null)
   const appInfo = useQuery(appInfoQueryOptions)
   // タスクの登録・更新（mutationKeyが ['tasks', ...] のもの）
   const savingTasks = useIsMutating({ mutationKey: taskKeys.all })
@@ -19,7 +21,7 @@ export function StatusBar({ pathname }: { pathname: string }) {
   const countRef = useShellSlotRef('status-count')
 
   const screenId = screenOf(pathname)
-  const screen = screenId ? SCREENS[screenId].label : '—'
+  const screen = compact ? 'コンパクト' : screenId ? SCREENS[screenId].label : '—'
 
   const messages: string[] = []
   if (savingTasks > 0) messages.push('タスクを保存中…')
@@ -53,6 +55,21 @@ export function StatusBar({ pathname }: { pathname: string }) {
       data-testid="status-bar"
     >
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 4, minWidth: 0, overflow: 'hidden' }} data-testid="status-left">
+        <ButtonBase
+          aria-label={`表示モード: ${compact ? 'コンパクト' : '通常'}`}
+          aria-haspopup="menu"
+          aria-expanded={anchor !== null}
+          aria-controls={anchor ? 'display-mode-menu' : undefined}
+          onClick={(event) => setAnchor(event.currentTarget)}
+          data-testid="display-mode-button"
+          sx={{ fontSize: 12, flexShrink: 0, px: 1, height: 22, '&.Mui-focusVisible': { outline: '1px solid currentColor', outlineOffset: -2 } }}
+        >
+          表示モード: {compact ? 'コンパクト' : '通常'}
+        </ButtonBase>
+        <Menu id="display-mode-menu" anchorEl={anchor} open={anchor !== null} onClose={() => setAnchor(null)}>
+          <MenuItem selected={!compact} onClick={() => { setAnchor(null); onChangeMode(false) }}>通常</MenuItem>
+          <MenuItem selected={compact} onClick={() => { setAnchor(null); onChangeMode(true) }}>コンパクト</MenuItem>
+        </Menu>
         <Typography component="span" data-testid="status-screen" sx={{ flexShrink: 0 }}>
           {screen}
         </Typography>
@@ -67,3 +84,4 @@ export function StatusBar({ pathname }: { pathname: string }) {
     </Box>
   )
 }
+

@@ -10,6 +10,7 @@ import { projectListQueryOptions } from '../features/projects/project-queries'
 import { filterSummaryByProjects, mergeSummary, summaryTotal } from '../features/summary/summary-merge'
 import { summaryProjectFilter, useSummaryExcludedProjects } from '../features/summary/summary-project-filter'
 import { summaryQueryOptions } from '../features/summary/summary-queries'
+import { TaskQuickAdd } from '../features/tasks/TaskQuickAdd'
 import { TaskList } from '../features/tasks/TaskList'
 import { taskListQueryOptions, usePendingTaskIds } from '../features/tasks/task-queries'
 import { useTaskRowActions } from '../features/tasks/use-task-row-actions'
@@ -36,7 +37,8 @@ const EMPTY_TASKS: TaskDto[] = []
 // - 各行は共通の TaskRow。一覧は区画ごとに仮想化し、区画の寸法の変化は virtualizer が測り直す。
 // - 右サイドバーのプロジェクトのフィルター（表示だけ）で OFF のプロジェクトのタスクを全区画から外す。
 // - ステータスバーの中央にフィルター後の4区画の合計件数。トップバーの表示設定は出さない。大きな画面タイトルは出さない。
-export function SummaryPage() {
+export function SummaryPage({ compact = false }: { compact?: boolean }) {
+  const sections = compact ? SECTIONS.filter((section) => section.key === 'todayItems' || section.key === 'tomorrowItems') : SECTIONS
   const day = useLocalDay()
   const query = useQuery(summaryQueryOptions(day))
   const tasksQuery = useQuery(taskListQueryOptions)
@@ -53,13 +55,18 @@ export function SummaryPage() {
   }, [projectsQuery.data])
 
   const summary = useMemo(
-    () => (query.data ? filterSummaryByProjects(mergeSummary(query.data, tasksQuery.data), excluded) : undefined),
-    [query.data, tasksQuery.data, excluded]
+    () => {
+      if (!query.data) return undefined
+      const merged = mergeSummary(query.data, tasksQuery.data)
+      return compact ? merged : filterSummaryByProjects(merged, excluded)
+    },
+    [query.data, tasksQuery.data, excluded, compact]
   )
-  const total = summary ? summaryTotal(summary) : 0
+  const total = summary ? compact ? summary.todayItems.length + summary.tomorrowItems.length : summaryTotal(summary) : 0
 
   return (
-    <Page title="Summary Review" icon={CalendarCheck} fill titleHidden>
+    <Page title={compact ? 'コンパクト' : 'Summary Review'} icon={CalendarCheck} fill titleHidden>
+      {compact && <Box sx={{ flexShrink: 0 }}><TaskQuickAdd projectId={null} /></Box>}
       {query.isSuccess && (
         <ShellSlot name="status-count">
           <Typography component="span" role="status" data-testid="task-count" sx={{ fontVariantNumeric: 'tabular-nums' }}>
@@ -95,12 +102,12 @@ export function SummaryPage() {
             minHeight: 0,
             minWidth: 0,
             display: 'grid',
-            gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)',
+            gridTemplateColumns: compact ? 'minmax(0, 1fr)' : 'minmax(0, 1fr) minmax(0, 1fr)',
             gridTemplateRows: 'minmax(0, 1fr) minmax(0, 1fr)',
             border: `1px solid ${vscodeColors.gridLine}`
           }}
         >
-          {SECTIONS.map((section) => {
+          {sections.map((section) => {
             const items = summary ? summary[section.key] : []
             return (
               <Box
@@ -111,14 +118,14 @@ export function SummaryPage() {
                 data-testid="summary-section"
                 sx={{
                   gridRow: section.row,
-                  gridColumn: section.column,
+                  gridColumn: compact ? 1 : section.column,
                   display: 'flex',
                   flexDirection: 'column',
                   minWidth: 0,
                   minHeight: 0,
                   overflow: 'hidden',
                   // 中央の罫線は左の列の右と上の行の下だけ（二重線にしない）
-                  borderRight: section.column === 1 ? `1px solid ${vscodeColors.gridLine}` : 'none',
+                  borderRight: !compact && section.column === 1 ? `1px solid ${vscodeColors.gridLine}` : 'none',
                   borderBottom: section.row === 1 ? `1px solid ${vscodeColors.gridLine}` : 'none'
                 }}
               >
@@ -164,3 +171,4 @@ export function SummaryPage() {
     </Page>
   )
 }
+
