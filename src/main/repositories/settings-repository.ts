@@ -5,7 +5,8 @@ import { appSettings, type AppSettingRow } from '../db/schema'
 // 設定キーは用途ごとに固定する（Rendererから任意のキーは指定させない）。
 export const SETTINGS_KEYS = {
   workspace: 'workspace',
-  windowState: 'windowState'
+  windowState: 'windowState',
+  noteSidebarWidth: 'noteSidebarWidth'
 } as const
 export type SettingsKey = (typeof SETTINGS_KEYS)[keyof typeof SETTINGS_KEYS]
 

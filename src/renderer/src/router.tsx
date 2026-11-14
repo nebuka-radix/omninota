@@ -17,6 +17,7 @@ import { NewProjectPage, ProjectPage, ProjectsIndexPage } from './routes/Project
 import { NotFoundPage } from './routes/NotFoundPage'
 import { SettingsPage } from './routes/SettingsPage'
 import { SummaryPage } from './routes/SummaryPage'
+import { NotesPage } from './routes/NotesPage'
 
 // コードベースのルート定義。ビルド後はfile://で読み込むため、履歴はハッシュ方式とする。
 const rootRoute = createRootRouteWithContext<{ queryClient: QueryClient }>()({
@@ -82,13 +83,15 @@ const summaryRoute = createRoute({
   component: SummaryPage
 })
 
+const notesRoute = createRoute({ getParentRoute: () => rootRoute, path: '/notes', component: NotesPage })
+
 const settingsRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/settings',
   component: SettingsPage
 })
 
-const routeTree = rootRoute.addChildren([indexRoute, summaryRoute, inboxRoute, settingsRoute, projectsRoute, newProjectRoute, projectRoute])
+const routeTree = rootRoute.addChildren([indexRoute, summaryRoute, inboxRoute, notesRoute, settingsRoute, projectsRoute, newProjectRoute, projectRoute])
 
 export const router = createRouter({
   routeTree,

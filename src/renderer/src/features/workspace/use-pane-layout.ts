@@ -19,8 +19,9 @@ const TOLERANCE_PX = 1
 
 type Measured = { sidebar: number; main: number; detail: number | null; available: number }
 
-export function usePaneLayout(compact = false) {
-  const { settings, setSidebarWidth, setDetailWidth } = useWorkspace()
+export function usePaneLayout(compact = false, hideDetail = false) {
+  const { settings: workspaceSettings, setSidebarWidth, setDetailWidth } = useWorkspace()
+  const settings = hideDetail ? { ...workspaceSettings, detailVisible: false } : workspaceSettings
   const groupRef = useGroupRef()
   const groupElementRef = useRef<HTMLDivElement>(null)
   const sidebarElementRef = useRef<HTMLDivElement>(null)

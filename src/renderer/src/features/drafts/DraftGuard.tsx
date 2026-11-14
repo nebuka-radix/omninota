@@ -22,7 +22,7 @@ export type DraftHandle = {
 
 type Choice = 'save' | 'discard' | 'cancel'
 
-export const DRAFT_LABELS: Record<DraftKind, string> = { task: 'タスクのタイトル', project: 'プロジェクト名', milestone: 'マイルストン名' }
+export const DRAFT_LABELS: Record<DraftKind, string> = { task: 'タスクのタイトル', project: 'プロジェクト名', milestone: 'マイルストン名', note: 'ノート' }
 
 type DraftGuardValue = {
   register: (handle: DraftHandle) => () => void

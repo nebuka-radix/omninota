@@ -109,7 +109,7 @@ function useNavigationBadges(): { summaryBadges: NavBadge[]; inboxBadges: NavBad
 export function NavigationPane({ pathname }: { pathname: string }) {
   const navigate = useNavigate()
   const screen = screenOf(pathname)
-  const [projectsOpen, setProjectsOpen] = useState(true)
+  const [projectsOpen, setProjectsOpen] = useState(false)
   const projects = useQuery(projectListQueryOptions)
   const selectedProjectId = projectIdFromRoute(pathname)
   // 完了済みのプロジェクトはサイドバーに表示しないため、折りたたみ中の「選択中」にも出さない（フェーズ5.8）
@@ -158,6 +158,7 @@ export function NavigationPane({ pathname }: { pathname: string }) {
             )
           )}
         </Box>
+        <NavItem screen="notes" active={screen === 'notes'} onClick={() => void navigate({ to: '/notes' })} />
         <Box sx={{ mt: 2, borderTop: `1px solid ${vscodeColors.border}`, pt: 1 }}>
           <NavItem screen="settings" active={screen === 'settings'} onClick={() => void navigate({ to: '/settings' })} />
         </Box>

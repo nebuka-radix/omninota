@@ -4,6 +4,14 @@ import { contextBridge, ipcRenderer } from 'electron'
 import { IPC_CHANNELS, type GtdApi } from '../shared/contracts/ipc'
 
 const api: GtdApi = {
+  notes: {
+    list: () => ipcRenderer.invoke(IPC_CHANNELS.notesList),
+    create: () => ipcRenderer.invoke(IPC_CHANNELS.notesCreate),
+    save: (input) => ipcRenderer.invoke(IPC_CHANNELS.notesSave, input),
+    setFavorite: (input) => ipcRenderer.invoke(IPC_CHANNELS.notesSetFavorite, input),
+    getSidebarWidth: () => ipcRenderer.invoke(IPC_CHANNELS.notesGetSidebarWidth),
+    saveSidebarWidth: (width) => ipcRenderer.invoke(IPC_CHANNELS.notesSaveSidebarWidth, width)
+  },
   app: {
     getInfo: () => ipcRenderer.invoke(IPC_CHANNELS.appGetInfo),
     setCompact: (compact) => ipcRenderer.invoke(IPC_CHANNELS.appSetCompact, compact)

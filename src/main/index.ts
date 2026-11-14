@@ -22,6 +22,8 @@ import { createScriptedMessageBox, type MessageBoxAdapter } from './lifecycle/me
 import { watchParentProcess, type ParentWatcher } from './lifecycle/parent-watch'
 import { createMilestoneRepository } from './repositories/milestone-repository'
 import { createProjectRepository } from './repositories/project-repository'
+import { createNoteRepository } from './repositories/note-repository'
+import { createNoteService } from './services/note-service'
 import { createSettingsRepository } from './repositories/settings-repository'
 import { createTaskRepository } from './repositories/task-repository'
 import { createMilestoneService } from './services/milestone-service'
@@ -366,6 +368,7 @@ if (!app.requestSingleInstanceLock()) {
       }
       return null
     },
+      noteService: createNoteService({ repository: createNoteRepository(database), settings: createSettingsRepository(database), now }),
       taskService: createTaskService({
         repository: taskRepository,
         findProject: projectRepository.findById,

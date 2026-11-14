@@ -116,7 +116,7 @@ export function AppShell({ initialCompact = false }: { initialCompact?: boolean 
       switchingRef.current = false
     }
   }
-  const pane = usePaneLayout(compact)
+  const pane = usePaneLayout(compact, pathname === '/notes')
   const [initialSidebarWidth] = useState(settings.sidebarWidth)
 
   const toggleButtonRef = useRef<HTMLButtonElement>(null)
@@ -151,7 +151,7 @@ export function AppShell({ initialCompact = false }: { initialCompact?: boolean 
           color: 'text.primary'
         }}
       >
-        <TopBar compact={compact} detailVisible={settings.detailVisible} onToggleDetail={() => void toggleDetail()} toggleButtonRef={toggleButtonRef} />
+        <TopBar compact={compact || pathname === '/notes'} detailVisible={settings.detailVisible} onToggleDetail={() => void toggleDetail()} toggleButtonRef={toggleButtonRef} />
 
         <Box sx={{ gridArea: 'body', display: 'flex', flexDirection: modeError ? 'column' : 'row', minWidth: 0, minHeight: 0, ...separatorStyles }}>
           {modeError && <Alert severity="error" onClose={() => setModeError(null)}>{modeError}</Alert>}
@@ -196,7 +196,7 @@ export function AppShell({ initialCompact = false }: { initialCompact?: boolean 
             >
               <MainPanel />
             </Panel>
-            {settings.detailVisible && (
+            {settings.detailVisible && pathname !== '/notes' && (
               <>
                 <PaneSeparator
                   id="detail-separator"

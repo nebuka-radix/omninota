@@ -3,7 +3,7 @@ import type { ProjectDto } from '../../../../shared/contracts/projects'
 import { projectIdFromRoute, UUID_PATTERN, type WorkspaceRoute } from '../../../../shared/contracts/workspace'
 
 export type StartupTarget =
-  | { to: '/inbox' | '/settings' | '/projects' | '/summary' }
+  | { to: '/inbox' | '/settings' | '/projects' | '/summary' | '/notes' }
   | { to: '/projects/$projectId'; projectId: string }
 
 // ルート未指定で起動した時の移動先を、保存済みの最後の画面から決める。
@@ -24,7 +24,7 @@ export async function resolveStartupTarget(
     }
     return exists ? { to: '/projects/$projectId', projectId } : { to: '/projects' }
   }
-  if (lastRoute === '/inbox' || lastRoute === '/settings' || lastRoute === '/projects' || lastRoute === '/summary') return { to: lastRoute }
+  if (lastRoute === '/inbox' || lastRoute === '/settings' || lastRoute === '/projects' || lastRoute === '/summary' || lastRoute === '/notes') return { to: lastRoute }
   return { to: '/inbox' }
 }
 

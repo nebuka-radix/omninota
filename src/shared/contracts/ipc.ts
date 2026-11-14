@@ -38,8 +38,15 @@ import type {
 } from './tasks'
 import type { SummaryReview } from './summary'
 import type { WorkspaceSettings } from './workspace'
+import type { NoteDto, SaveNoteInput, FavoriteNoteInput } from './notes'
 
 export const IPC_CHANNELS = {
+  notesList: 'notes:list',
+  notesCreate: 'notes:create',
+  notesSave: 'notes:save',
+  notesSetFavorite: 'notes:set-favorite',
+  notesGetSidebarWidth: 'notes:get-sidebar-width',
+  notesSaveSidebarWidth: 'notes:save-sidebar-width',
   appGetInfo: 'app:get-info',
   appSetCompact: 'app:set-compact',
   tasksCreate: 'tasks:create',
@@ -97,7 +104,7 @@ export type WorkspaceFlushRequest = {
 }
 
 // 未保存ドラフトの対象（終了時のダイアログの文言に使う。フェーズ5.1）
-export const DRAFT_KINDS = ['task', 'project', 'milestone'] as const
+export const DRAFT_KINDS = ['task', 'project', 'milestone', 'note'] as const
 export type DraftKind = (typeof DRAFT_KINDS)[number]
 
 export type WorkspaceFlushResult = {
@@ -152,6 +159,14 @@ export type AppInfo = {
 
 // Preloadがwindow.gtdとして公開するAPI
 export type GtdApi = {
+  notes: {
+    list: () => Promise<IpcResult<NoteDto[]>>
+    create: () => Promise<IpcResult<NoteDto>>
+    save: (input: SaveNoteInput) => Promise<IpcResult<NoteDto>>
+    setFavorite: (input: FavoriteNoteInput) => Promise<IpcResult<NoteDto>>
+    getSidebarWidth: () => Promise<IpcResult<number>>
+    saveSidebarWidth: (width: number) => Promise<IpcResult<number>>
+  }
   app: {
     getInfo: () => Promise<IpcResult<AppInfo>>
     setCompact: (compact: boolean) => Promise<IpcResult<null>>
