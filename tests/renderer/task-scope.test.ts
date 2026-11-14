@@ -91,6 +91,7 @@ describe('Table: 表示範囲と状態・検索・ソートの組み合わせ', 
 
 describe('詳細パネルの所属の選択肢（5.4でプロジェクト・マイルストンの1つの選択に拡張）', () => {
   const project = (id: string, name: string, createdAt: string, doneOn: string | null = null): ProjectDto => ({
+    favorite: false,
     id,
     name,
     createdAt,

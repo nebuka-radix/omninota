@@ -193,7 +193,7 @@ describe('既存データを保持したマイグレーション', () => {
     expect(createTaskRepository(upgraded).listAll()).toEqual(beforeTasks.map((task) => ({ ...task, projectId: null, milestoneId: null, hiddenAt: null, position: null, dueto: null, favorite: false })))
     // 0010: completed_at → done_on（値・updated_at はそのまま）、done は完了日時の有無から
     expect(upgraded.$client.prepare('SELECT * FROM projects ORDER BY id').all()).toEqual(
-      (beforeProjects as Record<string, unknown>[]).map(({ completed_at: doneOn, ...rest }) => ({ ...rest, done_on: doneOn, done: doneOn === null ? 0 : 1 }))
+      ((beforeProjects as Record<string, unknown>[]).map(({ completed_at: doneOn, ...rest }) => ({ ...rest, done_on: doneOn, done: doneOn === null ? 0 : 1 }))).map((row) => ({ ...row, favorite: 0 }))
     )
     expect(createSettingsRepository(upgraded).get('workspace')?.value).toBe(workspaceValue)
 

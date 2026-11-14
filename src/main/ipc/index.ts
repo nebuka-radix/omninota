@@ -16,7 +16,8 @@ import {
   projectsGetDeletionSummaryArgsSchema,
   projectsListArgsSchema,
   projectsRenameArgsSchema,
-  projectsSetCompletedArgsSchema
+  projectsSetCompletedArgsSchema,
+  projectsSetFavoriteArgsSchema
 } from '../../shared/validation/projects'
 import {
   tasksAssignFromInboxArgsSchema,
@@ -60,6 +61,9 @@ export function registerIpcHandlers(deps: {
   flushRequester: FlushRequester
 }): void {
   const { policy, taskService, projectService, milestoneService, workspaceSettingsService } = deps
+  ipcMain.handle(IPC_CHANNELS.projectsSetFavorite,
+    createIpcHandler({ channel: IPC_CHANNELS.projectsSetFavorite, argsSchema: projectsSetFavoriteArgsSchema, policy,
+      run: ([input]) => projectService.setFavorite(input) }))
   ipcMain.handle(
     IPC_CHANNELS.appSetCompact,
     createIpcHandler({

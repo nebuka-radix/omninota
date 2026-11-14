@@ -32,6 +32,7 @@ const api: GtdApi = {
     create: (input) => ipcRenderer.invoke(IPC_CHANNELS.projectsCreate, input),
     rename: (input) => ipcRenderer.invoke(IPC_CHANNELS.projectsRename, input),
     setCompleted: (input) => ipcRenderer.invoke(IPC_CHANNELS.projectsSetCompleted, input),
+    setFavorite: (input) => ipcRenderer.invoke(IPC_CHANNELS.projectsSetFavorite, input),
     getDeletionSummary: (input) => ipcRenderer.invoke(IPC_CHANNELS.projectsGetDeletionSummary, input),
     delete: (input) => ipcRenderer.invoke(IPC_CHANNELS.projectsDelete, input)
   },

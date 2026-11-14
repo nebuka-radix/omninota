@@ -6,6 +6,7 @@ import { PROJECT_NAME_MAX_LENGTH, type ProjectDto } from '../../../../shared/con
 import { projectIdFromRoute } from '../../../../shared/contracts/workspace'
 import { useDraftGuard } from '../drafts/DraftGuard'
 import { newProjectReturnRoute } from './new-project'
+import { ProjectFavoriteButton } from './ProjectFavoriteButton'
 import { useCreateProjectMutation, usePendingProjectIds, useRenameProjectMutation } from './project-queries'
 
 const isImeEnter = (event: KeyboardEvent<HTMLElement>) =>
@@ -174,6 +175,7 @@ export function ProjectNameEditor({ project }: { project: ProjectDto | null }) {
   if (!editing && project !== null) {
     return (
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 3 }}>
+        <ProjectFavoriteButton project={project} />
         <Typography component="h1" sx={{ fontSize: 15, fontWeight: 600, m: 0, wordBreak: 'break-all' }} data-testid="project-name">
           {project.name}
         </Typography>

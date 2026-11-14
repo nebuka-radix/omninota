@@ -99,6 +99,7 @@ describe('プロジェクトの保存（Service・一時DB）', () => {
   it('未完了（done = false・doneOn = null）で作成し、日時とIDはMain側で付与する', () => {
     const created = service.create({ name: '仕事' })
     expect(created).toEqual({
+      favorite: false,
       id: '00000000-0000-4000-8000-000000000001',
       name: '仕事',
       createdAt: '2026-11-09T00:00:00.000Z',

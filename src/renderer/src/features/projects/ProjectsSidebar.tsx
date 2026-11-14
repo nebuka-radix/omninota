@@ -14,7 +14,8 @@ import type { ProjectDto } from '../../../../shared/contracts/projects'
 import { projectIdFromRoute } from '../../../../shared/contracts/workspace'
 import { formatTaskDateTime } from '../tasks/TaskList'
 import { NEW_PROJECT_PATH, rememberNewProjectReturn } from './new-project'
-import { groupProjects } from './project-order'
+import { compareFavoriteProjects, groupProjects } from './project-order'
+import { ProjectFavoriteButton } from './ProjectFavoriteButton'
 import { projectListQueryOptions } from './project-queries'
 
 // Projectの左サイドバー: 未完了のプロジェクト一覧と、最下段の「NEW PROJECT」（フェーズ5.5。区分の廃止はフェーズ5.8）。
@@ -68,7 +69,7 @@ export function ProjectsSidebar({ pathname }: { pathname: string }) {
     // 未完了のプロジェクトだけを、Project 配下にそのまま並べる（名前順。同名は作成日時・ID）。
     // フェーズ5.8: 「未完了」の見出しと完了済みの区分は廃止した。完了済みのプロジェクトはサイドバーに表示しない（データは残る）。
     // 完了した直後も開いている画面はそのまま（ルートで決まる）で、完了を取り消すと一覧に戻る。
-    const openProjects = groupProjects(projects.data).open
+    const openProjects = groupProjects(projects.data).open.sort(compareFavoriteProjects)
     // 同名のプロジェクトは、作成日時とIDの先頭を副テキストで示して判別できるようにする（フェーズ5.4。一覧に表示するものの中で判定）
     const nameCounts = new Map<string, number>()
     for (const project of openProjects) nameCounts.set(project.name, (nameCounts.get(project.name) ?? 0) + 1)
@@ -84,13 +85,14 @@ export function ProjectsSidebar({ pathname }: { pathname: string }) {
           {openProjects.map((project) => {
             const selected = project.id === selectedId
             return (
+              <Box component="li" key={project.id} sx={{ display: 'flex', alignItems: 'center', px: 4, minWidth: 0 }}>
+                <ProjectFavoriteButton project={project} />
               <ListItemButton
-                key={project.id}
                 selected={selected}
                 aria-current={selected ? 'page' : undefined}
                 data-project-id={project.id}
                 onClick={() => void navigate({ to: '/projects/$projectId', params: { projectId: project.id } })}
-                sx={{ px: 4, minWidth: 0 }}
+                sx={{ px: 0.5, minWidth: 0, flex: 1 }}
               >
                 <ListItemText
                   primary={project.name}
@@ -103,6 +105,7 @@ export function ProjectsSidebar({ pathname }: { pathname: string }) {
                   }}
                 />
               </ListItemButton>
+              </Box>
             )
           })}
         </List>

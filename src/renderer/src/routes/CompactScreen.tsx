@@ -1,7 +1,7 @@
 import { useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import { Alert, Box, Button, CircularProgress, Tab, Tabs, Tooltip, Typography } from '@mui/material'
 import { useQuery } from '@tanstack/react-query'
-import { ListChevronsDownUp, ListChevronsUpDown, ListTree, FolderKanban, Flag } from 'lucide-react'
+import { ListChevronsDownUp, ListChevronsUpDown, ListTree, Flag } from 'lucide-react'
 import { useDraftGuard } from '../features/drafts/DraftGuard'
 import { projectListQueryOptions } from '../features/projects/project-queries'
 import { sortProjects } from '../features/projects/project-order'
@@ -15,6 +15,7 @@ import type { TaskDto } from '../../../shared/contracts/tasks'
 import { vscodeColors } from '../theme'
 import { SummaryPage } from './SummaryPage'
 import { SectionRow } from '../components/SectionRow'
+import { ProjectFavoriteButton } from '../features/projects/ProjectFavoriteButton'
 import { ShellSlot } from '../components/ShellSlots'
 
 type MilestoneTarget = { projectId: string; milestoneId: string }
@@ -210,7 +211,7 @@ function CompactTaskBrowser({ kind, selectedMilestone, onSelectMilestone }: {
         )
         return (
           <Box component="li" key={project.id} sx={{ minWidth: 0 }}>
-            <SectionRow level={0} toggleOnRowClick title={projectLabel} titleId={projectTitleId} icon={FolderKanban}
+            <SectionRow level={0} toggleOnRowClick title={projectLabel} titleId={projectTitleId} iconElement={<ProjectFavoriteButton project={project} />}
               height={32} sx={{ mt: '8px' }}
               expanded={projectExpanded} onExpandedChange={() => void toggle(projectKey)} controlsId={projectContentId} />
             <Box id={projectContentId} hidden={!projectExpanded}>

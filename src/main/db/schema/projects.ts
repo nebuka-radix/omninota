@@ -14,6 +14,7 @@ export const projects = sqliteTable('projects', {
   createdAt: text('created_at').notNull(),
   updatedAt: text('updated_at').notNull(),
   done: integer('done', { mode: 'boolean' }).notNull().default(false),
+  favorite: integer('favorite', { mode: 'boolean' }).notNull().default(false),
   doneOn: text('done_on')
 })
 

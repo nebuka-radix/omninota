@@ -14,6 +14,8 @@ export type SectionRowProps = {
   toggleOnRowClick?: boolean
   /** タイトル前の個別アイコン。省略時はMinus。 */
   icon?: LucideIcon
+  /** 個別の操作付きアイコンを指定する場合。iconより優先する。 */
+  iconElement?: ReactNode
   /** 表示状態は呼び出し側で管理する。省略時は展開状態。 */
   expanded?: boolean
   /** 未指定の場合、展開アイコンは表示するが操作不可。 */
@@ -37,6 +39,7 @@ export function SectionRow({
   onSelect,
   toggleOnRowClick = false,
   icon: Icon = Minus,
+  iconElement,
   expanded = true,
   onExpandedChange,
   controlsId,
@@ -101,7 +104,7 @@ export function SectionRow({
       >
         <Chevron size={18} aria-hidden="true" />
       </ButtonBase>
-      <Icon size={18} aria-hidden="true" style={{ flexShrink: 0 }} />
+      {iconElement ?? <Icon size={18} aria-hidden="true" style={{ flexShrink: 0 }} />}
       <Typography
         component={headingTag}
         id={titleId}

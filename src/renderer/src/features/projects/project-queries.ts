@@ -5,7 +5,8 @@ import type {
   ProjectDeletionSummary,
   ProjectDto,
   RenameProjectInput,
-  SetProjectCompletedInput
+  SetProjectCompletedInput,
+  SetProjectFavoriteInput
 } from '../../../../shared/contracts/projects'
 import { unwrapIpc } from '../../lib/ipc'
 import { milestoneKeys } from '../milestones/milestone-queries'
@@ -21,6 +22,7 @@ export const projectMutationKeys = {
   create: [...projectKeys.all, 'create'] as const,
   rename: [...projectKeys.all, 'rename'] as const,
   setCompleted: [...projectKeys.all, 'set-completed'] as const,
+  setFavorite: [...projectKeys.all, 'set-favorite'] as const,
   delete: [...projectKeys.all, 'delete'] as const
 }
 
@@ -68,6 +70,16 @@ export function useRenameProjectMutation() {
 }
 
 // 完了・完了の取り消し（フェーズ5.3）。保存に成功した後だけ表示を切り替える（楽観的更新はしない）。
+export function useSetProjectFavoriteMutation() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationKey: projectMutationKeys.setFavorite,
+    mutationFn: (input: SetProjectFavoriteInput) =>
+      taskSaveQueue.run(projectSaveKey(input.id), () => unwrapIpc(window.gtd.projects.setFavorite(input))),
+    onSuccess: (saved: ProjectDto) => replaceProjectInList(queryClient, saved)
+  })
+}
+
 export function useSetProjectCompletedMutation() {
   const queryClient = useQueryClient()
   return useMutation({
@@ -115,6 +127,7 @@ export function usePendingProjectIds(): ReadonlySet<string> {
           key[0] === projectKeys.all[0] &&
           (key[1] === projectMutationKeys.rename[1] ||
             key[1] === projectMutationKeys.setCompleted[1] ||
+            key[1] === projectMutationKeys.setFavorite[1] ||
             key[1] === projectMutationKeys.delete[1])
         )
       }

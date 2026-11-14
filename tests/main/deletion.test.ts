@@ -537,7 +537,7 @@ describe('移行（0005 → 0006）: プロジェクトだけに所属するタ�
       (beforeMilestones as Record<string, unknown>[]).map((m) => ({ ...m, position: null, done: 0, done_on: null }))
     )
     expect(upgraded.$client.prepare('SELECT * FROM projects').all()).toEqual(
-      (beforeProjects as Record<string, unknown>[]).map((p) => ({ ...renamed(p), done: p['completed_at'] === null ? 0 : 1 }))
+      ((beforeProjects as Record<string, unknown>[]).map((p) => ({ ...renamed(p), done: p['completed_at'] === null ? 0 : 1 }))).map((row) => ({ ...row, favorite: 0 }))
     )
     // milestones.project_id はNULL可。外部キー（tasks → milestones・milestones → projects）と索引は維持
     const columns = upgraded.$client.prepare('PRAGMA table_info(milestones)').all() as { name: string; notnull: number }[]

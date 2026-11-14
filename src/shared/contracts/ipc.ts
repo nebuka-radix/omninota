@@ -7,7 +7,8 @@ import type {
   ProjectDeletionSummary,
   ProjectDto,
   RenameProjectInput,
-  SetProjectCompletedInput
+  SetProjectCompletedInput,
+  SetProjectFavoriteInput
 } from './projects'
 import type {
   CreateMilestoneInput,
@@ -58,6 +59,7 @@ export const IPC_CHANNELS = {
   projectsCreate: 'projects:create',
   projectsRename: 'projects:rename',
   projectsSetCompleted: 'projects:set-completed',
+  projectsSetFavorite: 'projects:set-favorite',
   projectsGetDeletionSummary: 'projects:get-deletion-summary',
   projectsDelete: 'projects:delete',
   milestonesList: 'milestones:list',
@@ -187,6 +189,7 @@ export type GtdApi = {
     rename: (input: RenameProjectInput) => Promise<IpcResult<ProjectDto>>
     // 完了・完了の取り消し（フェーズ5.3）。未完了のタスクがあれば CONFLICT（details: project-has-open-tasks）
     setCompleted: (input: SetProjectCompletedInput) => Promise<IpcResult<ProjectDto>>
+    setFavorite: (input: SetProjectFavoriteInput) => Promise<IpcResult<ProjectDto>>
     // 削除（フェーズ5.6）。確認内容（件数）を取得してから、その件数を添えて削除する。
     // 配下のマイルストン・タスクは削除せず、所属を外して非表示にする（Inboxにも表示しない）
     getDeletionSummary: (input: { id: string }) => Promise<IpcResult<ProjectDeletionSummary>>

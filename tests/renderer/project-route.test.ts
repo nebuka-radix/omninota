@@ -5,6 +5,7 @@ import type { ProjectDto } from '../../src/shared/contracts/projects'
 const ID = '6f1c2f8e-3c1d-4f0a-9b7e-2a6d1f3c9e10'
 const OTHER_ID = '00000000-0000-4000-8000-000000000001'
 const project: ProjectDto = {
+  favorite: false,
   id: ID,
   name: '仕事',
   createdAt: '2026-11-09T00:00:00.000Z',

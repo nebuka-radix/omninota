@@ -70,7 +70,7 @@ describe('migration 0010（completed_at → done_on、projects.done、milestones
       const after = (table: string) => db.$client.prepare(`SELECT * FROM ${table} ORDER BY id`).all() as Row[]
       const rename = ({ completed_at: doneOn, ...rest }: Row) => ({ ...rest, done_on: doneOn })
       expect(after('tasks')).toEqual(before.tasks.map(rename))
-      expect(after('projects')).toEqual(before.projects.map((row) => ({ ...rename(row), done: row['completed_at'] === null ? 0 : 1 })))
+      expect(after('projects')).toEqual((before.projects.map((row) => ({ ...rename(row), done: row['completed_at'] === null ? 0 : 1 }))).map((row) => ({ ...row, favorite: 0 })))
       expect(after('milestones')).toEqual(before.milestones.map((row) => ({ ...row, done: 0, done_on: null })))
       // 旧列は残さない
       for (const table of ['tasks', 'projects']) {

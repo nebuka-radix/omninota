@@ -12,6 +12,7 @@ import type { TaskDto } from '../../src/shared/contracts/tasks'
 const P = 'aaaaaaaa-0000-4000-8000-000000000001'
 const Q = 'bbbbbbbb-0000-4000-8000-000000000002'
 const project = (id: string, name: string, doneOn: string | null = null): ProjectDto => ({
+  favorite: false,
   id,
   name,
   createdAt: '2026-11-01T00:00:00.000Z',
