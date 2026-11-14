@@ -10,6 +10,8 @@ export type SectionRowProps = {
   /** 選択状態と選択操作。未指定なら従来の見出し表示。 */
   selected?: boolean
   onSelect?: () => void
+  /** 行全体のクリックでも展開状態を切り替える。既定false。 */
+  toggleOnRowClick?: boolean
   /** タイトル前の個別アイコン。省略時はMinus。 */
   icon?: LucideIcon
   /** 表示状態は呼び出し側で管理する。省略時は展開状態。 */
@@ -33,6 +35,7 @@ export function SectionRow({
   title,
   selected = false,
   onSelect,
+  toggleOnRowClick = false,
   icon: Icon = Minus,
   expanded = true,
   onExpandedChange,
@@ -57,8 +60,16 @@ export function SectionRow({
       data-testid="section-row"
       data-selected={selected ? 'true' : 'false'}
       onClick={(event) => {
-        if (event.target instanceof Element && event.target.closest('button, input, textarea, select, a')) return
-        onSelect?.()
+        const target = event.target instanceof Element ? event.target : null
+        if (!target) return
+        // 開閉ボタンは自身の処理に任せ、バブリングによる二重切り替えを防ぐ。
+        if (target.closest('[data-testid="section-row-toggle"]')) return
+        if (target.closest('input, textarea, select, a')) return
+        const titleButton = target.closest('[data-testid="section-row-select"]')
+        if (target.closest('button') && !titleButton) return
+        // タイトルボタンではonSelectが既に実行される。それ以外の行内クリックではここで選択する。
+        if (!titleButton) onSelect?.()
+        if (toggleOnRowClick) onExpandedChange?.(!expanded)
       }}
       data-level={normalizedLevel}
       data-expanded={expanded ? 'true' : 'false'}
@@ -68,7 +79,8 @@ export function SectionRow({
           height, boxSizing: 'border-box', ml: `${leftMargin}px`, px: '12px', gap: '8px',
           bgcolor: backgroundColor, color: '#eeeeee',
           boxShadow: selected ? 'inset 0 -1.5px 0 #00ff00' : undefined,
-          fontSize: `${fontSize}px`, fontWeight: 800
+          fontSize: `${fontSize}px`, fontWeight: 800,
+          cursor: toggleOnRowClick && onExpandedChange ? 'pointer' : undefined
         },
         ...(Array.isArray(sx) ? sx : [sx])
       ]}

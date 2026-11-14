@@ -210,7 +210,7 @@ function CompactTaskBrowser({ kind, selectedMilestone, onSelectMilestone }: {
         )
         return (
           <Box component="li" key={project.id} sx={{ minWidth: 0 }}>
-            <SectionRow level={0} title={projectLabel} titleId={projectTitleId} icon={FolderKanban}
+            <SectionRow level={0} toggleOnRowClick title={projectLabel} titleId={projectTitleId} icon={FolderKanban}
               height={32} sx={{ mt: '8px' }}
               expanded={projectExpanded} onExpandedChange={() => void toggle(projectKey)} controlsId={projectContentId} />
             <Box id={projectContentId} hidden={!projectExpanded}>
@@ -224,7 +224,7 @@ function CompactTaskBrowser({ kind, selectedMilestone, onSelectMilestone }: {
                     const contentId = `compact-milestone-content-${group.milestoneId}`
                     return (
                       <Box component="li" key={group.key} sx={{ minWidth: 0 }}>
-                        <SectionRow level={1} title={group.label} titleId={titleId} icon={Flag}
+                        <SectionRow level={1} toggleOnRowClick title={group.label} titleId={titleId} icon={Flag}
                           selected={selectedMilestone?.projectId === project.id && selectedMilestone.milestoneId === group.milestoneId}
                           onSelect={() => onSelectMilestone({ projectId: project.id, milestoneId: group.milestoneId })}
                           height={28}
