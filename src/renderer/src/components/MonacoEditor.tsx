@@ -1,9 +1,11 @@
 import { lazy, Suspense, useEffect, useId, useRef, useState } from 'react'
-import { FileCodeCorner, Save, TextWrap } from 'lucide-react'
+import { FileCodeCorner, Save, TableOfContents, TextWrap } from 'lucide-react'
 import type * as Monaco from 'monaco-editor'
 import { markdownTableEdits } from './monaco-editor/markdown-tables'
 import './monaco-editor/monaco-editor.css'
 import { previewFraction, previewLayout } from './monaco-editor/preview-layout'
+import { markdownHeadings, type MarkdownHeading } from './monaco-editor/markdown-headings'
+import { FoldIconStyles } from './monaco-editor/FoldIconStyles'
 
 const Preview = lazy(() => import('./monaco-editor/MarkdownPreview').then((module) => ({ default: module.MarkdownPreview })))
 
@@ -36,6 +38,9 @@ export function MonacoEditor({
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [previewOpen, setPreviewOpen] = useState(false)
+  const [tocOpen, setTocOpen] = useState(false)
+  const [headings, setHeadings] = useState<MarkdownHeading[]>([])
+  const tocId = `monaco-outline-${useId().replace(/[^a-zA-Z0-9]/g, '')}`
   const bodyRef = useRef<HTMLDivElement>(null)
   const [bodyWidth, setBodyWidth] = useState(0)
   const [previewRatio, setPreviewRatio] = useState(0.5)
@@ -44,6 +49,23 @@ export function MonacoEditor({
   const [previewValue, setPreviewValue] = useState(value)
   const [fontSize, setFontSize] = useState(() => Math.min(32, Math.max(10, Math.round(initialFontSize))))
   const previewId = `monaco-preview-${useId().replace(/[^a-zA-Z0-9]/g, '')}`
+
+  const goToHeading = async (heading: MarkdownHeading) => {
+    const editor = editorRef.current
+    const model = editor?.getModel()
+    if (!editor || !model || model.isDisposed()) return
+    const line = Math.min(model.getLineCount(), Math.max(1, heading.line))
+    try {
+      await editor.getAction('editor.unfold')?.run({ levels: 6, direction: 'up', selectionLines: [line - 1] })
+      if (editorRef.current !== editor || model.isDisposed()) return
+      const target = Math.min(model.getLineCount(), line)
+      editor.setPosition({ lineNumber: target, column: 1 })
+      editor.revealLineInCenter(target)
+      editor.focus()
+    } catch (caught) {
+      if (mounted.current) setError(caught instanceof Error ? caught.message : String(caught))
+    }
+  }
 
   runRef.current = async (save) => {
     const editor = editorRef.current
@@ -91,8 +113,10 @@ export function MonacoEditor({
       const editor = monaco.editor.create(hostRef.current, {
         model, theme: THEME_ID, automaticLayout: true,
         lineNumbers: 'on', lineNumbersMinChars: 2, glyphMargin: false,
+        folding: true, foldingStrategy: 'auto', showFoldingControls: 'always', lineDecorationsWidth: 4,
         minimap: { enabled: false }, scrollBeyondLastLine: false,
         fontSize: Math.min(32, Math.max(10, Math.round(initialFontSize))),
+        fontFamily: "'HackGen Console NF', Menlo, Monaco, 'Courier New', monospace", fontLigatures: false,
         tabSize: 2, insertSpaces: true, detectIndentation: false,
         wordWrap: latest.current.wordWrap ? 'on' : 'off',
         readOnly: latest.current.readOnly, ariaLabel: latest.current.ariaLabel,
@@ -100,8 +124,14 @@ export function MonacoEditor({
         quickSuggestions: false, padding: { top: 6, bottom: 6 }
       })
       editorRef.current = editor
+      setHeadings(markdownHeadings(model.getValue()))
+      let outlineTimer: number | undefined
       const subscription = editor.onDidChangeModelContent(() => {
         if (!synchronizing.current) latest.current.onChange(editor.getValue())
+        window.clearTimeout(outlineTimer)
+        outlineTimer = window.setTimeout(() => {
+          if (!cancelled && !model.isDisposed()) setHeadings(markdownHeadings(model.getValue()))
+        }, 150)
       })
       const host = hostRef.current
       const wheel = (event: WheelEvent) => {
@@ -115,6 +145,7 @@ export function MonacoEditor({
       cleanup = () => {
         host.removeEventListener('wheel', wheel, true)
         subscription.dispose()
+        window.clearTimeout(outlineTimer)
         editor.dispose()
         model.dispose()
         if (editorRef.current === editor) editorRef.current = null
@@ -188,6 +219,7 @@ export function MonacoEditor({
           editor.pushUndoStop()
         }
       }}>
+      <FoldIconStyles />
       <div className="gtd-monaco-toolbar" role="toolbar" aria-label="エディタ操作">
         <div className="gtd-monaco-toolbar-left">
           <button type="button" aria-label="保存" title="保存 (⌘S)" disabled={!ready || busy || readOnly}
@@ -197,6 +229,11 @@ export function MonacoEditor({
           <button type="button" className="gtd-monaco-wrap" aria-label="Word Wrap" aria-pressed={wrapEnabled}
             title={`Word Wrap: ${wrapEnabled ? 'ON' : 'OFF'}`} onClick={() => setWrapEnabled((current) => !current)}>
             <TextWrap size={16} aria-hidden />
+          </button>
+          <button type="button" className="gtd-monaco-toc" aria-label="目次" aria-pressed={tocOpen}
+            aria-expanded={tocOpen} aria-controls={tocId} title="目次"
+            onClick={() => setTocOpen((current) => !current)}>
+            <TableOfContents size={16} aria-hidden />
           </button>
           <span className="gtd-monaco-status" role="status">{busy ? '処理中…' : ''}</span>
         </div>
@@ -210,7 +247,19 @@ export function MonacoEditor({
         </div>
       </div>
       {error && <div className="gtd-monaco-error" role="alert">{error}</div>}
-      <div ref={bodyRef} className="gtd-monaco-body">
+      <div className="gtd-monaco-body">
+        {tocOpen && <aside id={tocId} className="gtd-monaco-outline" aria-label="見出しの目次">
+          <div className="gtd-monaco-outline-title">CONTENTS</div>
+          {headings.length === 0 && <div className="gtd-monaco-outline-empty">{ready ? '見出しがありません' : '読み込み中…'}</div>}
+          <nav aria-label="見出し一覧">
+            {headings.map((heading) => <button type="button" key={heading.line}
+              title={`${heading.title} (行 ${heading.line})`} aria-label={`${heading.title}へ移動`}
+              style={{ paddingLeft: 6 + (heading.level - 1) * 12 }} onClick={() => { void goToHeading(heading) }}>
+              {heading.title}
+            </button>)}
+          </nav>
+        </aside>}
+        <div ref={bodyRef} className="gtd-monaco-workspace">
         <div ref={hostRef} className="gtd-monaco-input" />
         {previewOpen && <>
           <div className="gtd-monaco-divider" role="separator" tabIndex={0}
@@ -258,6 +307,7 @@ export function MonacoEditor({
           </Suspense>
           </aside>
         </>}
+        </div>
       </div>
     </div>
   )

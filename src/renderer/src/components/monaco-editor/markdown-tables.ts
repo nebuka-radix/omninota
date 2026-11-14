@@ -3,6 +3,7 @@ import remarkParse from 'remark-parse'
 import remarkGfm from 'remark-gfm'
 import * as prettier from 'prettier/standalone'
 import * as markdownPlugin from 'prettier/plugins/markdown'
+import { alignTableDisplayWidth } from './table-display-width'
 
 export type TableEdit = { start: number; end: number; text: string }
 const parser = unified().use(remarkParse).use(remarkGfm)
@@ -21,7 +22,7 @@ export async function markdownTableEdits(source: string): Promise<TableEdit[]> {
       parser: 'markdown', plugins: [markdownPlugin], proseWrap: 'preserve',
       embeddedLanguageFormatting: 'off', endOfLine: source.includes('\r\n') ? 'crlf' : 'lf'
     })
-    const text = formatted.replace(/\r?\n$/, '')
+    const text = alignTableDisplayWidth(formatted.replace(/\r?\n$/, ''))
     if (text !== original) edits.push({ start, end, text })
   }
   return edits

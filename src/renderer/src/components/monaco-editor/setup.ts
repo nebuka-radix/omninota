@@ -1,5 +1,6 @@
 import * as monaco from 'monaco-editor'
 import EditorWorker from 'monaco-editor/esm/vs/editor/editor.worker?worker'
+import { markdownHeadingRanges } from './markdown-headings'
 
 export const LANGUAGE_ID = 'gtd-markdown'
 export const THEME_ID = 'gtd-markdown-dark'
@@ -41,6 +42,9 @@ export function setupMonaco(): typeof monaco {
       backtickFence: [[/^ {0,3}`{3,}\s*$/, 'code', '@pop'], [/.*$/, 'code']],
       tildeFence: [[/^ {0,3}~{3,}\s*$/, 'code', '@pop'], [/.*$/, 'code']]
     }
+  })
+  monaco.languages.registerFoldingRangeProvider(LANGUAGE_ID, {
+    provideFoldingRanges: (model) => markdownHeadingRanges(model.getValue())
   })
   monaco.editor.defineTheme(THEME_ID, {
     base: 'vs-dark', inherit: true,

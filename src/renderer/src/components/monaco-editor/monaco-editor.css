@@ -38,3 +38,14 @@
 
 /* 043: Save and TextWrap share the left toolbar group. */
 .gtd-monaco-toolbar-left { gap:4px; }
+
+/* 046: Heading outline pane. The preview width is measured within workspace only. */
+.gtd-monaco-workspace { display:flex; flex:1; min-width:0; min-height:0; overflow:hidden; }
+.gtd-monaco-outline { flex:0 0 28%; max-width:220px; min-width:0; overflow:auto; background:#252526; border-right:1px solid #454545; color:#cccccc; user-select:text; }
+.gtd-monaco-outline-title { position:sticky; top:0; padding:6px; font-size:11px; font-weight:700; background:#252526; }
+.gtd-monaco-outline-empty { padding:6px; font-size:11px; color:#999999; }
+.gtd-monaco-outline nav button { display:block; box-sizing:border-box; width:100%; min-height:26px; padding-top:4px; padding-right:6px; padding-bottom:4px; border:0; background:transparent; color:inherit; font:inherit; font-size:12px; line-height:18px; text-align:left; white-space:nowrap; text-overflow:ellipsis; overflow:hidden; cursor:pointer; }
+.gtd-monaco-outline nav button:hover { background:#2a2d2e; }
+.gtd-monaco-outline nav button:focus-visible { outline:1px solid #007fd4; outline-offset:-1px; }
+.gtd-monaco-toolbar button.gtd-monaco-toc[aria-pressed="true"] { background:#00ff00; color:#000000; }
+.gtd-monaco-toolbar button.gtd-monaco-toc[aria-pressed="false"] { background:#252526; color:#858585; }
