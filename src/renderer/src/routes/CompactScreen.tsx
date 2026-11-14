@@ -111,6 +111,13 @@ function CompactTaskBrowser({ kind, selectedMilestone, onSelectMilestone }: {
   const projectsQuery = useQuery(projectListQueryOptions)
   const milestonesQuery = useQuery(milestoneListQueryOptions)
   const [expandedNodes, setExpandedNodes] = useState<ReadonlySet<string>>(new Set())
+  const defaultExpansionApplied = useRef(false)
+  useLayoutEffect(() => {
+    if (kind !== 'project' || !projectsQuery.isSuccess || defaultExpansionApplied.current) return
+    defaultExpansionApplied.current = true
+    // プロジェクトだけを開き、マイルストン配下のタスクは閉じた状態にする。
+    setExpandedNodes(new Set(projectsQuery.data.filter((project) => !project.done).map((project) => `project:${project.id}`)))
+  }, [kind, projectsQuery.isSuccess, projectsQuery.data])
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [announcement, setAnnouncement] = useState('')
   const [navigationError, setNavigationError] = useState<string | null>(null)
