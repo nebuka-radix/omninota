@@ -96,7 +96,7 @@ export function CompactScreen() {
   }, [])
   return (
     <Box sx={{ height: '100%', minWidth: 0, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
-      {tab !== 'note' && <Box sx={{ px: 2, pt: 3, flexShrink: 0,
+      <Box sx={{ px: 2, pt: 3, flexShrink: 0,
         '& form': { mb: 0 },
         '& [data-testid="task-add-disabled-reason"]': { display: 'none' }
       }}>
@@ -110,7 +110,7 @@ export function CompactScreen() {
             color: destinationMissing ? '#ff0000' : 'text.secondary', overflowWrap: 'anywhere' }}>
           {projectTab ? (destinationMissing ? 'Milestone not selected.' : (destination?.name ?? '')) : 'INBOX'}
         </Typography>
-      </Box>}
+      </Box>
       <Tabs value={tab} onChange={(_event, value: CompactTab) => void changeTab(value)} aria-label="コンパクト表示" variant="scrollable" scrollButtons="auto" allowScrollButtonsMobile
         sx={{ minHeight: 32, flexShrink: 0, borderBottom: `1px solid ${vscodeColors.border}`, '& .MuiTab-root': { minWidth: 0, minHeight: 32, px: 2, py: 1, fontSize: 16 } }}>
         {(Object.keys(labels) as CompactTab[]).map((key) => (

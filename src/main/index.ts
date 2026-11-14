@@ -63,6 +63,8 @@ if (testMode.kind === 'off' && testMode.ignoredInPackagedApp) {
   console.warn('[test] パッケージ版のため GTD_TEST_UI を無視します')
 }
 // userDataはreadyより前に確定させる。開発・previewは GTD-dev、パッケージ版は GTD。
+app.setName(APP_IDENTITY.displayName)
+
 app.setPath(
   'userData',
   resolveUserDataDir({
