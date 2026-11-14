@@ -21,7 +21,6 @@ const labels = { day: 'THE DAY', inbox: 'INBOX', project: 'PROJECT' } as const
 
 export function CompactScreen() {
   const [tab, setTab] = useState<CompactTab>('day')
-  const [dayPercent, setDayPercent] = useState(50)
   const [error, setError] = useState<string | null>(null)
   const switching = useRef(false)
   const { confirmLeave } = useDraftGuard()
@@ -44,7 +43,7 @@ export function CompactScreen() {
       {error && <Alert severity="error" onClose={() => setError(null)}>{error}</Alert>}
       <Box role="tabpanel" id={`compact-panel-${tab}`} aria-labelledby={`compact-tab-${tab}`} tabIndex={0}
         sx={{ flex: 1, minWidth: 0, minHeight: 0, overflow: 'hidden' }}>
-        {tab === 'day' ? <SummaryPage compact showQuickAdd={false} compactSplit={{ value: dayPercent, onChange: setDayPercent }} /> : <CompactTaskBrowser key={tab} kind={tab} />}
+        {tab === 'day' ? <SummaryPage compact showQuickAdd={false} /> : <CompactTaskBrowser key={tab} kind={tab} />}
       </Box>
     </Box>
   )

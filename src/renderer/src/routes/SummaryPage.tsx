@@ -7,7 +7,6 @@ import type { TaskDto } from '../../../shared/contracts/tasks'
 import { Page } from '../components/Page'
 import { SectionRow } from '../components/SectionRow'
 import { useDraftGuard } from '../features/drafts/DraftGuard'
-import { CompactSplitHandle } from '../features/summary/CompactSplitHandle'
 import { ShellSlot } from '../components/ShellSlots'
 import { projectListQueryOptions } from '../features/projects/project-queries'
 import { filterSummaryByProjects, mergeSummary, summaryTotal } from '../features/summary/summary-merge'
@@ -40,21 +39,15 @@ const EMPTY_TASKS: TaskDto[] = []
 // - 各行は共通の TaskRow。一覧は区画ごとに仮想化し、区画の寸法の変化は virtualizer が測り直す。
 // - 右サイドバーのプロジェクトのフィルター（表示だけ）で OFF のプロジェクトのタスクを全区画から外す。
 // - ステータスバーの中央にフィルター後の4区画の合計件数。トップバーの表示設定は出さない。大きな画面タイトルは出さない。
-export function SummaryPage({ compact = false, showQuickAdd = true, compactSplit }: {
+export function SummaryPage({ compact = false, showQuickAdd = true }: {
   compact?: boolean
   showQuickAdd?: boolean
-  compactSplit?: { value: number; onChange: (value: number) => void }
 }) {
-  const [localTodayPercent, setLocalTodayPercent] = useState(50)
-  const compactTodayPercent = compactSplit?.value ?? localTodayPercent
-  const setCompactTodayPercent = compactSplit?.onChange ?? setLocalTodayPercent
   const sections = compact ? SECTIONS.filter((section) => section.key === 'todayItems' || section.key === 'tomorrowItems') : SECTIONS
   const [sectionExpanded, setSectionExpanded] = useState<Partial<Record<SectionKey, boolean>>>({})
   const [sectionError, setSectionError] = useState<string | null>(null)
   const sectionBusy = useRef(false)
   const { confirmLeave } = useDraftGuard()
-  const todayExpanded = sectionExpanded.todayItems !== false
-  const tomorrowExpanded = sectionExpanded.tomorrowItems !== false
   const changeSectionExpanded = async (key: SectionKey, next: boolean) => {
     if (sectionBusy.current) return
     sectionBusy.current = true
@@ -66,11 +59,6 @@ export function SummaryPage({ compact = false, showQuickAdd = true, compactSplit
       setSectionError(error instanceof Error ? error.message : 'セクションの表示を変更できませんでした')
     } finally { sectionBusy.current = false }
   }
-  const compactRows = todayExpanded && tomorrowExpanded
-    ? `minmax(0, ${compactTodayPercent}fr) minmax(0, ${100 - compactTodayPercent}fr)`
-    : todayExpanded ? `minmax(${HEADING_HEIGHT}px, 1fr) ${HEADING_HEIGHT}px`
-    : tomorrowExpanded ? `${HEADING_HEIGHT}px minmax(${HEADING_HEIGHT}px, 1fr)`
-    : `${HEADING_HEIGHT}px ${HEADING_HEIGHT}px`
   const day = useLocalDay()
   const query = useQuery(summaryQueryOptions(day))
   const tasksQuery = useQuery(taskListQueryOptions)
@@ -134,16 +122,16 @@ export function SummaryPage({ compact = false, showQuickAdd = true, compactSplit
             flex: 1,
             minHeight: 0,
             minWidth: 0,
-            display: 'grid',
+            display: compact ? 'flex' : 'grid',
+            flexDirection: compact ? 'column' : undefined,
+            overflowY: compact ? 'auto' : undefined,
+            overflowX: compact ? 'hidden' : undefined,
             gridTemplateColumns: compact ? 'minmax(0, 1fr)' : 'minmax(0, 1fr) minmax(0, 1fr)',
-            gridTemplateRows: compact
-              ? compactRows
-              : 'minmax(0, 1fr) minmax(0, 1fr)',
+            gridTemplateRows: compact ? undefined : 'minmax(0, 1fr) minmax(0, 1fr)',
             position: 'relative',
             border: compact ? 'none' : `1px solid ${vscodeColors.gridLine}`
           }}
         >
-          {compact && todayExpanded && tomorrowExpanded && <CompactSplitHandle value={compactTodayPercent} onChange={setCompactTodayPercent} />}
           {sections.map((section) => {
             const items = summary ? summary[section.key] : []
             const isExpanded = !compact || sectionExpanded[section.key] !== false
@@ -156,6 +144,7 @@ export function SummaryPage({ compact = false, showQuickAdd = true, compactSplit
                 data-testid="summary-section"
                 sx={{
                   gridRow: section.row,
+                  flexShrink: compact ? 0 : undefined,
                   gridColumn: compact ? 1 : section.column,
                   display: 'flex',
                   flexDirection: 'column',
@@ -199,7 +188,7 @@ export function SummaryPage({ compact = false, showQuickAdd = true, compactSplit
                   hidden={!isExpanded}
                   sx={{
                     display: isExpanded ? 'flex' : 'none', flexDirection: 'column',
-                    flex: 1, minHeight: 0, minWidth: 0,
+                    flex: compact ? '0 0 auto' : 1, minHeight: 0, minWidth: 0,
                     pl: compact ? '24px' : 0
                   }}
                 >
@@ -211,6 +200,7 @@ export function SummaryPage({ compact = false, showQuickAdd = true, compactSplit
                   <TaskList
                     variant="section"
                     rowMode={compact ? 'Compact' : 'Standard'}
+                    maxVisibleRows={compact ? Math.max(1, items.length) : undefined}
                     tasks={items}
                     actions={rowActions.actions}
                     listLabel={`${section.label}（${items.length}件）`}
