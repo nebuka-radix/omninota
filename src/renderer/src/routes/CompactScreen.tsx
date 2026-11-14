@@ -13,6 +13,9 @@ import { useTaskRowActions } from '../features/tasks/use-task-row-actions'
 import type { TaskDto } from '../../../shared/contracts/tasks'
 import { vscodeColors } from '../theme'
 import { SummaryPage } from './SummaryPage'
+import { mergeSummary } from '../features/summary/summary-merge'
+import { summaryQueryOptions } from '../features/summary/summary-queries'
+import { useLocalDay } from '../lib/local-day'
 import { SectionRow } from '../components/SectionRow'
 import { ProjectFavoriteButton } from '../features/projects/ProjectFavoriteButton'
 import { MilestoneFavoriteButton } from '../features/milestones/MilestoneFavoriteButton'
@@ -24,8 +27,29 @@ type CompactTab = 'day' | 'inbox' | 'project'
 const EMPTY_TASKS: TaskDto[] = []
 const labels = { day: 'THE DAY', inbox: 'INBOX', project: 'PROJECT' } as const
 
+function TabTaskCountBadge({ count, background, label }: { count: number; background: string; label: string }) {
+  return (
+    <Box component="span" aria-label={`${label}: ${count}件`} title={`${label}: ${count}件`}
+      data-testid="compact-tab-count" data-count-kind={label}
+      sx={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', minWidth: '18px', height: '18px',
+        px: '4px', boxSizing: 'border-box', borderRadius: '9px', bgcolor: background,
+        color: '#ffffff', fontSize: '11px', lineHeight: 1, fontWeight: 800, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>
+      {count}
+    </Box>
+  )
+}
+
 export function CompactScreen() {
   const [tab, setTab] = useState<CompactTab>('day')
+  const badgeDay = useLocalDay()
+  const badgeSummaryQuery = useQuery(summaryQueryOptions(badgeDay))
+  const badgeTasksQuery = useQuery(taskListQueryOptions)
+  const badgeSummary = badgeSummaryQuery.isSuccess
+    ? mergeSummary(badgeSummaryQuery.data, badgeTasksQuery.data)
+    : undefined
+  const inboxBadgeCount = badgeTasksQuery.isSuccess
+    ? badgeTasksQuery.data.filter((task) => task.projectId === null && task.doneOn === null).length
+    : undefined
   const [selectedMilestone, setSelectedMilestone] = useState<MilestoneTarget | null>(null)
   const destinationProjects = useQuery(projectListQueryOptions)
   const destinationMilestones = useQuery(milestoneListQueryOptions)
@@ -65,9 +89,25 @@ export function CompactScreen() {
           {projectTab ? (destinationMissing ? 'Milestone not selected.' : (destination?.name ?? '')) : 'INBOX'}
         </Typography>
       </Box>
-      <Tabs value={tab} onChange={(_event, value: CompactTab) => void changeTab(value)} aria-label="コンパクト表示" variant="fullWidth"
-        sx={{ minHeight: 32, flexShrink: 0, borderBottom: `1px solid ${vscodeColors.border}`, '& .MuiTab-root': { minWidth: 0, minHeight: 32, p: 1, fontSize: 11 } }}>
-        {(Object.keys(labels) as CompactTab[]).map((key) => <Tab key={key} value={key} label={labels[key]} id={`compact-tab-${key}`} aria-controls={`compact-panel-${key}`} />)}
+      <Tabs value={tab} onChange={(_event, value: CompactTab) => void changeTab(value)} aria-label="コンパクト表示" variant="scrollable" scrollButtons="auto" allowScrollButtonsMobile
+        sx={{ minHeight: 32, flexShrink: 0, borderBottom: `1px solid ${vscodeColors.border}`, '& .MuiTab-root': { minWidth: 0, minHeight: 32, px: 2, py: 1, fontSize: 16 } }}>
+        {(Object.keys(labels) as CompactTab[]).map((key) => (
+          <Tab key={key} value={key} id={`compact-tab-${key}`} aria-controls={`compact-panel-${key}`}
+            label={
+              <Box component="span" sx={{ display: 'inline-flex', flexDirection: 'row', alignItems: 'center', gap: '6px', whiteSpace: 'nowrap' }}>
+                <Box component="span" sx={{ fontSize: '16px', lineHeight: '20px' }}>{labels[key]}</Box>
+                {key === 'day' && badgeSummary && (
+                  <Box component="span" sx={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                    <TabTaskCountBadge count={badgeSummary.overdueItems.length} background="#ff0000" label="期限超過" />
+                    <TabTaskCountBadge count={badgeSummary.todayItems.length} background="#1e90ff" label="今日" />
+                  </Box>
+                )}
+                {key === 'inbox' && inboxBadgeCount !== undefined &&
+                  <TabTaskCountBadge count={inboxBadgeCount} background="#008080" label="Inboxの未完了タスク" />}
+              </Box>
+            }
+          />
+        ))}
       </Tabs>
       {error && <Alert severity="error" onClose={() => setError(null)}>{error}</Alert>}
       <Box role="tabpanel" id={`compact-panel-${tab}`} aria-labelledby={`compact-tab-${tab}`} tabIndex={0}
