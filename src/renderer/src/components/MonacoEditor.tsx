@@ -6,6 +6,7 @@ import './monaco-editor/monaco-editor.css'
 import { previewFraction, previewLayout } from './monaco-editor/preview-layout'
 import { markdownHeadings, type MarkdownHeading } from './monaco-editor/markdown-headings'
 import { FoldIconStyles } from './monaco-editor/FoldIconStyles'
+import { outlinePaneLayout } from './monaco-editor/outline-layout'
 
 const Preview = lazy(() => import('./monaco-editor/MarkdownPreview').then((module) => ({ default: module.MarkdownPreview })))
 
@@ -39,6 +40,16 @@ export function MonacoEditor({
   const [error, setError] = useState<string | null>(null)
   const [previewOpen, setPreviewOpen] = useState(false)
   const [tocOpen, setTocOpen] = useState(false)
+  const outlineContainerRef = useRef<HTMLDivElement>(null)
+  const [outlineViewportWidth, setOutlineViewportWidth] = useState(0)
+  const [tocPreferredWidth, setTocPreferredWidth] = useState<number | null>(null)
+  const tocLayout = outlinePaneLayout(outlineViewportWidth, tocPreferredWidth)
+  const tocDragRef = useRef<{ pointerId: number; x: number; width: number; previous: number | null } | null>(null)
+  const cancelTocResize = () => {
+    if (!tocDragRef.current) return
+    setTocPreferredWidth(tocDragRef.current.previous)
+    tocDragRef.current = null
+  }
   const [headings, setHeadings] = useState<MarkdownHeading[]>([])
   const tocId = `monaco-outline-${useId().replace(/[^a-zA-Z0-9]/g, '')}`
   const bodyRef = useRef<HTMLDivElement>(null)
@@ -177,6 +188,16 @@ export function MonacoEditor({
   }, [fontSize, readOnly, wrapEnabled, ariaLabel, ready])
 
   useEffect(() => {
+    const element = outlineContainerRef.current
+    if (!element) return
+    const measure = () => setOutlineViewportWidth(element.clientWidth)
+    measure()
+    const observer = new ResizeObserver(measure)
+    observer.observe(element)
+    return () => observer.disconnect()
+  }, [])
+
+  useEffect(() => {
     const element = bodyRef.current
     if (!element) return
     const measure = () => setBodyWidth(element.clientWidth)
@@ -247,8 +268,9 @@ export function MonacoEditor({
         </div>
       </div>
       {error && <div className="gtd-monaco-error" role="alert">{error}</div>}
-      <div className="gtd-monaco-body">
-        {tocOpen && <aside id={tocId} className="gtd-monaco-outline" aria-label="見出しの目次">
+      <div ref={outlineContainerRef} className="gtd-monaco-body" data-outline-open={tocOpen ? 'true' : 'false'}>
+        {tocOpen && <>
+        <aside id={tocId} className="gtd-monaco-outline" aria-label="見出しの目次" style={{ width: tocLayout.width }}>
           <div className="gtd-monaco-outline-title">CONTENTS</div>
           {headings.length === 0 && <div className="gtd-monaco-outline-empty">{ready ? '見出しがありません' : '読み込み中…'}</div>}
           <nav aria-label="見出し一覧">
@@ -258,7 +280,41 @@ export function MonacoEditor({
               {heading.title}
             </button>)}
           </nav>
-        </aside>}
+        </aside>
+        <div className="gtd-monaco-outline-divider" role="separator" tabIndex={0}
+          aria-label="目次ペインの幅を調整" aria-orientation="vertical" aria-controls={tocId}
+          aria-valuemin={tocLayout.minimum} aria-valuemax={Math.round(tocLayout.maximum)} aria-valuenow={tocLayout.width}
+          onDoubleClick={() => setTocPreferredWidth(null)}
+          onPointerDown={(event) => {
+            if (event.button !== 0) return
+            event.preventDefault()
+            event.currentTarget.setPointerCapture(event.pointerId)
+            tocDragRef.current = { pointerId: event.pointerId, x: event.clientX, width: tocLayout.width, previous: tocPreferredWidth }
+          }}
+          onPointerMove={(event) => {
+            const drag = tocDragRef.current
+            if (!drag || drag.pointerId !== event.pointerId) return
+            const viewport = outlineContainerRef.current?.clientWidth ?? outlineViewportWidth
+            setTocPreferredWidth(outlinePaneLayout(viewport, drag.width + event.clientX - drag.x).width)
+          }}
+          onPointerUp={(event) => {
+            if (tocDragRef.current?.pointerId !== event.pointerId) return
+            tocDragRef.current = null
+            event.currentTarget.releasePointerCapture(event.pointerId)
+          }}
+          onPointerCancel={cancelTocResize} onLostPointerCapture={cancelTocResize}
+          onKeyDown={(event) => {
+            let next = tocLayout.width
+            if (event.key === 'ArrowLeft') next -= 10
+            else if (event.key === 'ArrowRight') next += 10
+            else if (event.key === 'Home') next = tocLayout.minimum
+            else if (event.key === 'End') next = tocLayout.maximum
+            else return
+            event.preventDefault(); event.stopPropagation()
+            const viewport = outlineContainerRef.current?.clientWidth ?? outlineViewportWidth
+            setTocPreferredWidth(outlinePaneLayout(viewport, next).width)
+          }} />
+        </>}
         <div ref={bodyRef} className="gtd-monaco-workspace">
         <div ref={hostRef} className="gtd-monaco-input" />
         {previewOpen && <>

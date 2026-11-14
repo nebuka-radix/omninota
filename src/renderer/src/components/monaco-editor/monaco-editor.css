@@ -49,3 +49,10 @@
 .gtd-monaco-outline nav button:focus-visible { outline:1px solid #007fd4; outline-offset:-1px; }
 .gtd-monaco-toolbar button.gtd-monaco-toc[aria-pressed="true"] { background:#00ff00; color:#000000; }
 .gtd-monaco-toolbar button.gtd-monaco-toc[aria-pressed="false"] { background:#252526; color:#858585; }
+
+/* 055: Strict 128px minimum and a draggable outline separator. */
+.gtd-monaco-body { overflow-x:auto; overflow-y:hidden; }
+.gtd-monaco-outline { flex:0 0 auto; min-width:128px; max-width:none; box-sizing:border-box; border-right:0; }
+.gtd-monaco-body[data-outline-open="true"] > .gtd-monaco-workspace { min-width:80px; }
+.gtd-monaco-outline-divider { flex:0 0 6px; width:6px; background:#454545; cursor:col-resize; touch-action:none; user-select:none; }
+.gtd-monaco-outline-divider:hover,.gtd-monaco-outline-divider:focus-visible { background:#007fd4; outline:none; }
