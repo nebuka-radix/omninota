@@ -1,7 +1,7 @@
 import { useLayoutEffect, useRef, useState, type ReactNode } from 'react'
-import { Alert, Box, Button, CircularProgress, Tab, Tabs, Tooltip, Typography } from '@mui/material'
+import { Alert, Box, CircularProgress, Tab, Tabs, ToggleButton, ToggleButtonGroup, Typography } from '@mui/material'
 import { useQuery } from '@tanstack/react-query'
-import { ListChevronsDownUp, ListChevronsUpDown, ListTree, Flag } from 'lucide-react'
+import { Flag } from 'lucide-react'
 import { useDraftGuard } from '../features/drafts/DraftGuard'
 import { projectListQueryOptions } from '../features/projects/project-queries'
 import { compareFavoriteProjects, sortProjects } from '../features/projects/project-order'
@@ -17,6 +17,7 @@ import { SummaryPage } from './SummaryPage'
 import { SectionRow } from '../components/SectionRow'
 import { ProjectFavoriteButton } from '../features/projects/ProjectFavoriteButton'
 import { ShellSlot } from '../components/ShellSlots'
+import { projectTreeDisplayMode, type ProjectTreeDisplayMode } from '../features/projects/project-tree-display'
 
 type MilestoneTarget = { projectId: string; milestoneId: string }
 type CompactTab = 'day' | 'inbox' | 'project'
@@ -112,6 +113,7 @@ function CompactTaskBrowser({ kind, selectedMilestone, onSelectMilestone }: {
   const projectsQuery = useQuery(projectListQueryOptions)
   const milestonesQuery = useQuery(milestoneListQueryOptions)
   const [expandedNodes, setExpandedNodes] = useState<ReadonlySet<string>>(new Set())
+  const [preferredDisplay, setPreferredDisplay] = useState<ProjectTreeDisplayMode>('MILESTONE')
   const defaultExpansionApplied = useRef(false)
   useLayoutEffect(() => {
     if (kind !== 'project' || !projectsQuery.isSuccess || defaultExpansionApplied.current) return
@@ -138,6 +140,7 @@ function CompactTaskBrowser({ kind, selectedMilestone, onSelectMilestone }: {
     else tasksByProject.set(task.projectId, [task])
   }
   const milestoneRows = milestonesQuery.data ?? []
+  const displayMode = projectTreeDisplayMode(projects.map((project) => project.id), milestoneRows, expandedNodes, preferredDisplay)
   const milestonesByProject = new Map<string, typeof milestoneRows>()
   for (const milestone of milestoneRows) {
     if (milestone.projectId === null) continue
@@ -170,6 +173,7 @@ function CompactTaskBrowser({ kind, selectedMilestone, onSelectMilestone }: {
       if (mode !== 'all' && !(await confirmLeave())) return
       setNavigationError(null)
       const projectIds = new Set(projects.map((project) => project.id))
+      setPreferredDisplay(mode === 'none' ? 'PROJECT' : mode === 'milestones' ? 'MILESTONE' : 'ALL')
       setExpandedNodes(mode === 'none' ? new Set() : new Set([
         ...projects.map((project) => `project:${project.id}`),
         ...(mode === 'all' ? milestoneRows.filter((milestone) => milestone.projectId !== null && projectIds.has(milestone.projectId))
@@ -252,46 +256,29 @@ function CompactTaskBrowser({ kind, selectedMilestone, onSelectMilestone }: {
     <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column', minHeight: 0, minWidth: 0 }}>
       {kind === 'project' && (
         <ShellSlot name="top-bar-controls">
-          <Box
-            role="group" aria-label="プロジェクト階層の操作"
-            sx={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-start', gap: 1, width: 'max-content', maxWidth: '100%', minWidth: 0, overflowX: 'auto', overflowY: 'hidden', color: '#ffffff' }}
-          >
-            <Tooltip title="すべて折りたたむ">
-              <span style={{ display: 'flex', flex: '0 0 auto' }}>
-                <Button size="small" aria-label="すべて折りたたむ"
-                  disabled={loading || error !== null || projects.length === 0}
-                  onClick={() => void setAllExpanded('none')}
-                  data-testid="compact-project-collapse-all"
-                  sx={{ minWidth: 0, px: 0.5, gap: '4px', justifyContent: 'flex-start', fontSize: 11, whiteSpace: 'nowrap', color: '#ffffff', '&.Mui-disabled': { color: '#ffffff', opacity: 0.4 } }}>
-                  <ListChevronsDownUp size={16} aria-hidden style={{ flexShrink: 0 }} />
-                  <Box component="span" sx={{ whiteSpace: 'nowrap', color: 'inherit' }}>すべて折りたたむ</Box>
-                </Button>
-              </span>
-            </Tooltip>
-            <Tooltip title="マイルストンまで展開">
-              <span style={{ display: 'flex', flex: '0 0 auto' }}>
-                <Button size="small" aria-label="マイルストンまで展開"
-                  disabled={loading || error !== null || projects.length === 0}
-                  onClick={() => void setAllExpanded('milestones')}
-                  data-testid="compact-project-expand-milestones"
-                  sx={{ minWidth: 0, px: 0.5, gap: '4px', justifyContent: 'flex-start', fontSize: 11, whiteSpace: 'nowrap', color: '#ffffff', '&.Mui-disabled': { color: '#ffffff', opacity: 0.4 } }}>
-                  <ListTree size={16} aria-hidden style={{ flexShrink: 0 }} />
-                  <Box component="span" sx={{ whiteSpace: 'nowrap', color: 'inherit' }}>マイルストンまで展開</Box>
-                </Button>
-              </span>
-            </Tooltip>
-            <Tooltip title="すべて展開">
-              <span style={{ display: 'flex', flex: '0 0 auto' }}>
-                <Button size="small" aria-label="すべて展開"
-                  disabled={loading || error !== null || projects.length === 0}
-                  onClick={() => void setAllExpanded('all')}
-                  data-testid="compact-project-expand-all"
-                  sx={{ minWidth: 0, px: 0.5, gap: '4px', justifyContent: 'flex-start', fontSize: 11, whiteSpace: 'nowrap', color: '#ffffff', '&.Mui-disabled': { color: '#ffffff', opacity: 0.4 } }}>
-                  <ListChevronsUpDown size={16} aria-hidden style={{ flexShrink: 0 }} />
-                  <Box component="span" sx={{ whiteSpace: 'nowrap', color: 'inherit' }}>すべて展開</Box>
-                </Button>
-              </span>
-            </Tooltip>
+          <Box role="group" aria-label="プロジェクト階層の表示"
+            sx={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-start', gap: 1,
+              minWidth: 0, maxWidth: '100%', overflowX: 'auto', overflowY: 'hidden', color: '#ffffff' }}>
+            <Typography component="span" sx={{ fontSize: 12, flexShrink: 0 }}>表示</Typography>
+            <ToggleButtonGroup value={displayMode} exclusive size="small" aria-label="表示するプロジェクト階層"
+              data-testid="compact-project-display" sx={{ flexShrink: 0, height: 28 }}
+              onChange={(_event, value: ProjectTreeDisplayMode | null) => {
+                if (!value || value === 'CUSTOM') return
+                void setAllExpanded(value === 'PROJECT' ? 'none' : value === 'MILESTONE' ? 'milestones' : 'all')
+              }}>
+              {(['PROJECT', 'MILESTONE', 'ALL', 'CUSTOM'] as const).map((mode) => (
+                <ToggleButton key={mode} value={mode}
+                  disabled={mode === 'CUSTOM' || loading || error !== null || projects.length === 0}
+                  title={mode === 'CUSTOM' ? 'ノードを個別に開閉した状態（自動選択）' : undefined}
+                  data-testid={`compact-project-display-${mode.toLowerCase()}`}
+                  sx={{ px: 2.5, py: 0, fontSize: 12, color: '#ffffff', whiteSpace: 'nowrap',
+                    '&.Mui-selected': { color: '#ffffff', bgcolor: 'rgba(255,255,255,0.16)' },
+                    '&.Mui-disabled': { color: 'rgba(255,255,255,0.4)' },
+                    '&.Mui-selected.Mui-disabled': { color: '#ffffff', bgcolor: 'rgba(255,255,255,0.16)' } }}>
+                  {mode}
+                </ToggleButton>
+              ))}
+            </ToggleButtonGroup>
           </Box>
         </ShellSlot>
       )}
