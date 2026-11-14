@@ -12,7 +12,7 @@ import { useNotesSelection } from './NotesContext'
 import { noteListScrollTop } from './note-list-scroll'
 
 // This subtree stays mounted when collapsed, so inline name drafts are not discarded.
-export function NotesSidebar({ pathname, expanded }: { pathname: string; expanded: boolean }) {
+export function NotesSidebar({ pathname, expanded, embedded = false }: { pathname: string; expanded: boolean; embedded?: boolean }) {
   const notesQuery = useQuery(noteListQueryOptions)
   const notes = notesQuery.data ?? []
   const { selectedId, selectNote } = useNotesSelection()
@@ -41,7 +41,7 @@ export function NotesSidebar({ pathname, expanded }: { pathname: string; expande
     try {
       if (!await confirmLeave()) return
       setError(null)
-      await navigate({ to: '/notes' })
+      if (!embedded) await navigate({ to: '/notes' })
       setRenamingId(null)
       selectNote(id)
     } catch (caught) { setError(caught instanceof Error ? caught.message : String(caught)) }
@@ -55,7 +55,7 @@ export function NotesSidebar({ pathname, expanded }: { pathname: string; expande
       if (!await confirmLeave()) return
       setError(null)
       const note = await mutations.create.mutateAsync()
-      await navigate({ to: '/notes' })
+      if (!embedded) await navigate({ to: '/notes' })
       selectNote(note.id)
       setRenamingId(note.id)
     } catch (caught) { setError(caught instanceof Error ? caught.message : String(caught)) }
@@ -75,7 +75,7 @@ export function NotesSidebar({ pathname, expanded }: { pathname: string; expande
     <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0, minWidth: 0, overflow: 'hidden' }}>
       <Box sx={{ flexShrink: 0, bgcolor: vscodeColors.sideBarBackground }}>
         <Button onClick={() => void create()} disabled={pending || notesQuery.data === undefined}
-          data-testid="new-note" sx={{ width: '100%', height: 32, justifyContent: 'flex-start', pl: 8, pr: 2,
+          data-testid="new-note" sx={{ width: '100%', height: 32, justifyContent: 'flex-start', pl: embedded ? 2 : 8, pr: 2,
             color: '#ffffff', fontSize: 12, fontWeight: 600, textTransform: 'none', whiteSpace: 'nowrap' }}>
           + NEW NOTE
         </Button>
@@ -94,7 +94,7 @@ export function NotesSidebar({ pathname, expanded }: { pathname: string; expande
         {notes.map((note) => {
           const selected = pathname === '/notes' && note.id === selectedId
           return (
-            <Box component="li" key={note.id} data-note-id={note.id} sx={{ display: 'flex', alignItems: 'center', pl: 4, pr: 1,
+            <Box component="li" key={note.id} data-note-id={note.id} sx={{ display: 'flex', alignItems: 'center', pl: embedded ? 1 : 4, pr: 1,
               bgcolor: selected ? vscodeColors.listActiveSelection : 'transparent', minWidth: 0 }}>
               <IconButton aria-label={`${note.name}のお気に入りを${note.favorite ? '解除' : '設定'}`} aria-pressed={note.favorite}
                 disabled={pending} onClick={() => void favorite(note)}

@@ -14,7 +14,7 @@ describe('Note input and route validation', () => {
   it('rejects invalid IDs, arbitrary fields, and invalid widths', () => {
     expect(notesFavoriteArgsSchema.safeParse([{ id: 0, favorite: true }]).success).toBe(false)
     expect(notesFavoriteArgsSchema.safeParse([{ id: 1, favorite: true, active: false }]).success).toBe(false)
-    expect(notesSaveSidebarWidthArgsSchema.safeParse([139]).success).toBe(false)
+    expect(notesSaveSidebarWidthArgsSchema.safeParse([103]).success).toBe(false)
     expect(notesSaveSidebarWidthArgsSchema.safeParse([481]).success).toBe(false)
     expect(notesSaveSidebarWidthArgsSchema.safeParse([220]).success).toBe(true)
   })

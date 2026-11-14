@@ -1,5 +1,5 @@
 export const NOTE_NAME_MAX_LENGTH = 96
-export const NOTE_SIDEBAR = { default: 220, min: 140, max: 480 } as const
+export const NOTE_SIDEBAR = { default: 220, min: 104, max: 480 } as const
 export type NoteDto = {
   id: number
   favorite: boolean

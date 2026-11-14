@@ -13,6 +13,7 @@ import { useTaskRowActions } from '../features/tasks/use-task-row-actions'
 import type { TaskDto } from '../../../shared/contracts/tasks'
 import { vscodeColors } from '../theme'
 import { SummaryPage } from './SummaryPage'
+import { CompactNotesPane } from '../features/notes/CompactNotesPane'
 import { mergeSummary } from '../features/summary/summary-merge'
 import { summaryQueryOptions } from '../features/summary/summary-queries'
 import { useLocalDay } from '../lib/local-day'
@@ -23,9 +24,9 @@ import { ShellSlot } from '../components/ShellSlots'
 import { projectTreeDisplayMode, type ProjectTreeDisplayMode } from '../features/projects/project-tree-display'
 
 type MilestoneTarget = { projectId: string; milestoneId: string }
-type CompactTab = 'day' | 'inbox' | 'project'
+type CompactTab = 'day' | 'inbox' | 'project' | 'note'
 const EMPTY_TASKS: TaskDto[] = []
-const labels = { day: 'THE DAY', inbox: 'INBOX', project: 'PROJECT' } as const
+const labels = { day: 'THE DAY', inbox: 'INBOX', project: 'PROJECT', note: 'NOTE' } as const
 
 function TabTaskCountBadge({ count, background, label }: { count: number; background: string; label: string }) {
   if (count === 0) return null
@@ -75,7 +76,7 @@ export function CompactScreen() {
   }
   return (
     <Box sx={{ height: '100%', minWidth: 0, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
-      <Box sx={{ px: 2, pt: 3, flexShrink: 0,
+      {tab !== 'note' && <Box sx={{ px: 2, pt: 3, flexShrink: 0,
         '& form': { mb: 0 },
         '& [data-testid="task-add-disabled-reason"]': { display: 'none' }
       }}>
@@ -89,7 +90,7 @@ export function CompactScreen() {
             color: destinationMissing ? '#ff0000' : 'text.secondary', overflowWrap: 'anywhere' }}>
           {projectTab ? (destinationMissing ? 'Milestone not selected.' : (destination?.name ?? '')) : 'INBOX'}
         </Typography>
-      </Box>
+      </Box>}
       <Tabs value={tab} onChange={(_event, value: CompactTab) => void changeTab(value)} aria-label="コンパクト表示" variant="scrollable" scrollButtons="auto" allowScrollButtonsMobile
         sx={{ minHeight: 32, flexShrink: 0, borderBottom: `1px solid ${vscodeColors.border}`, '& .MuiTab-root': { minWidth: 0, minHeight: 32, px: 2, py: 1, fontSize: 16 } }}>
         {(Object.keys(labels) as CompactTab[]).map((key) => (
@@ -113,7 +114,7 @@ export function CompactScreen() {
       {error && <Alert severity="error" onClose={() => setError(null)}>{error}</Alert>}
       <Box role="tabpanel" id={`compact-panel-${tab}`} aria-labelledby={`compact-tab-${tab}`} tabIndex={0}
         sx={{ flex: 1, minWidth: 0, minHeight: 0, overflow: 'hidden' }}>
-        {tab === 'day' ? <SummaryPage compact showQuickAdd={false} /> : <CompactTaskBrowser key={tab} kind={tab} selectedMilestone={validDestination ? selectedMilestone : null} onSelectMilestone={setSelectedMilestone} />}
+        {tab === 'day' ? <SummaryPage compact showQuickAdd={false} /> : tab === 'note' ? <CompactNotesPane /> : <CompactTaskBrowser key={tab} kind={tab} selectedMilestone={validDestination ? selectedMilestone : null} onSelectMilestone={setSelectedMilestone} />}
       </Box>
     </Box>
   )

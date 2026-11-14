@@ -46,6 +46,7 @@
     "src/renderer/src/components/monaco-editor/markdown-tables.ts",
     "src/renderer/src/components/monaco-editor/preview-layout.ts",
     "src/renderer/src/layouts/shell/screens.ts",
-    "src/renderer/src/features/notes/note-list-scroll.ts"
+    "src/renderer/src/features/notes/note-list-scroll.ts",
+    "src/renderer/src/features/notes/compact-note-layout.ts"
   ]
 }
