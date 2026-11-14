@@ -17,12 +17,23 @@ import { SummaryPage } from './SummaryPage'
 import { SectionRow } from '../components/SectionRow'
 import { ShellSlot } from '../components/ShellSlots'
 
+type MilestoneTarget = { projectId: string; milestoneId: string }
 type CompactTab = 'day' | 'inbox' | 'project'
 const EMPTY_TASKS: TaskDto[] = []
 const labels = { day: 'THE DAY', inbox: 'INBOX', project: 'PROJECT' } as const
 
 export function CompactScreen() {
   const [tab, setTab] = useState<CompactTab>('day')
+  const [selectedMilestone, setSelectedMilestone] = useState<MilestoneTarget | null>(null)
+  const destinationProjects = useQuery(projectListQueryOptions)
+  const destinationMilestones = useQuery(milestoneListQueryOptions)
+  const destination = selectedMilestone
+    ? destinationMilestones.data?.find((item) => item.id === selectedMilestone.milestoneId && item.projectId === selectedMilestone.projectId)
+    : undefined
+  const destinationProject = destinationProjects.data?.find((item) => item.id === selectedMilestone?.projectId && !item.done)
+  const validDestination = destination !== undefined && destinationProject !== undefined
+  const projectTab = tab === 'project'
+  const destinationMissing = projectTab && !validDestination
   const [error, setError] = useState<string | null>(null)
   const switching = useRef(false)
   const { confirmLeave } = useDraftGuard()
@@ -37,7 +48,21 @@ export function CompactScreen() {
   }
   return (
     <Box sx={{ height: '100%', minWidth: 0, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
-      <Box sx={{ px: 2, pt: 3, flexShrink: 0 }}><TaskQuickAdd projectId={null} /></Box>
+      <Box sx={{ px: 2, pt: 3, flexShrink: 0,
+        '& form': { mb: 0 },
+        '& [data-testid="task-add-disabled-reason"]': { display: 'none' }
+      }}>
+        <TaskQuickAdd
+          projectId={projectTab && validDestination ? selectedMilestone!.projectId : null}
+          milestoneId={projectTab && validDestination ? selectedMilestone!.milestoneId : null}
+          disabledReason={destinationMissing ? 'Milestone not selected.' : undefined}
+        />
+        <Typography component="p" aria-live="polite" data-testid="compact-registration-target"
+          sx={{ m: 0, mt: '4px', mb: '8px', fontSize: '8pt', lineHeight: 1.5,
+            color: destinationMissing ? '#ff0000' : 'text.secondary', overflowWrap: 'anywhere' }}>
+          {projectTab ? (destinationMissing ? 'Milestone not selected.' : (destination?.name ?? '')) : 'INBOX'}
+        </Typography>
+      </Box>
       <Tabs value={tab} onChange={(_event, value: CompactTab) => void changeTab(value)} aria-label="コンパクト表示" variant="fullWidth"
         sx={{ minHeight: 32, flexShrink: 0, borderBottom: `1px solid ${vscodeColors.border}`, '& .MuiTab-root': { minWidth: 0, minHeight: 32, p: 1, fontSize: 11 } }}>
         {(Object.keys(labels) as CompactTab[]).map((key) => <Tab key={key} value={key} label={labels[key]} id={`compact-tab-${key}`} aria-controls={`compact-panel-${key}`} />)}
@@ -45,7 +70,7 @@ export function CompactScreen() {
       {error && <Alert severity="error" onClose={() => setError(null)}>{error}</Alert>}
       <Box role="tabpanel" id={`compact-panel-${tab}`} aria-labelledby={`compact-tab-${tab}`} tabIndex={0}
         sx={{ flex: 1, minWidth: 0, minHeight: 0, overflow: 'hidden' }}>
-        {tab === 'day' ? <SummaryPage compact showQuickAdd={false} /> : <CompactTaskBrowser key={tab} kind={tab} />}
+        {tab === 'day' ? <SummaryPage compact showQuickAdd={false} /> : <CompactTaskBrowser key={tab} kind={tab} selectedMilestone={validDestination ? selectedMilestone : null} onSelectMilestone={setSelectedMilestone} />}
       </Box>
     </Box>
   )
@@ -77,7 +102,11 @@ function MilestoneTaskIndent({ titleId, children }: { titleId: string; children:
   return <Box ref={ref} sx={{ pl: `${indent}px`, minWidth: 0, boxSizing: 'border-box' }}>{children}</Box>
 }
 
-function CompactTaskBrowser({ kind }: { kind: 'inbox' | 'project' }) {
+function CompactTaskBrowser({ kind, selectedMilestone, onSelectMilestone }: {
+  kind: 'inbox' | 'project'
+  selectedMilestone: MilestoneTarget | null
+  onSelectMilestone: (target: MilestoneTarget) => void
+}) {
   const tasksQuery = useQuery(taskListQueryOptions)
   const projectsQuery = useQuery(projectListQueryOptions)
   const milestonesQuery = useQuery(milestoneListQueryOptions)
@@ -189,6 +218,8 @@ function CompactTaskBrowser({ kind }: { kind: 'inbox' | 'project' }) {
                     return (
                       <Box component="li" key={group.key} sx={{ minWidth: 0 }}>
                         <SectionRow level={1} title={group.label} titleId={titleId} icon={Flag}
+                          selected={selectedMilestone?.projectId === project.id && selectedMilestone.milestoneId === group.milestoneId}
+                          onSelect={() => onSelectMilestone({ projectId: project.id, milestoneId: group.milestoneId })}
                           height={28}
                           expanded={milestoneExpanded} onExpandedChange={() => void toggle(milestoneKey)} controlsId={contentId} />
                         <Box id={contentId} hidden={!milestoneExpanded}>

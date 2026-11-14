@@ -7,6 +7,9 @@ export type SectionRowProps = {
   /** 0: section、1: subsection、2: subsubsection。非負整数。 */
   level?: number
   title: ReactNode
+  /** 選択状態と選択操作。未指定なら従来の見出し表示。 */
+  selected?: boolean
+  onSelect?: () => void
   /** タイトル前の個別アイコン。省略時はMinus。 */
   icon?: LucideIcon
   /** 表示状態は呼び出し側で管理する。省略時は展開状態。 */
@@ -28,6 +31,8 @@ export type SectionRowProps = {
 export function SectionRow({
   level = 0,
   title,
+  selected = false,
+  onSelect,
   icon: Icon = Minus,
   expanded = true,
   onExpandedChange,
@@ -50,6 +55,11 @@ export function SectionRow({
   return (
     <Box
       data-testid="section-row"
+      data-selected={selected ? 'true' : 'false'}
+      onClick={(event) => {
+        if (event.target instanceof Element && event.target.closest('button, input, textarea, select, a')) return
+        onSelect?.()
+      }}
       data-level={normalizedLevel}
       data-expanded={expanded ? 'true' : 'false'}
       sx={[
@@ -57,6 +67,7 @@ export function SectionRow({
           display: 'flex', alignItems: 'center', minWidth: 0, flexShrink: 0,
           height, boxSizing: 'border-box', ml: `${leftMargin}px`, px: '12px', gap: '8px',
           bgcolor: backgroundColor, color: '#eeeeee',
+          boxShadow: selected ? 'inset 0 -1.5px 0 #00ff00' : undefined,
           fontSize: `${fontSize}px`, fontWeight: 800
         },
         ...(Array.isArray(sx) ? sx : [sx])
@@ -87,7 +98,15 @@ export function SectionRow({
         title={typeof title === 'string' ? title : undefined}
         sx={{ m: 0, minWidth: 0, fontSize: 'inherit', fontWeight: 'inherit', lineHeight: 1.5, color: 'inherit' }}
       >
-        {title}
+        {onSelect ? (
+          <ButtonBase type="button" onClick={onSelect} aria-pressed={selected}
+            aria-label={`${label}を選択`} data-testid="section-row-select"
+            sx={{ display: 'block', maxWidth: '100%', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+              textAlign: 'left', fontSize: 'inherit', fontWeight: 'inherit', lineHeight: 'inherit', color: 'inherit',
+              '&.Mui-focusVisible': { outline: '1px solid currentColor', outlineOffset: -1 } }}>
+            {title}
+          </ButtonBase>
+        ) : title}
       </Typography>
     </Box>
   )
