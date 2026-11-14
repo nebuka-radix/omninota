@@ -1,5 +1,5 @@
 import { useLayoutEffect, useRef, useState, type ReactNode } from 'react'
-import { Alert, Box, Button, CircularProgress, Menu, MenuItem, Tab, Tabs, Typography } from '@mui/material'
+import { Alert, Box, Button, CircularProgress, Tab, Tabs, Tooltip, Typography } from '@mui/material'
 import { useQuery } from '@tanstack/react-query'
 import { ArrowDownFromLine, ArrowUpFromLine, FolderKanban, Flag } from 'lucide-react'
 import { useDraftGuard } from '../features/drafts/DraftGuard'
@@ -82,7 +82,6 @@ function CompactTaskBrowser({ kind }: { kind: 'inbox' | 'project' }) {
   const projectsQuery = useQuery(projectListQueryOptions)
   const milestonesQuery = useQuery(milestoneListQueryOptions)
   const [expandedNodes, setExpandedNodes] = useState<ReadonlySet<string>>(new Set())
-  const [menuAnchor, setMenuAnchor] = useState<HTMLElement | null>(null)
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [announcement, setAnnouncement] = useState('')
   const [navigationError, setNavigationError] = useState<string | null>(null)
@@ -130,7 +129,6 @@ function CompactTaskBrowser({ kind }: { kind: 'inbox' | 'project' }) {
   const setAllExpanded = async (expand: boolean) => {
     if (busy.current) return
     busy.current = true
-    setMenuAnchor(null)
     try {
       if (!expand && !(await confirmLeave())) return
       setNavigationError(null)
@@ -215,23 +213,35 @@ function CompactTaskBrowser({ kind }: { kind: 'inbox' | 'project' }) {
     <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column', minHeight: 0, minWidth: 0 }}>
       {kind === 'project' && (
         <ShellSlot name="top-bar-controls">
-          <Button
-            size="small" aria-haspopup="menu"
-            aria-expanded={menuAnchor !== null}
-            aria-controls={menuAnchor ? 'compact-project-actions-menu' : undefined}
-            disabled={loading || error !== null || projects.length === 0}
-            onClick={(event) => setMenuAnchor(event.currentTarget)}
-            sx={{ minWidth: 0, px: 1, fontSize: 12, whiteSpace: 'nowrap' }}
-            data-testid="compact-project-actions-button"
-          >PROJECT操作</Button>
-          <Menu id="compact-project-actions-menu" anchorEl={menuAnchor} open={menuAnchor !== null} onClose={() => setMenuAnchor(null)}>
-            <MenuItem onClick={() => void setAllExpanded(false)} sx={{ gap: 2, fontSize: 12 }} data-testid="compact-project-collapse-all">
-              <ArrowUpFromLine size={16} aria-hidden />すべて折りたたむ
-            </MenuItem>
-            <MenuItem onClick={() => void setAllExpanded(true)} sx={{ gap: 2, fontSize: 12 }} data-testid="compact-project-expand-all">
-              <ArrowDownFromLine size={16} aria-hidden />すべて展開
-            </MenuItem>
-          </Menu>
+          <Box
+            role="group" aria-label="プロジェクト階層の操作"
+            sx={{ display: 'flex', alignItems: 'center', gap: 1, width: '100%', minWidth: 0 }}
+          >
+            <Tooltip title="すべて折りたたむ">
+              <span style={{ display: 'flex', flex: '1 1 0', minWidth: 0 }}>
+                <Button size="small" aria-label="すべて折りたたむ"
+                  disabled={loading || error !== null || projects.length === 0}
+                  onClick={() => void setAllExpanded(false)}
+                  data-testid="compact-project-collapse-all"
+                  sx={{ minWidth: 0, width: '100%', px: 0.5, gap: '4px', justifyContent: 'flex-start', fontSize: 11, whiteSpace: 'nowrap' }}>
+                  <ArrowUpFromLine size={16} aria-hidden style={{ flexShrink: 0 }} />
+                  <Box component="span" sx={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}>すべて折りたたむ</Box>
+                </Button>
+              </span>
+            </Tooltip>
+            <Tooltip title="すべて展開">
+              <span style={{ display: 'flex', flex: '1 1 0', minWidth: 0 }}>
+                <Button size="small" aria-label="すべて展開"
+                  disabled={loading || error !== null || projects.length === 0}
+                  onClick={() => void setAllExpanded(true)}
+                  data-testid="compact-project-expand-all"
+                  sx={{ minWidth: 0, width: '100%', px: 0.5, gap: '4px', justifyContent: 'flex-start', fontSize: 11, whiteSpace: 'nowrap' }}>
+                  <ArrowDownFromLine size={16} aria-hidden style={{ flexShrink: 0 }} />
+                  <Box component="span" sx={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}>すべて展開</Box>
+                </Button>
+              </span>
+            </Tooltip>
+          </Box>
         </ShellSlot>
       )}
       <Box role="status" aria-live="polite" sx={{ position: 'absolute', width: 1, height: 1, overflow: 'hidden', clip: 'rect(0 0 0 0)' }}>{announcement}</Box>
