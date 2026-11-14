@@ -13,7 +13,7 @@ import { useInlineTitleEdit } from './inline-title-edit'
 import { TaskRowMenu, useTaskDeletion } from './TaskDeletion'
 import { useFocusReturn, useTaskDue } from './TaskDue'
 import { useTaskEditDialog } from './TaskEditDialog'
-import type { TaskRowActions, TaskRowMode } from './TaskRow'
+import type { TaskRowActions, TaskRowMode } from '../../components/TaskRow'
 import {
   useAssignInboxTasksMutation,
   usePendingTaskIds,

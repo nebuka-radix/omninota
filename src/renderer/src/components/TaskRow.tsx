@@ -2,10 +2,10 @@ import type { MouseEvent as ReactMouseEvent, PointerEvent as ReactPointerEvent, 
 import { createPortal } from 'react-dom'
 import { Box, ButtonBase, Checkbox, Typography } from '@mui/material'
 import { AlertTriangle, CalendarPlus, Link2, MoreHorizontal, Star } from 'lucide-react'
-import { isTaskCompleted, type TaskDto } from '../../../../shared/contracts/tasks'
-import { vscodeColors } from '../../theme'
-import { dueLabelOf } from './due-format'
-import { InlineTitleInput, type InlineTitleEditController } from './inline-title-edit'
+import { isTaskCompleted, type TaskDto } from '../../../shared/contracts/tasks'
+import { vscodeColors } from '../theme'
+import { dueLabelOf } from '../features/tasks/due-format'
+import { InlineTitleInput, type InlineTitleEditController } from '../features/tasks/inline-title-edit'
 import { CompactTaskRow } from './CompactTaskRow'
 
 // タスクの行（Inbox の一覧・プロジェクトのマイルストンカード・Summary Review のセクションで共通）。

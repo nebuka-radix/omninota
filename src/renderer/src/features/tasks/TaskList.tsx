@@ -19,7 +19,7 @@ import { vscodeColors } from '../../theme'
 import { usePendingClick } from './pending-click'
 import { nearestRemaining, selectAll, selectOnly, selectRange, toggleSelection, EMPTY_SELECTION, type TaskSelection } from './selection'
 import type { TaskSortColumn } from './task-table'
-import { TaskRow, TASK_ROW_HEIGHT, taskRowHeight, taskOptionId, type TaskRowActions, type TaskRowMode } from './TaskRow'
+import { TaskRow, TASK_ROW_HEIGHT, taskRowHeight, taskOptionId, type TaskRowActions, type TaskRowMode } from '../../components/TaskRow'
 
 export { TASK_ROW_HEIGHT, taskOptionId }
 const PAGE_STEP = 10
