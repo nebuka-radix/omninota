@@ -95,11 +95,11 @@ function DetailPane({
   )
 }
 
-export function AppShell() {
+export function AppShell({ initialCompact = false }: { initialCompact?: boolean }) {
   const { settings, setDetailVisible } = useWorkspace()
   const { confirmLeave } = useDraftGuard()
   const pathname = useRouterState({ select: (state) => state.location.pathname })
-  const [compact, setCompact] = useState(false)
+  const [compact, setCompact] = useState(initialCompact)
   const [modeError, setModeError] = useState<string | null>(null)
   const switchingRef = useRef(false)
   const changeMode = async (next: boolean) => {

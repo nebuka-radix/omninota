@@ -34,12 +34,12 @@ export const DEFAULT_WINDOW_SIZE = { width: 1200, height: 760 } as const
 // - inactive: 自動テスト（GTD_TEST_UI=secondary）。指定位置に、フォーカスを奪わずに表示する（showInactive）
 export type WindowPresentation = { kind: 'normal' } | { kind: 'hidden' } | { kind: 'inactive'; bounds: Rectangle }
 
-export function createMainWindow(presentation: WindowPresentation = { kind: 'normal' }): BrowserWindow {
+export function createMainWindow(presentation: WindowPresentation = { kind: 'normal' }, restored?: { compact: boolean; bounds: Rectangle | undefined }): BrowserWindow {
   const testing = presentation.kind !== 'normal'
   const win = new BrowserWindow({
     title: APP_IDENTITY.displayName,
-    ...(presentation.kind === 'inactive' ? presentation.bounds : DEFAULT_WINDOW_SIZE),
-    minWidth: MIN_WINDOW_WIDTH,
+    ...(presentation.kind === 'inactive' ? presentation.bounds : restored?.bounds ?? DEFAULT_WINDOW_SIZE),
+    minWidth: restored?.compact ? 240 : MIN_WINDOW_WIDTH,
     minHeight: MIN_WINDOW_HEIGHT,
     show: false,
     backgroundColor: '#1e1e1e',

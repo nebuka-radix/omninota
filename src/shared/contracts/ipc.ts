@@ -129,6 +129,7 @@ export type IpcResult<T> = { ok: true; data: T } | { ok: false; error: IpcError 
 export type AppEnvironment = 'development' | 'production'
 
 export type AppInfo = {
+  compact?: boolean
   name: string
   version: string
   environment: AppEnvironment

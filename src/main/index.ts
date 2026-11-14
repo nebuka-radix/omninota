@@ -1,5 +1,6 @@
 import { readFileSync, realpathSync } from 'node:fs'
 import { tmpdir } from 'node:os'
+import { createWindowState } from './lifecycle/window-state'
 import { app, BrowserWindow, dialog, screen, session } from 'electron'
 import { APP_IDENTITY } from '../shared/app-identity'
 import { IPC_CHANNELS, type AppInfo } from '../shared/contracts/ipc'
@@ -113,6 +114,7 @@ const migrationsDir = resolveMigrationsDir({
   resourcesPath: process.resourcesPath
 })
 
+let windowState: ReturnType<typeof createWindowState> | null = null
 let mainWindow: BrowserWindow | null = null
 let database: AppDatabase | null = null
 
@@ -205,7 +207,12 @@ function startParentWatch(): void {
 function showMainWindow(): void {
   if (!mainWindow || mainWindow.isDestroyed()) {
     exitCoordinator.resetForNewWindow()
-    mainWindow = createMainWindow(windowPresentation)
+    if (!database) throw new Error('DBが初期化されていません')
+    windowState ??= createWindowState(createSettingsRepository(database), MIN_WINDOW_WIDTH)
+    const restoring = windowPresentation.kind === 'normal'
+    mainWindow = createMainWindow(windowPresentation, restoring ? { compact: windowState.compact, bounds: windowState.restoreBounds() } : undefined)
+    // 自動UIテストでは従来の起動サイズと表示方法を維持する。
+    if (restoring) windowState.attach(mainWindow)
     if (testConfig) {
       // 実行スクリプトが「表示されていない」「フォーカスを取っていない」「表示位置」を確認するためのログ
       const win = mainWindow
@@ -278,6 +285,7 @@ function initializeDatabase(): AppDatabase {
 
 function getAppInfo(): AppInfo {
   return {
+    compact: windowPresentation.kind === 'normal' ? windowState?.compact ?? false : false,
     name: APP_IDENTITY.displayName,
     version: app.getVersion(),
     environment: app.isPackaged ? 'production' : 'development',
@@ -349,12 +357,12 @@ if (!app.requestSingleInstanceLock()) {
       policy: { getWindow: () => mainWindow, isAllowedUrl: isAppUrl },
       getAppInfo,
     setCompact: (compact) => {
-      const win = mainWindow
-      if (!win || win.isDestroyed()) throw new Error('ウィンドウがありません')
-      win.setMinimumSize(compact ? 240 : MIN_WINDOW_WIDTH, MIN_WINDOW_HEIGHT)
-      if (!compact) {
-        const { width, height } = win.getBounds()
-        if (width < MIN_WINDOW_WIDTH) win.setSize(MIN_WINDOW_WIDTH, height)
+      if (windowPresentation.kind !== 'normal') {
+        if (!mainWindow || mainWindow.isDestroyed()) throw new Error('ウィンドウがありません')
+        mainWindow.setMinimumSize(compact ? 240 : MIN_WINDOW_WIDTH, MIN_WINDOW_HEIGHT)
+      } else {
+        if (!windowState) throw new Error('ウィンドウ設定が初期化されていません')
+        windowState.setCompact(compact)
       }
       return null
     },
