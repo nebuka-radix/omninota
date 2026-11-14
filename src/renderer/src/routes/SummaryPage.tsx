@@ -5,6 +5,7 @@ import { CalendarCheck, CheckCheck, ClockCheck, ClockExclamationPoint } from 'lu
 import type { SummaryReview } from '../../../shared/contracts/summary'
 import type { TaskDto } from '../../../shared/contracts/tasks'
 import { Page } from '../components/Page'
+import { useDayTaskDrag } from '../features/summary/use-day-task-drag'
 import { SectionRow } from '../components/SectionRow'
 import { useDraftGuard } from '../features/drafts/DraftGuard'
 import { ShellSlot } from '../components/ShellSlots'
@@ -82,6 +83,14 @@ export function SummaryPage({ compact = false, showQuickAdd = true }: {
     },
     [query.data, tasksQuery.data, excluded, compact]
   )
+  const dayDrag = useDayTaskDrag({
+    enabled: compact,
+    rows: sections.flatMap((section) => !compact || sectionExpanded[section.key] === false ? [] :
+      (summary?.[section.key] ?? []).map((task) => ({ task, section: section.key }))),
+    pendingIds: pendingTaskIds,
+    onMoved: (day) => setSectionExpanded((current) => ({ ...current, [day === 'today' ? 'todayItems' : 'tomorrowItems']: true })),
+    onAnnounce: setAnnouncement
+  })
   const total = summary ? compact ? summary.todayItems.length + summary.tomorrowItems.length + summary.overdueItems.length : summaryTotal(summary) : 0
 
   return (
@@ -103,6 +112,7 @@ export function SummaryPage({ compact = false, showQuickAdd = true }: {
         {announcement}
       </Box>
       {sectionError && <Alert severity="error" onClose={() => setSectionError(null)}>{sectionError}</Alert>}
+      {compact && dayDrag.error && <Alert severity="error" onClose={dayDrag.clearError}>{dayDrag.error}</Alert>}
       <Box sx={{ flexShrink: 0 }}>{rowActions.alerts}</Box>
       {query.isPending ? (
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }} role="status">
@@ -116,6 +126,7 @@ export function SummaryPage({ compact = false, showQuickAdd = true }: {
         </Alert>
       ) : (
         <Box
+          ref={dayDrag.containerRef}
           data-testid="summary-review"
           data-today={summary?.today}
           sx={{
@@ -142,9 +153,12 @@ export function SummaryPage({ compact = false, showQuickAdd = true }: {
                 component="section"
                 aria-labelledby={`summary-heading-${section.key}`}
                 data-section={section.key}
+                data-day-drop={compact && section.key === 'todayItems' ? 'today' : compact && section.key === 'tomorrowItems' ? 'tomorrow' : undefined}
                 data-testid="summary-section"
                 sx={{
                   gridRow: section.row,
+                  outline: compact && ((section.key === 'todayItems' && dayDrag.over === 'today') || (section.key === 'tomorrowItems' && dayDrag.over === 'tomorrow')) ? `2px solid ${vscodeColors.focusBorder}` : undefined,
+                  outlineOffset: '-2px',
                   flexShrink: compact ? 0 : undefined,
                   gridColumn: compact ? 1 : section.column,
                   display: 'flex',
@@ -201,6 +215,17 @@ export function SummaryPage({ compact = false, showQuickAdd = true }: {
                   <TaskList
                     variant="section"
                     rowMode="Standard"
+                    multiSelect={compact ? {
+                      selection: dayDrag.selection,
+                      onChange: dayDrag.changeSelection,
+                      onShowDetail: (id) => {
+                        setSelectedId(id)
+                        const task = tasksQuery.data?.find((item) => item.id === id)
+                        const anchor = document.getElementById(`task-option-${id}`)
+                        if (task && anchor) rowActions.actions.openEditor(task, anchor)
+                      }
+                    } : undefined}
+                    onRowDragStart={compact ? dayDrag.start : undefined}
                     maxVisibleRows={compact ? Math.max(1, items.length) : undefined}
                     tasks={items}
                     actions={rowActions.actions}
@@ -219,6 +244,7 @@ export function SummaryPage({ compact = false, showQuickAdd = true }: {
           })}
         </Box>
       )}
+      {compact && dayDrag.elements}
       {rowActions.elements}
     </Page>
   )

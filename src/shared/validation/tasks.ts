@@ -90,6 +90,10 @@ export const setTaskDueInputSchema = z.strictObject({
   ])
 })
 export const tasksSetDueArgsSchema = z.tuple([setTaskDueInputSchema])
+export const tasksSetDayManyArgsSchema = z.tuple([z.strictObject({
+  ids: taskIdListSchema,
+  day: z.enum(['today', 'tomorrow'])
+})])
 
 // お気に入り: 目的の状態（真偽値だけ。0 / 1 や文字列は受け付けない）
 export const setTaskFavoriteInputSchema = z.strictObject({

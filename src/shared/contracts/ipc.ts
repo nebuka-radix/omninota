@@ -27,6 +27,7 @@ import type {
   DeleteTasksResult,
   ReorderMilestoneTasksInput,
   SetTaskDueInput,
+  SetTasksDayInput,
   SetTaskFavoriteInput,
   SetTaskAssignmentInput,
   SetTaskCompletedInput,
@@ -49,6 +50,7 @@ export const IPC_CHANNELS = {
   tasksDeleteMany: 'tasks:delete-many',
   tasksReorderInMilestone: 'tasks:reorder-in-milestone',
   tasksSetDue: 'tasks:set-due',
+  tasksSetDayMany: 'tasks:set-day-many',
   tasksSetFavorite: 'tasks:set-favorite',
   summaryGet: 'summary:get',
   summaryToday: 'summary:today',
@@ -168,6 +170,7 @@ export type GtdApi = {
     reorderInMilestone: (input: ReorderMilestoneTasksInput) => Promise<IpcResult<TaskDto[]>>
     // 期限の設定・変更・解除（フェーズ6）。期限だけを更新し、保存後のタスクを返す
     setDue: (input: SetTaskDueInput) => Promise<IpcResult<TaskDto>>
+    setDayMany: (input: SetTasksDayInput) => Promise<IpcResult<TaskDto[]>>
     // お気に入りの設定・解除。お気に入りだけを更新し、保存後のタスクを返す
     setFavorite: (input: SetTaskFavoriteInput) => Promise<IpcResult<TaskDto>>
   }

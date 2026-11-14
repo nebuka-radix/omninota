@@ -99,6 +99,8 @@ export type TaskDto = {
 // （画面を開いたまま日付が変わっても、古い日付を保存しない）。date は実在する暦日（Mainで検証）。過去の日付も可
 export type TaskDueChange = { kind: 'today' } | { kind: 'tomorrow' } | { kind: 'date'; date: string } | { kind: 'clear' }
 
+export type SetTasksDayInput = { ids: string[]; day: 'today' | 'tomorrow' }
+
 export type SetTaskDueInput = {
   id: string
   due: TaskDueChange

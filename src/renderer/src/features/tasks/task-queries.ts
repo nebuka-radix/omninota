@@ -7,6 +7,7 @@ import type {
   DeleteTasksInput,
   ReorderMilestoneTasksInput,
   SetTaskDueInput,
+  SetTasksDayInput,
   SetTaskAssignmentInput,
   SetTaskCompletedInput,
   TaskDto,
@@ -33,7 +34,8 @@ export const taskMutationKeys = {
   deleteMany: [...taskKeys.all, 'delete-many'] as const,
   reorder: [...taskKeys.all, 'reorder'] as const,
   // フェーズ6: 期限
-  setDue: [...taskKeys.all, 'set-due'] as const
+  setDue: [...taskKeys.all, 'set-due'] as const,
+  setDayMany: [...taskKeys.all, 'set-day-many'] as const
 }
 
 // タスク一覧の正本はこのQuery（全件）。Inbox・プロジェクトの一覧、詳細、件数はすべてここから導出する。
@@ -166,6 +168,20 @@ export function useReorderMilestoneTasksMutation() {
 // 期限の設定・変更・解除（フェーズ6）。同じタスクの保存キューに並べる（タイトルの保存・所属の変更・削除と順番に実行する。
 // 削除の後に届いても Main が NOT_FOUND にし、対象を作り直さない）。成功した応答だけで一覧の行を置き換える。
 // Summary Review の取得結果は query-client の MutationCache で古いものとして扱う
+export function useSetTasksDayMutation() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationKey: taskMutationKeys.setDayMany,
+    mutationFn: (input: SetTasksDayInput) => taskSaveQueue.runMany(input.ids, () => unwrapIpc(window.gtd.tasks.setDayMany(input))),
+    onSuccess: (saved) => {
+      const byId = new Map(saved.map((task) => [task.id, task]))
+      queryClient.setQueryData<TaskDto[]>(taskKeys.list(), (tasks) => tasks?.map((task) => byId.get(task.id) ?? task))
+      void queryClient.invalidateQueries({ queryKey: ['summary'] })
+      if (queryClient.isFetching({ queryKey: taskKeys.list() }) > 0) void queryClient.invalidateQueries({ queryKey: taskKeys.list() })
+    }
+  })
+}
+
 export function useSetTaskDueMutation() {
   const queryClient = useQueryClient()
   return useMutation({
@@ -203,7 +219,8 @@ const TASK_UPDATE_KEYS: readonly unknown[] = [
   taskMutationKeys.assignFromInbox[1],
   taskMutationKeys.deleteMany[1],
   taskMutationKeys.reorder[1],
-  taskMutationKeys.setDue[1]
+  taskMutationKeys.setDue[1],
+  taskMutationKeys.setDayMany[1]
 ]
 
 function isTaskUpdateKey(key: readonly unknown[] | undefined): boolean {

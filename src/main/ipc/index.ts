@@ -25,6 +25,7 @@ import {
   tasksDeleteManyArgsSchema,
   tasksReorderInMilestoneArgsSchema,
   tasksSetDueArgsSchema,
+  tasksSetDayManyArgsSchema,
   summaryGetArgsSchema,
   tasksSetFavoriteArgsSchema,
   tasksListArgsSchema,
@@ -168,6 +169,12 @@ export function registerIpcHandlers(deps: {
       policy,
       run: ([input]) => taskService.reorderInMilestone(input)
     })
+  )
+
+  ipcMain.handle(
+    IPC_CHANNELS.tasksSetDayMany,
+    createIpcHandler({ channel: IPC_CHANNELS.tasksSetDayMany, argsSchema: tasksSetDayManyArgsSchema, policy,
+      run: ([input]) => taskService.setDayMany(input) })
   )
 
   // フェーズ6: 期限の設定・変更・解除と Summary Review
