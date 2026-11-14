@@ -120,6 +120,7 @@ export function TaskList({
   actions,
   variant = 'table',
   rowMode = 'Standard',
+  parentVisible = true,
   listLabel,
   cardKey,
   emptyLabel,
@@ -142,6 +143,7 @@ export function TaskList({
   actions: TaskRowActions
   variant?: 'table' | 'card' | 'section'
   rowMode?: TaskRowMode
+  parentVisible?: boolean
   // 一覧の読み上げ名（省略時は「タスク一覧（N件表示 / 全N件）」）
   listLabel?: string
   // カードの識別（隣のカードへの移動で使う）
@@ -721,6 +723,7 @@ export function TaskList({
                   key={task.id}
                   task={task}
                   mode={rowMode}
+                  parentVisible={parentVisible}
                   top={item.start}
                   listId={listId}
                   controlsLayer={controlsLayer}

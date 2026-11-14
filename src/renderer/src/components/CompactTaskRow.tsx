@@ -18,7 +18,7 @@ const titleStyle = {
   px: 0.5, cursor: 'pointer', overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis'
 } as const
 
-export function CompactTaskRow({ task, top, listId, controlsLayer, today, actions, selected, active, pending, dimmed, handle,
+export function CompactTaskRow({ parentVisible = true, task, top, listId, controlsLayer, today, actions, selected, active, pending, dimmed, handle,
   onRowPointerDown, onRowClick, onRowContextMenu, onTitleClick, onTitleDoubleClick, onInlineDone }: TaskRowProps) {
   const completed = isTaskCompleted(task)
   const favorite = actions.isFavorite(task)
@@ -70,7 +70,7 @@ export function CompactTaskRow({ task, top, listId, controlsLayer, today, action
         onClick={(event) => actions.openMenu(task, event.currentTarget, 'Compact')} sx={icon}>
         <MoreHorizontal size={14} aria-hidden />
       </ButtonBase>
-      <Box aria-hidden sx={{ ...assignmentStyle, visibility: 'hidden' }}>{assignment}</Box>
+      <Box aria-hidden sx={{ ...assignmentStyle, visibility: 'hidden' }}>{parentVisible ? assignment : null}</Box>
     </Box>
   )
   return <>
@@ -93,7 +93,7 @@ export function CompactTaskRow({ task, top, listId, controlsLayer, today, action
         sx={{ ...titleStyle, visibility: editing ? 'hidden' : 'visible', textDecoration: completed ? 'line-through' : 'none',
           color: completed ? 'text.secondary' : 'text.primary', '&:hover': { textDecoration: 'underline' } }}>{task.title}</Typography>
       <span aria-hidden />
-      <Box component="span" aria-hidden title={assignment ?? undefined} data-testid="task-assignment" sx={assignmentStyle}>{assignment}</Box>
+      <Box component="span" aria-hidden title={assignment ?? undefined} data-testid="task-assignment" sx={assignmentStyle}>{parentVisible ? assignment : null}</Box>
     </Box>
     {controlsLayer && createPortal(controls, controlsLayer)}
   </>

@@ -67,6 +67,8 @@ const stop = (event: SyntheticEvent) => event.stopPropagation()
 export type TaskRowMode = 'Standard' | 'Compact'
 export type TaskRowProps = {
   mode?: TaskRowMode
+  /** 所属するプロジェクト／マイルストン名の表示。既定はtrue。 */
+  parentVisible?: boolean
   task: TaskDto
   // 行の上端（仮想リスト内の位置）
   top: number
@@ -97,6 +99,7 @@ export type TaskRowProps = {
 
 export function TaskRow(props: TaskRowProps) {
   const {
+  parentVisible = true,
   task,
   top,
   listId,
@@ -260,7 +263,7 @@ export function TaskRow(props: TaskRowProps) {
         >
           <MoreHorizontal size={14} aria-hidden />
         </ButtonBase>
-        {assignment && (
+        {parentVisible && assignment && (
           // 所属（読み上げは行の名前に含めるため、ここは読み上げない）。操作の領域を先に確保し、残りの幅で省略表示する
           <Box
             component="span"

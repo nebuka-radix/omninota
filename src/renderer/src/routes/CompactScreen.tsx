@@ -1,7 +1,7 @@
 import { useRef, useState, type ReactNode } from 'react'
-import { Alert, Box, ButtonBase, CircularProgress, Tab, Tabs, TextField, Typography } from '@mui/material'
+import { Alert, Box, CircularProgress, Tab, Tabs, Typography } from '@mui/material'
 import { useQuery } from '@tanstack/react-query'
-import { ChevronDown, ChevronRight } from 'lucide-react'
+import { FolderKanban, Flag } from 'lucide-react'
 import { useDraftGuard } from '../features/drafts/DraftGuard'
 import { projectListQueryOptions } from '../features/projects/project-queries'
 import { sortProjects } from '../features/projects/project-order'
@@ -14,6 +14,7 @@ import { useTaskRowActions } from '../features/tasks/use-task-row-actions'
 import type { TaskDto } from '../../../shared/contracts/tasks'
 import { vscodeColors } from '../theme'
 import { SummaryPage } from './SummaryPage'
+import { SectionRow } from '../components/SectionRow'
 
 type CompactTab = 'day' | 'inbox' | 'project'
 const EMPTY_TASKS: TaskDto[] = []
@@ -53,7 +54,6 @@ function CompactTaskBrowser({ kind }: { kind: 'inbox' | 'project' }) {
   const tasksQuery = useQuery(taskListQueryOptions)
   const projectsQuery = useQuery(projectListQueryOptions)
   const milestonesQuery = useQuery(milestoneListQueryOptions)
-  const [projectId, setProjectId] = useState('')
   const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(new Set())
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [announcement, setAnnouncement] = useState('')
@@ -65,81 +65,102 @@ function CompactTaskBrowser({ kind }: { kind: 'inbox' | 'project' }) {
   const rowActions = useTaskRowActions({ tasks: allTasks, onAnnounce: setAnnouncement })
   const projects = sortProjects(projectsQuery.data ?? []).filter((project) => !project.done)
   const projectLabels = disambiguatedNames(projects)
-  // 保存対象ではないため、未選択・削除された場合は先頭のプロジェクトを選ぶ。
-  const selectedProject = projects.find((item) => item.id === projectId) ?? projects[0]
-  const selectedProjectId = selectedProject?.id ?? ''
   const inboxTasks = allTasks.filter((task) => task.projectId === null && task.doneOn === null).sort(compareManualOrder)
-  const ownTasks = allTasks.filter((task) => task.projectId === selectedProjectId && task.doneOn === null).sort(compareManualOrder)
-  const groups = buildTaskGroups(ownTasks, (milestonesQuery.data ?? []).filter((item) => item.projectId === selectedProjectId))
+  const tasksByProject = new Map<string, TaskDto[]>()
+  for (const task of allTasks) {
+    if (task.projectId === null || task.doneOn !== null) continue
+    const list = tasksByProject.get(task.projectId)
+    if (list) list.push(task)
+    else tasksByProject.set(task.projectId, [task])
+  }
+  const milestoneRows = milestonesQuery.data ?? []
+  const milestonesByProject = new Map<string, typeof milestoneRows>()
+  for (const milestone of milestoneRows) {
+    if (milestone.projectId === null) continue
+    const list = milestonesByProject.get(milestone.projectId)
+    if (list) list.push(milestone)
+    else milestonesByProject.set(milestone.projectId, [milestone])
+  }
 
-  const guarded = async (action: () => void) => {
+  const toggle = async (key: string) => {
     if (busy.current) return
     busy.current = true
     try {
-      if (await confirmLeave()) { setNavigationError(null); action() }
+      const closing = !collapsed.has(key)
+      if (closing && !(await confirmLeave())) return
+      setNavigationError(null)
+      setCollapsed((current) => {
+        const next = new Set(current)
+        if (next.has(key)) next.delete(key)
+        else next.add(key)
+        return next
+      })
     } catch (cause) {
       setNavigationError(cause instanceof Error ? cause.message : '表示を変更できませんでした')
     } finally { busy.current = false }
   }
-  const toggle = (id: string) => {
-    const apply = () => setCollapsed((current) => {
-      const next = new Set(current)
-      if (next.has(id)) next.delete(id)
-      else next.add(id)
-      return next
-    })
-    if (collapsed.has(id)) apply()
-    else void guarded(apply)
-  }
-  const renderList = (tasks: readonly TaskDto[], label: string, fixed = false) => (
-    <TaskList variant="section" rowMode="Compact" tasks={tasks} actions={rowActions.actions} listLabel={label}
+  const renderList = (tasks: readonly TaskDto[], label: string, projectTree = false) => (
+    <TaskList variant="section" rowMode="Compact" parentVisible={!projectTree}
+      tasks={tasks} actions={rowActions.actions} listLabel={label}
       totalCount={tasks.length} selectedTaskId={selectedId} pendingTaskIds={pendingTaskIds}
-      resetScrollKey={`${kind}:${selectedProjectId}`} onSelect={setSelectedId}
+      resetScrollKey={kind} onSelect={setSelectedId}
       onRequestDelete={(task) => rowActions.deleteTasks([task])}
-      maxVisibleRows={fixed ? 6 : undefined} />
+      maxVisibleRows={projectTree ? Math.max(1, tasks.length) : undefined} />
   )
   const loading = tasksQuery.isPending || (kind === 'project' && (projectsQuery.isPending || milestonesQuery.isPending))
   const error = tasksQuery.error ?? (kind === 'project' ? projectsQuery.error ?? milestonesQuery.error : null)
   let body: ReactNode
   if (error) body = <Alert severity="error">読み込めませんでした: {error.message}</Alert>
   else if (loading) body = <Box role="status" sx={{ p: 2 }}><CircularProgress size={16} /> 読み込み中…</Box>
-  else if (kind === 'inbox') body = inboxTasks.length > 0 ? renderList(inboxTasks, `Inbox（${inboxTasks.length}件）`) : <Typography sx={{ p: 2, fontSize: 12 }}>Inboxに未完了のタスクはありません</Typography>
+  else if (kind === 'inbox') body = inboxTasks.length > 0
+    ? renderList(inboxTasks, `Inbox（${inboxTasks.length}件）`)
+    : <Typography sx={{ p: 2, fontSize: 12 }}>Inboxに未完了のタスクはありません</Typography>
   else body = (
-    <>
-      <Box sx={{ p: 2, flexShrink: 0 }}>
-        <TextField select fullWidth size="small" label="プロジェクト" value={selectedProjectId}
-          disabled={projects.length === 0} slotProps={{ select: { native: true }, inputLabel: { shrink: true } }}
-          onChange={(event) => {
-            const next = event.target.value
-            void guarded(() => { setProjectId(next); setSelectedId(null); setCollapsed(new Set()) })
-          }}>
-          {projects.length === 0 ? <option value="">未完了のプロジェクトがありません</option> : projects.map((project) => (
-            <option key={project.id} value={project.id}>{projectLabels.get(project.id) ?? project.name}</option>
-          ))}
-        </TextField>
-      </Box>
-      <Box component="ul" aria-label="マイルストンとタスク" sx={{ m: 0, p: 0, listStyle: 'none', flex: 1, minHeight: 0, overflowY: 'auto', overflowX: 'hidden' }}>
-        {groups.length === 0 && <Box component="li" sx={{ p: 2, fontSize: 12 }}>マイルストンはありません</Box>}
-        {groups.map((group) => {
-          const expanded = !collapsed.has(group.milestoneId)
-          const Chevron = expanded ? ChevronDown : ChevronRight
-          return (
-            <Box component="li" key={group.key} sx={{ minWidth: 0, borderBottom: `1px solid ${vscodeColors.border}` }}>
-              <ButtonBase aria-expanded={expanded} aria-controls={`compact-milestone-${group.milestoneId}`}
-                onClick={() => toggle(group.milestoneId)}
-                sx={{ width: '100%', display: 'flex', justifyContent: 'flex-start', minHeight: 30, gap: 1, px: 1, fontSize: 12 }}>
-                <Chevron size={14} aria-hidden style={{ flexShrink: 0 }} />
-                <Typography component="span" noWrap title={group.label} sx={{ fontSize: 12, minWidth: 0 }}>{group.label}</Typography>
-                <Typography component="span" sx={{ ml: 'auto', flexShrink: 0, fontSize: 11 }}>{group.tasks.length} 件</Typography>
-              </ButtonBase>
-              <Box id={`compact-milestone-${group.milestoneId}`} hidden={!expanded} sx={{ pl: 2, minWidth: 0 }}>
-                {expanded && (group.tasks.length > 0 ? renderList(group.tasks, `${group.label}のタスク`, true) : <Typography sx={{ p: 2, fontSize: 12, color: 'text.secondary' }}>未完了のタスクはありません</Typography>)}
-              </Box>
+    <Box component="ul" aria-label="プロジェクト・マイルストン・タスク" data-testid="compact-project-tree"
+      sx={{ m: 0, p: 0, listStyle: 'none', flex: 1, minHeight: 0, minWidth: 0, overflowY: 'auto', overflowX: 'hidden' }}>
+      {projects.length === 0 && <Box component="li" sx={{ p: 2, fontSize: 12 }}>未完了のプロジェクトがありません</Box>}
+      {projects.map((project) => {
+        const projectKey = `project:${project.id}`
+        const projectExpanded = !collapsed.has(projectKey)
+        const projectLabel = projectLabels.get(project.id) ?? project.name
+        const projectTitleId = `compact-project-title-${project.id}`
+        const projectContentId = `compact-project-content-${project.id}`
+        const groups = buildTaskGroups(
+          [...(tasksByProject.get(project.id) ?? [])].sort(compareManualOrder),
+          milestonesByProject.get(project.id) ?? []
+        )
+        return (
+          <Box component="li" key={project.id} sx={{ minWidth: 0 }}>
+            <SectionRow level={0} title={projectLabel} titleId={projectTitleId} icon={FolderKanban}
+              expanded={projectExpanded} onExpandedChange={() => void toggle(projectKey)} controlsId={projectContentId} />
+            <Box id={projectContentId} hidden={!projectExpanded}>
+              {projectExpanded && (
+                <Box component="ul" aria-labelledby={projectTitleId} sx={{ listStyle: 'none', m: 0, p: 0 }}>
+                  {groups.length === 0 && <Box component="li" sx={{ pl: '36px', py: 1, fontSize: 12, color: 'text.secondary' }}>マイルストンはありません</Box>}
+                  {groups.map((group) => {
+                    const milestoneKey = `milestone:${group.milestoneId}`
+                    const milestoneExpanded = !collapsed.has(milestoneKey)
+                    const titleId = `compact-milestone-title-${group.milestoneId}`
+                    const contentId = `compact-milestone-content-${group.milestoneId}`
+                    return (
+                      <Box component="li" key={group.key} sx={{ minWidth: 0 }}>
+                        <SectionRow level={1} title={group.label} titleId={titleId} icon={Flag}
+                          expanded={milestoneExpanded} onExpandedChange={() => void toggle(milestoneKey)} controlsId={contentId} />
+                        <Box id={contentId} hidden={!milestoneExpanded} sx={{ pl: '36px', minWidth: 0 }}>
+                          {milestoneExpanded && (group.tasks.length > 0
+                            ? renderList(group.tasks, `${projectLabel} / ${group.label}の未完了タスク`, true)
+                            : <Typography sx={{ py: 1, px: 1, fontSize: 12, color: 'text.secondary' }}>未完了のタスクはありません</Typography>)}
+                        </Box>
+                      </Box>
+                    )
+                  })}
+                </Box>
+              )}
             </Box>
-          )
-        })}
-      </Box>
-    </>
+          </Box>
+        )
+      })}
+    </Box>
   )
   return (
     <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column', minHeight: 0, minWidth: 0 }}>
