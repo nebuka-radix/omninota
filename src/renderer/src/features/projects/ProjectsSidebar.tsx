@@ -18,7 +18,7 @@ import { compareFavoriteProjects, groupProjects } from './project-order'
 import { ProjectFavoriteButton } from './ProjectFavoriteButton'
 import { projectListQueryOptions } from './project-queries'
 
-// Projectの左サイドバー: 未完了のプロジェクト一覧と、最下段の「NEW PROJECT」（フェーズ5.5。区分の廃止はフェーズ5.8）。
+// PROJECT配下: 先頭にNEW PROJECTを固定し、その下の未完了プロジェクト一覧だけをスクロールする。
 // - 旧来の名前入力欄と＋ボタンは廃止した。NEW PROJECT はメインパネルに新規プロジェクトの編集画面を開く（DBにはまだ作らない）。
 // - プロジェクトの選択・NEW PROJECT はルートの変更（未保存の編集があれば、遷移の前に既存の確認が出る）。
 function NewProjectItem({ pathname }: { pathname: string }) {
@@ -34,7 +34,7 @@ function NewProjectItem({ pathname }: { pathname: string }) {
         rememberNewProjectReturn(pathname)
         void navigate({ to: NEW_PROJECT_PATH })
       }}
-      sx={{ px: 4, gap: 1.5, mt: 1, minWidth: 0 }}
+      sx={{ px: 4, gap: 1.5, mt: 0, minWidth: 0 }}
     >
       <Plus size={14} aria-hidden />
       <ListItemText
@@ -113,12 +113,13 @@ export function ProjectsSidebar({ pathname }: { pathname: string }) {
   }
 
   return (
-    <>
-      {body}
-      {/* 一覧の後、Project配下の最下段に置く（0件・読み込み失敗時も表示） */}
-      <List dense disablePadding aria-label="プロジェクトの作成">
+    <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0, overflow: 'hidden' }}>
+      <List dense disablePadding aria-label="プロジェクトの作成" sx={{ flexShrink: 0 }}>
         <NewProjectItem pathname={pathname} />
       </List>
-    </>
+      <Box sx={{ flex: 1, minHeight: 0, overflowY: 'auto', overflowX: 'hidden', overscrollBehavior: 'contain' }}>
+        {body}
+      </Box>
+    </Box>
   )
 }

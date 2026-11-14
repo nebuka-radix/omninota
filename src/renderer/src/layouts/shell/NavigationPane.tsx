@@ -1,11 +1,10 @@
 import { useState, type ReactNode } from 'react'
-import { Box, ButtonBase, IconButton, Tooltip, Typography } from '@mui/material'
+import { Box, ButtonBase, Typography } from '@mui/material'
 import { useQuery } from '@tanstack/react-query'
 import { useNavigate } from '@tanstack/react-router'
 import { ChevronDown, ChevronRight } from 'lucide-react'
-import { projectIdFromRoute } from '../../../../shared/contracts/workspace'
 import { ProjectsSidebar } from '../../features/projects/ProjectsSidebar'
-import { projectListQueryOptions } from '../../features/projects/project-queries'
+import { NotesSidebar } from '../../features/notes/NotesSidebar'
 import { taskListQueryOptions } from '../../features/tasks/task-queries'
 import { mergeSummary } from '../../features/summary/summary-merge'
 import { summaryQueryOptions } from '../../features/summary/summary-queries'
@@ -106,60 +105,60 @@ function useNavigationBadges(): { summaryBadges: NavBadge[]; inboxBadges: NavBad
   return { summaryBadges, inboxBadges }
 }
 
+function NavigationSection({ label, expanded, active, controlsId, onToggle }: {
+  label: string
+  expanded: boolean
+  active: boolean
+  controlsId: string
+  onToggle: () => void
+}) {
+  const Icon = expanded ? ChevronDown : ChevronRight
+  return (
+    <ButtonBase onClick={onToggle} aria-label={label} aria-expanded={expanded} aria-controls={controlsId}
+      sx={{ width: '100%', height: 32, minHeight: 32, flexShrink: 0, justifyContent: 'flex-start',
+        gap: 2, px: 3, minWidth: 0, color: active ? vscodeColors.foreground : 'text.secondary',
+        bgcolor: active ? vscodeColors.listActiveSelection : 'transparent',
+        '&:hover': { bgcolor: active ? vscodeColors.listActiveSelection : vscodeColors.listHover } }}>
+      <Icon size={16} strokeWidth={1.75} aria-hidden style={{ flexShrink: 0 }} />
+      <Typography component="span" noWrap sx={{ fontSize: 13, fontWeight: 600, minWidth: 0 }}>{label}</Typography>
+    </ButtonBase>
+  )
+}
+
 export function NavigationPane({ pathname }: { pathname: string }) {
   const navigate = useNavigate()
   const screen = screenOf(pathname)
   const [projectsOpen, setProjectsOpen] = useState(false)
-  const projects = useQuery(projectListQueryOptions)
-  const selectedProjectId = projectIdFromRoute(pathname)
-  // 完了済みのプロジェクトはサイドバーに表示しないため、折りたたみ中の「選択中」にも出さない（フェーズ5.8）
-  const selectedProject = projects.data?.find((project) => project.id === selectedProjectId && !project.done)
+  const [notesOpen, setNotesOpen] = useState(pathname === '/notes')
   const { summaryBadges, inboxBadges } = useNavigationBadges()
-
   return (
-    <Box
-      component="nav"
-      aria-label="ナビゲーション"
-      sx={{ height: '100%', display: 'flex', flexDirection: 'column', minWidth: 0 }}
-      data-testid="navigation"
-    >
+    <Box component="nav" aria-label="ナビゲーション" data-testid="navigation"
+      sx={{ height: '100%', minHeight: 0, display: 'flex', flexDirection: 'column', minWidth: 0, overflow: 'hidden' }}>
       <PaneHeader id="navigation-title" title="GTD" />
-      <Box sx={{ flex: 1, minHeight: 0, overflowY: 'auto', overflowX: 'hidden', pb: 2 }}>
-        {/* Summary Review（フェーズ6）は Inbox の直上 */}
-        <NavItem screen="summary" active={screen === 'summary'} badges={summaryBadges} onClick={() => void navigate({ to: '/summary' })} />
-        <NavItem screen="inbox" active={screen === 'inbox'} badges={inboxBadges} onClick={() => void navigate({ to: '/inbox' })} />
-        <NavItem
-          screen="projects"
-          active={pathname === '/projects'}
-          onClick={() => void navigate({ to: '/projects' })}
-          trailing={
-            <Tooltip title={projectsOpen ? 'プロジェクト一覧を折りたたむ' : 'プロジェクト一覧を表示'}>
-              <IconButton
-                aria-label={projectsOpen ? 'プロジェクト一覧を折りたたむ' : 'プロジェクト一覧を表示'}
-                aria-expanded={projectsOpen}
-                aria-controls="navigation-projects"
-                onClick={() => setProjectsOpen((open) => !open)}
-                sx={{ color: 'text.secondary', mr: 1, flexShrink: 0 }}
-              >
-                {projectsOpen ? <ChevronDown size={14} aria-hidden /> : <ChevronRight size={14} aria-hidden />}
-              </IconButton>
-            </Tooltip>
-          }
-        />
-        <Box id="navigation-projects" sx={{ pt: 1 }}>
-          {projectsOpen ? (
-            <ProjectsSidebar pathname={pathname} />
-          ) : (
-            selectedProject && (
-              // 折りたたみ中も、選択中のプロジェクトは分かるようにする
-              <Typography variant="body2" noWrap sx={{ px: 5, py: 0.5, fontSize: 12 }} aria-current="page" data-testid="nav-selected-project">
-                選択中: {selectedProject.name}
-              </Typography>
-            )
-          )}
+      <Box sx={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+        <Box sx={{ flexShrink: 0 }}>
+          <NavItem screen="summary" active={screen === 'summary'} badges={summaryBadges} onClick={() => void navigate({ to: '/summary' })} />
+          <NavItem screen="inbox" active={screen === 'inbox'} badges={inboxBadges} onClick={() => void navigate({ to: '/inbox' })} />
         </Box>
-        <NavItem screen="notes" active={screen === 'notes'} onClick={() => void navigate({ to: '/notes' })} />
-        <Box sx={{ mt: 2, borderTop: `1px solid ${vscodeColors.border}`, pt: 1 }}>
+        <Box sx={{ flex: projectsOpen ? '1 1 0px' : '0 0 auto', minHeight: projectsOpen ? 64 : 32,
+          display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+          <NavigationSection label={SCREENS.projects.label} active={screen === 'projects'} expanded={projectsOpen}
+            controlsId="navigation-projects" onToggle={() => setProjectsOpen((open) => !open)} />
+          <Box id="navigation-projects" hidden={!projectsOpen}
+            sx={{ display: projectsOpen ? 'flex' : 'none', flex: 1, minHeight: 0, flexDirection: 'column', overflow: 'hidden' }}>
+            <ProjectsSidebar pathname={pathname} />
+          </Box>
+        </Box>
+        <Box sx={{ flex: notesOpen ? '1 1 0px' : '0 0 auto', minHeight: notesOpen ? 64 : 32,
+          display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+          <NavigationSection label={SCREENS.notes.label} active={screen === 'notes'} expanded={notesOpen}
+            controlsId="navigation-notes" onToggle={() => setNotesOpen((open) => !open)} />
+          <Box id="navigation-notes" hidden={!notesOpen}
+            sx={{ display: notesOpen ? 'flex' : 'none', flex: 1, minHeight: 0, flexDirection: 'column', overflow: 'hidden' }}>
+            <NotesSidebar pathname={pathname} expanded={notesOpen} />
+          </Box>
+        </Box>
+        <Box sx={{ flexShrink: 0, mt: 2, borderTop: `1px solid ${vscodeColors.border}`, pt: 1 }}>
           <NavItem screen="settings" active={screen === 'settings'} onClick={() => void navigate({ to: '/settings' })} />
         </Box>
       </Box>

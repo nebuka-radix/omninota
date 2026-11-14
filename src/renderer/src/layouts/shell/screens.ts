@@ -5,11 +5,11 @@ import { CalendarCheck, FolderKanban, Inbox, NotebookPen, Settings, type LucideI
 export type ScreenId = 'summary' | 'inbox' | 'projects' | 'notes' | 'settings'
 
 export const SCREENS: Record<ScreenId, { label: string; icon: LucideIcon; path: '/summary' | '/inbox' | '/projects' | '/notes' | '/settings' }> = {
-  summary: { label: 'Summary Review', icon: CalendarCheck, path: '/summary' },
-  inbox: { label: 'Inbox', icon: Inbox, path: '/inbox' },
-  projects: { label: 'Project', icon: FolderKanban, path: '/projects' },
-  notes: { label: 'Note', icon: NotebookPen, path: '/notes' },
-  settings: { label: '設定', icon: Settings, path: '/settings' }
+  summary: { label: 'SUMMARY REVIEW', icon: CalendarCheck, path: '/summary' },
+  inbox: { label: 'INBOX', icon: Inbox, path: '/inbox' },
+  projects: { label: 'PROJECT', icon: FolderKanban, path: '/projects' },
+  notes: { label: 'NOTE', icon: NotebookPen, path: '/notes' },
+  settings: { label: 'SETTINGS', icon: Settings, path: '/settings' }
 }
 
 export const SCREEN_ORDER: readonly ScreenId[] = ['summary', 'inbox', 'projects', 'notes', 'settings']

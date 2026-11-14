@@ -2,6 +2,7 @@ import { Box, CircularProgress } from '@mui/material'
 import { useQuery } from '@tanstack/react-query'
 import { DEFAULT_WORKSPACE_SETTINGS } from '../../../shared/contracts/workspace'
 import { DraftGuardProvider } from '../features/drafts/DraftGuard'
+import { NotesProvider } from '../features/notes/NotesContext'
 import { workspaceSettingsQueryOptions } from '../features/workspace/workspace-queries'
 import { WorkspaceProvider } from '../features/workspace/WorkspaceContext'
 import { AppShell } from './shell/AppShell'
@@ -26,7 +27,7 @@ export function AppFrame() {
   return (
     <WorkspaceProvider initialSettings={loaded ? workspace.data : DEFAULT_WORKSPACE_SETTINGS} persistenceEnabled={loaded}>
       <DraftGuardProvider>
-        <AppShell initialCompact={appInfo.data?.compact ?? false} />
+        <NotesProvider><AppShell initialCompact={appInfo.data?.compact ?? false} /></NotesProvider>
       </DraftGuardProvider>
     </WorkspaceProvider>
   )

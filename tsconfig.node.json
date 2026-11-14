@@ -44,6 +44,8 @@
     "src/renderer/src/features/summary/summary-merge.ts",
     "src/renderer/src/features/projects/project-tree-display.ts",
     "src/renderer/src/components/monaco-editor/markdown-tables.ts",
-    "src/renderer/src/components/monaco-editor/preview-layout.ts"
+    "src/renderer/src/components/monaco-editor/preview-layout.ts",
+    "src/renderer/src/layouts/shell/screens.ts",
+    "src/renderer/src/features/notes/note-list-scroll.ts"
   ]
 }

@@ -2,18 +2,18 @@
 
 - Application sidebar: Project starts collapsed. Note menu follows the Project area.
 - /notes is a workspace route and can be restored on next launch.
-- The main panel contains a separate note list and a note editor.
+- The main sidebar NOTE section contains the note list. The main panel contains only the selected editor.
 - No selection on entering: MonacoEditor is not mounted until a note is selected.
-- + New Note immediately creates and selects an active record named New Note.
+- + NEW NOTE in the main sidebar immediately creates and selects an active record named New Note, then begins inline naming.
 - List order: favorite DESC, updated_on DESC, id DESC (tie-breaker).
 - Star button toggles favorite; favorite uses yellow fill, others have no fill.
 - Inline list rename (F2) is limited to 96 UTF-16 code units by the UI/IPC and must not be blank.
 - Body uses MonacoEditor; save button / Cmd+S save formatted description. Name is saved separately by inline rename.
 - Unsaved notes are registered with DraftGuard for selection, navigation, mode change and exit.
-- Note list width is drag-resizable, stored in app_settings under noteSidebarWidth.
-  Default 220px, allowed 140–480px. Arrow keys change 10px; Home/End set limits.
+- The internal note sidebar/divider is no longer displayed. The existing main sidebar width
+  persistence is used; the legacy noteSidebarWidth preference is retained but not read by this UI.
 - Window resize can temporarily reduce visible width without changing the saved preference.
-- Width writes are serialized and participate in DraftGuard's pending-save settlement.
+- Note name/body drafts continue to participate in DraftGuard's pending-save settlement.
 - Existing app detail pane is hidden on /notes without changing its saved visibility preference.
   The Monaco preview is independent from that pane.
 - Existing badges and compact-mode tabs are not changed.
