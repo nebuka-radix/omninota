@@ -1,5 +1,6 @@
 import { useCallback, useRef, useState, type Ref } from 'react'
-import { Box } from '@mui/material'
+import { Alert, Box } from '@mui/material'
+import { unwrapIpc } from '../../lib/ipc'
 import { useRouterState } from '@tanstack/react-router'
 import { Group, Panel, Separator } from 'react-resizable-panels'
 import { WORKSPACE_LIMITS } from '../../../../shared/contracts/workspace'
@@ -99,12 +100,18 @@ export function AppShell() {
   const { confirmLeave } = useDraftGuard()
   const pathname = useRouterState({ select: (state) => state.location.pathname })
   const [compact, setCompact] = useState(false)
+  const [modeError, setModeError] = useState<string | null>(null)
   const switchingRef = useRef(false)
   const changeMode = async (next: boolean) => {
     if (switchingRef.current || next === compact) return
     switchingRef.current = true
     try {
-      if (await confirmLeave()) setCompact(next)
+      if (!(await confirmLeave())) return
+      setModeError(null)
+      await unwrapIpc(window.gtd.app.setCompact(next))
+      setCompact(next)
+    } catch (error) {
+      setModeError(error instanceof Error ? error.message : '表示モードを変更できませんでした')
     } finally {
       switchingRef.current = false
     }
@@ -146,7 +153,8 @@ export function AppShell() {
       >
         <TopBar compact={compact} detailVisible={settings.detailVisible} onToggleDetail={() => void toggleDetail()} toggleButtonRef={toggleButtonRef} />
 
-        <Box sx={{ gridArea: 'body', display: 'flex', minWidth: 0, minHeight: 0, ...separatorStyles }}>
+        <Box sx={{ gridArea: 'body', display: 'flex', flexDirection: modeError ? 'column' : 'row', minWidth: 0, minHeight: 0, ...separatorStyles }}>
+          {modeError && <Alert severity="error" onClose={() => setModeError(null)}>{modeError}</Alert>}
           {compact ? (
             <Box component="main" aria-label="メインパネル" data-testid="compact-screen" sx={{ flex: 1, minWidth: 0, minHeight: 0, overflow: 'hidden' }}>
               <SummaryPage compact />

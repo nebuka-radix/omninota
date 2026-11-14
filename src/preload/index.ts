@@ -5,7 +5,8 @@ import { IPC_CHANNELS, type GtdApi } from '../shared/contracts/ipc'
 
 const api: GtdApi = {
   app: {
-    getInfo: () => ipcRenderer.invoke(IPC_CHANNELS.appGetInfo)
+    getInfo: () => ipcRenderer.invoke(IPC_CHANNELS.appGetInfo),
+    setCompact: (compact) => ipcRenderer.invoke(IPC_CHANNELS.appSetCompact, compact)
   },
   tasks: {
     // 入力の検証はMain側で行う。ここでは引数を1つだけ転送する。

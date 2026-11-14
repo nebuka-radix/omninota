@@ -348,6 +348,16 @@ if (!app.requestSingleInstanceLock()) {
     registerIpcHandlers({
       policy: { getWindow: () => mainWindow, isAllowedUrl: isAppUrl },
       getAppInfo,
+    setCompact: (compact) => {
+      const win = mainWindow
+      if (!win || win.isDestroyed()) throw new Error('ウィンドウがありません')
+      win.setMinimumSize(compact ? 240 : MIN_WINDOW_WIDTH, MIN_WINDOW_HEIGHT)
+      if (!compact) {
+        const { width, height } = win.getBounds()
+        if (width < MIN_WINDOW_WIDTH) win.setSize(MIN_WINDOW_WIDTH, height)
+      }
+      return null
+    },
       taskService: createTaskService({
         repository: taskRepository,
         findProject: projectRepository.findById,

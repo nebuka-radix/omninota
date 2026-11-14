@@ -1,4 +1,5 @@
 import { ipcMain } from 'electron'
+import { z } from 'zod'
 import { IPC_CHANNELS, type AppInfo } from '../../shared/contracts/ipc'
 import { appGetInfoArgsSchema } from '../../shared/validation/app'
 import {
@@ -49,6 +50,7 @@ import { createIpcHandler, type SenderPolicy } from './handler'
 export function registerIpcHandlers(deps: {
   policy: SenderPolicy
   getAppInfo: () => AppInfo
+  setCompact: (compact: boolean) => null
   taskService: TaskService
   projectService: ProjectService
   milestoneService: MilestoneService
@@ -57,6 +59,15 @@ export function registerIpcHandlers(deps: {
   flushRequester: FlushRequester
 }): void {
   const { policy, taskService, projectService, milestoneService, workspaceSettingsService } = deps
+  ipcMain.handle(
+    IPC_CHANNELS.appSetCompact,
+    createIpcHandler({
+      channel: IPC_CHANNELS.appSetCompact,
+      argsSchema: z.tuple([z.boolean()]),
+      policy,
+      run: ([compact]) => deps.setCompact(compact)
+    })
+  )
 
   ipcMain.handle(
     IPC_CHANNELS.appGetInfo,

@@ -43,14 +43,19 @@ export function StatusBar({ pathname, compact, onChangeMode }: { pathname: strin
         bgcolor: hasError ? vscodeColors.statusBarErrorBackground : vscodeColors.statusBarBackground,
         color: vscodeColors.statusBarForeground,
         display: 'grid',
-        gridTemplateColumns: 'minmax(0, 1fr) auto minmax(0, 1fr)',
+        gridTemplateColumns: compact ? 'minmax(0, 1fr)' : 'minmax(0, 1fr) auto minmax(0, 1fr)',
         alignItems: 'center',
         columnGap: 4,
         px: 3,
         minWidth: 0,
         overflow: 'hidden',
         whiteSpace: 'nowrap',
-        '& .MuiTypography-root': { fontSize: 12 }
+        '& .MuiTypography-root': { fontSize: 12 },
+        ...(compact && {
+          px: 1, columnGap: 0,
+          '& [data-testid="status-left"]': { gap: 0 },
+          '& [data-testid="status-screen"], & [data-testid="status-center"], & [data-testid="status-app"]': { display: 'none' }
+        })
       }}
       data-testid="status-bar"
     >

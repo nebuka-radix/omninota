@@ -38,6 +38,7 @@ import type { WorkspaceSettings } from './workspace'
 
 export const IPC_CHANNELS = {
   appGetInfo: 'app:get-info',
+  appSetCompact: 'app:set-compact',
   tasksCreate: 'tasks:create',
   tasksList: 'tasks:list',
   tasksUpdateTitle: 'tasks:update-title',
@@ -146,6 +147,7 @@ export type AppInfo = {
 export type GtdApi = {
   app: {
     getInfo: () => Promise<IpcResult<AppInfo>>
+    setCompact: (compact: boolean) => Promise<IpcResult<null>>
   }
   tasks: {
     create: (input: CreateTaskInput) => Promise<IpcResult<TaskDto>>
