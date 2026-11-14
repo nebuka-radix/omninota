@@ -7,7 +7,9 @@ import { projectIdFromRoute } from '../../../../shared/contracts/workspace'
 import { ProjectsSidebar } from '../../features/projects/ProjectsSidebar'
 import { projectListQueryOptions } from '../../features/projects/project-queries'
 import { taskListQueryOptions } from '../../features/tasks/task-queries'
-import { INBOX_SCOPE, isTaskInScope } from '../../features/tasks/task-scope'
+import { mergeSummary } from '../../features/summary/summary-merge'
+import { summaryQueryOptions } from '../../features/summary/summary-queries'
+import { useLocalDay } from '../../lib/local-day'
 import { vscodeColors } from '../../theme'
 import { PaneHeader } from './PaneHeader'
 import { SCREENS, screenOf, type ScreenId } from './screens'
@@ -20,18 +22,14 @@ import { SCREENS, screenOf, type ScreenId } from './screens'
 // - 幅は既存の左ペインの希望幅（Workspace設定の sidebarWidth、既定240px）をそのまま使う。
 // フェーズ5.5: Inbox の件数は行内のバッジで示す（項目名のラベルは出さない）。バッジは別の操作対象にせず、
 // ボタンの一部とする。読み上げでは件数を説明（aria-describedby）として伝える（ボタンの名前は「Inbox」のまま）。
-type NavBadge = { text: string; description: string }
+type NavBadge = { key: string; text: string; description: string; background: string }
 
 function NavItem({
-  screen,
-  active,
-  badge,
-  onClick,
-  trailing
+  screen, active, badges = [], onClick, trailing
 }: {
   screen: ScreenId
   active: boolean
-  badge?: NavBadge | undefined
+  badges?: readonly NavBadge[] | undefined
   onClick: () => void
   trailing?: ReactNode
 }) {
@@ -41,19 +39,13 @@ function NavItem({
     <Box sx={{ display: 'flex', alignItems: 'center' }}>
       <ButtonBase
         aria-label={label}
-        aria-describedby={badge ? descriptionId : undefined}
+        aria-describedby={badges.length > 0 ? descriptionId : undefined}
         aria-current={active ? 'page' : undefined}
         onClick={onClick}
         sx={{
-          flex: 1,
-          minWidth: 0,
-          justifyContent: 'flex-start',
-          gap: 2,
-          px: 3,
-          height: 32,
-          fontSize: 13,
+          flex: 1, minWidth: 0, justifyContent: 'flex-start', gap: 2, px: 3,
+          height: 32, fontSize: 13,
           color: active ? vscodeColors.foreground : 'text.secondary',
-          // 選択状態は左の線と文字色、キーボードフォーカスは枠線（テーマの:focus-visible）で区別する
           boxShadow: active ? `inset 2px 0 0 ${vscodeColors.foreground}` : 'none',
           bgcolor: active ? vscodeColors.listActiveSelection : 'transparent',
           '&:hover': { bgcolor: active ? vscodeColors.listActiveSelection : vscodeColors.listHover }
@@ -63,38 +55,27 @@ function NavItem({
         <Typography component="span" noWrap sx={{ fontSize: 13, fontWeight: 600, minWidth: 0 }}>
           {label}
         </Typography>
-        {badge && (
+        {badges.length > 0 && (
           <>
-            <Box
-              component="span"
-              aria-hidden
-              data-testid={`nav-${screen}-badge`}
-              sx={{
-                ml: 'auto',
-                flexShrink: 0,
-                minWidth: 20,
-                height: 18,
-                px: 1.5,
-                borderRadius: 9,
-                display: 'inline-flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                fontSize: 11,
-                fontWeight: 600,
-                lineHeight: 1,
-                color: vscodeColors.foreground,
-                bgcolor: vscodeColors.badgeBackground,
-                fontVariantNumeric: 'tabular-nums'
-              }}
-            >
-              {badge.text}
+            <Box component="span" sx={{ ml: 'auto', flexShrink: 0, display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+              {badges.map((badge) => (
+                <Box component="span" key={badge.key} aria-hidden title={badge.description}
+                  data-testid={screen === 'inbox' ? 'nav-inbox-badge' : `nav-${screen}-${badge.key}-badge`}
+                  data-count-kind={badge.key}
+                  sx={{
+                    flexShrink: 0, minWidth: '20px', height: '20px', px: '4px',
+                    boxSizing: 'border-box', borderRadius: '10px', display: 'inline-flex',
+                    alignItems: 'center', justifyContent: 'center', fontSize: '13px',
+                    fontWeight: 800, lineHeight: 1, color: '#ffffff', bgcolor: badge.background,
+                    fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap'
+                  }}>
+                  {badge.text}
+                </Box>
+              ))}
             </Box>
-            <Box
-              component="span"
-              id={descriptionId}
-              sx={{ position: 'absolute', width: 1, height: 1, overflow: 'hidden', clip: 'rect(0 0 0 0)', whiteSpace: 'nowrap' }}
-            >
-              {badge.description}
+            <Box component="span" id={descriptionId}
+              sx={{ position: 'absolute', width: 1, height: 1, overflow: 'hidden', clip: 'rect(0 0 0 0)', whiteSpace: 'nowrap' }}>
+              {badges.map((badge) => badge.description).join('、')}
             </Box>
           </>
         )}
@@ -104,13 +85,25 @@ function NavItem({
   )
 }
 
-function useInboxBadge(): NavBadge {
-  // Inboxの一覧と同じQueryを使う（追加の取得APIは使わない）。集計条件は従来どおり「プロジェクトに属さない未完了のタスク」
+function useNavigationBadges(): { summaryBadges: NavBadge[]; inboxBadges: NavBadge[] } {
+  const day = useLocalDay()
   const tasks = useQuery(taskListQueryOptions)
-  if (tasks.isPending) return { text: '…', description: 'タスクの件数を読み込み中' }
-  if (tasks.isError) return { text: '!', description: 'タスクの件数を取得できません' }
-  const open = tasks.data.filter((task) => isTaskInScope(task, INBOX_SCOPE) && task.doneOn === null).length
-  return { text: String(open), description: `未完了のタスク ${open} 件` }
+  const summary = useQuery(summaryQueryOptions(day))
+  const summaryBadges: NavBadge[] = []
+  const inboxBadges: NavBadge[] = []
+  // コンパクト画面と同じQuery・集計処理を使う。
+  if (summary.isSuccess) {
+    const merged = mergeSummary(summary.data, tasks.data)
+    const overdue = merged.overdueItems.length
+    const today = merged.todayItems.length
+    if (overdue > 0) summaryBadges.push({ key: 'overdue', text: String(overdue), description: `期限超過 ${overdue} 件`, background: '#b91c1c' })
+    if (today > 0) summaryBadges.push({ key: 'today', text: String(today), description: `今日のタスク ${today} 件`, background: '#1e90ff' })
+  }
+  if (tasks.isSuccess) {
+    const open = tasks.data.filter((task) => task.projectId === null && task.doneOn === null).length
+    if (open > 0) inboxBadges.push({ key: 'inbox', text: String(open), description: `未完了のタスク ${open} 件`, background: '#008080' })
+  }
+  return { summaryBadges, inboxBadges }
 }
 
 export function NavigationPane({ pathname }: { pathname: string }) {
@@ -121,7 +114,7 @@ export function NavigationPane({ pathname }: { pathname: string }) {
   const selectedProjectId = projectIdFromRoute(pathname)
   // 完了済みのプロジェクトはサイドバーに表示しないため、折りたたみ中の「選択中」にも出さない（フェーズ5.8）
   const selectedProject = projects.data?.find((project) => project.id === selectedProjectId && !project.done)
-  const inboxBadge = useInboxBadge()
+  const { summaryBadges, inboxBadges } = useNavigationBadges()
 
   return (
     <Box
@@ -133,8 +126,8 @@ export function NavigationPane({ pathname }: { pathname: string }) {
       <PaneHeader id="navigation-title" title="GTD" />
       <Box sx={{ flex: 1, minHeight: 0, overflowY: 'auto', overflowX: 'hidden', pb: 2 }}>
         {/* Summary Review（フェーズ6）は Inbox の直上 */}
-        <NavItem screen="summary" active={screen === 'summary'} onClick={() => void navigate({ to: '/summary' })} />
-        <NavItem screen="inbox" active={screen === 'inbox'} badge={inboxBadge} onClick={() => void navigate({ to: '/inbox' })} />
+        <NavItem screen="summary" active={screen === 'summary'} badges={summaryBadges} onClick={() => void navigate({ to: '/summary' })} />
+        <NavItem screen="inbox" active={screen === 'inbox'} badges={inboxBadges} onClick={() => void navigate({ to: '/inbox' })} />
         <NavItem
           screen="projects"
           active={pathname === '/projects'}
