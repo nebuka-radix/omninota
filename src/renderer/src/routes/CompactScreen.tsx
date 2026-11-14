@@ -215,29 +215,29 @@ function CompactTaskBrowser({ kind }: { kind: 'inbox' | 'project' }) {
         <ShellSlot name="top-bar-controls">
           <Box
             role="group" aria-label="プロジェクト階層の操作"
-            sx={{ display: 'flex', alignItems: 'center', gap: 1, width: '100%', minWidth: 0 }}
+            sx={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-start', gap: 1, width: 'max-content', maxWidth: '100%', minWidth: 0, overflowX: 'auto', overflowY: 'hidden', color: '#ffffff' }}
           >
             <Tooltip title="すべて折りたたむ">
-              <span style={{ display: 'flex', flex: '1 1 0', minWidth: 0 }}>
+              <span style={{ display: 'flex', flex: '0 0 auto' }}>
                 <Button size="small" aria-label="すべて折りたたむ"
                   disabled={loading || error !== null || projects.length === 0}
                   onClick={() => void setAllExpanded(false)}
                   data-testid="compact-project-collapse-all"
-                  sx={{ minWidth: 0, width: '100%', px: 0.5, gap: '4px', justifyContent: 'flex-start', fontSize: 11, whiteSpace: 'nowrap' }}>
+                  sx={{ minWidth: 0, px: 0.5, gap: '4px', justifyContent: 'flex-start', fontSize: 11, whiteSpace: 'nowrap', color: '#ffffff', '&.Mui-disabled': { color: '#ffffff', opacity: 0.4 } }}>
                   <ArrowUpFromLine size={16} aria-hidden style={{ flexShrink: 0 }} />
-                  <Box component="span" sx={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}>すべて折りたたむ</Box>
+                  <Box component="span" sx={{ whiteSpace: 'nowrap', color: 'inherit' }}>すべて折りたたむ</Box>
                 </Button>
               </span>
             </Tooltip>
             <Tooltip title="すべて展開">
-              <span style={{ display: 'flex', flex: '1 1 0', minWidth: 0 }}>
+              <span style={{ display: 'flex', flex: '0 0 auto' }}>
                 <Button size="small" aria-label="すべて展開"
                   disabled={loading || error !== null || projects.length === 0}
                   onClick={() => void setAllExpanded(true)}
                   data-testid="compact-project-expand-all"
-                  sx={{ minWidth: 0, width: '100%', px: 0.5, gap: '4px', justifyContent: 'flex-start', fontSize: 11, whiteSpace: 'nowrap' }}>
+                  sx={{ minWidth: 0, px: 0.5, gap: '4px', justifyContent: 'flex-start', fontSize: 11, whiteSpace: 'nowrap', color: '#ffffff', '&.Mui-disabled': { color: '#ffffff', opacity: 0.4 } }}>
                   <ArrowDownFromLine size={16} aria-hidden style={{ flexShrink: 0 }} />
-                  <Box component="span" sx={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}>すべて展開</Box>
+                  <Box component="span" sx={{ whiteSpace: 'nowrap', color: 'inherit' }}>すべて展開</Box>
                 </Button>
               </span>
             </Tooltip>
