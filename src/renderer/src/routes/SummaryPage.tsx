@@ -18,6 +18,7 @@ import { TaskList } from '../features/tasks/TaskList'
 import { taskListQueryOptions, usePendingTaskIds } from '../features/tasks/task-queries'
 import { useTaskRowActions } from '../features/tasks/use-task-row-actions'
 import { importantTasks } from '../features/tasks/important-presentation'
+import { orderDayTasks } from '../features/summary/day-task-order'
 import { useLocalDay } from '../lib/local-day'
 import { vscodeColors } from '../theme'
 
@@ -85,7 +86,10 @@ export function SummaryPage({ compact = false, showQuickAdd = true }: {
     [query.data, tasksQuery.data, excluded, compact]
   )
   const importantItems = useMemo(() => importantTasks(tasksQuery.data ?? EMPTY_TASKS), [tasksQuery.data])
-  const itemsOf = (key: SectionKey): readonly TaskDto[] => key === 'importantItems' ? importantItems : summary?.[key] ?? []
+  const itemsOf = (key: SectionKey): readonly TaskDto[] => {
+    const items = key === 'importantItems' ? importantItems : summary?.[key] ?? []
+    return compact ? orderDayTasks(items, key === 'importantItems') : items
+  }
   const dayDrag = useDayTaskDrag({
     enabled: compact,
     rows: sections.flatMap((section) => !compact || sectionExpanded[section.key] === false ? [] :
