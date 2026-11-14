@@ -1,7 +1,7 @@
 import { ipcMain } from 'electron'
 import { z } from 'zod'
 import type { NoteService } from '../services/note-service'
-import { notesListArgsSchema, notesCreateArgsSchema, notesSaveArgsSchema, notesFavoriteArgsSchema, notesGetSidebarWidthArgsSchema, notesSaveSidebarWidthArgsSchema } from '../../shared/validation/notes'
+import { notesListArgsSchema, notesCreateArgsSchema, notesSaveArgsSchema, notesRenameArgsSchema, notesFavoriteArgsSchema, notesGetSidebarWidthArgsSchema, notesSaveSidebarWidthArgsSchema } from '../../shared/validation/notes'
 import { IPC_CHANNELS, type AppInfo } from '../../shared/contracts/ipc'
 import { appGetInfoArgsSchema } from '../../shared/validation/app'
 import {
@@ -71,6 +71,8 @@ export function registerIpcHandlers(deps: {
     createIpcHandler({ channel: IPC_CHANNELS.notesCreate, argsSchema: notesCreateArgsSchema, policy, run: () => deps.noteService.create() }))
   ipcMain.handle(IPC_CHANNELS.notesSave,
     createIpcHandler({ channel: IPC_CHANNELS.notesSave, argsSchema: notesSaveArgsSchema, policy, run: ([input]) => deps.noteService.save(input) }))
+  ipcMain.handle(IPC_CHANNELS.notesRename,
+    createIpcHandler({ channel: IPC_CHANNELS.notesRename, argsSchema: notesRenameArgsSchema, policy, run: ([input]) => deps.noteService.rename(input) }))
   ipcMain.handle(IPC_CHANNELS.notesSetFavorite,
     createIpcHandler({ channel: IPC_CHANNELS.notesSetFavorite, argsSchema: notesFavoriteArgsSchema, policy, run: ([input]) => deps.noteService.setFavorite(input) }))
   ipcMain.handle(IPC_CHANNELS.notesGetSidebarWidth,

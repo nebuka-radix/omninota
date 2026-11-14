@@ -6,6 +6,7 @@ export type NoteRepository = {
   find(id: number): NoteRow | undefined
   create(at: string): NoteRow
   save(id: number, name: string, description: string, at: string): NoteRow | undefined
+  rename(id: number, name: string, at: string): NoteRow | undefined
   setFavorite(id: number, favorite: boolean, at: string): NoteRow | undefined
 }
 export function createNoteRepository(db: AppDatabase): NoteRepository {
@@ -20,6 +21,7 @@ export function createNoteRepository(db: AppDatabase): NoteRepository {
       return row
     },
     save: (id, name, description, at) => db.update(notes).set({ name, description, updatedOn: at }).where(activeId(id)).returning().get(),
+    rename: (id, name, at) => db.update(notes).set({ name, updatedOn: at }).where(activeId(id)).returning().get(),
     setFavorite: (id, favorite, at) => db.update(notes).set({ favorite, updatedOn: at }).where(activeId(id)).returning().get()
   }
 }

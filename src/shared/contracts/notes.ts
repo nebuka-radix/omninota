@@ -9,5 +9,6 @@ export type NoteDto = {
   createdOn: string
   updatedOn: string
 }
-export type SaveNoteInput = { id: number; name: string; description: string }
+export type SaveNoteInput = { id: number; name?: string; description: string }
+export type RenameNoteInput = { id: number; name: string }
 export type FavoriteNoteInput = { id: number; favorite: boolean }

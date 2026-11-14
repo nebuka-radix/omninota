@@ -35,3 +35,6 @@
 .gtd-monaco-divider { flex:0 0 6px; width:6px; background:#454545; cursor:col-resize; touch-action:none; user-select:none; }
 .gtd-monaco-divider:hover,.gtd-monaco-divider:focus-visible { background:#007fd4; outline:none; }
 .gtd-monaco-preview { border-left:0; }
+
+/* 043: Save and TextWrap share the left toolbar group. */
+.gtd-monaco-toolbar-left { gap:4px; }

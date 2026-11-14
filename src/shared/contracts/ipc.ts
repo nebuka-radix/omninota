@@ -38,12 +38,13 @@ import type {
 } from './tasks'
 import type { SummaryReview } from './summary'
 import type { WorkspaceSettings } from './workspace'
-import type { NoteDto, SaveNoteInput, FavoriteNoteInput } from './notes'
+import type { NoteDto, SaveNoteInput, RenameNoteInput, FavoriteNoteInput } from './notes'
 
 export const IPC_CHANNELS = {
   notesList: 'notes:list',
   notesCreate: 'notes:create',
   notesSave: 'notes:save',
+  notesRename: 'notes:rename',
   notesSetFavorite: 'notes:set-favorite',
   notesGetSidebarWidth: 'notes:get-sidebar-width',
   notesSaveSidebarWidth: 'notes:save-sidebar-width',
@@ -163,6 +164,7 @@ export type GtdApi = {
     list: () => Promise<IpcResult<NoteDto[]>>
     create: () => Promise<IpcResult<NoteDto>>
     save: (input: SaveNoteInput) => Promise<IpcResult<NoteDto>>
+    rename: (input: RenameNoteInput) => Promise<IpcResult<NoteDto>>
     setFavorite: (input: FavoriteNoteInput) => Promise<IpcResult<NoteDto>>
     getSidebarWidth: () => Promise<IpcResult<number>>
     saveSidebarWidth: (width: number) => Promise<IpcResult<number>>

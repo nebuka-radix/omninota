@@ -7,8 +7,8 @@
 - + New Note immediately creates and selects an active record named New Note.
 - List order: favorite DESC, updated_on DESC, id DESC (tie-breaker).
 - Star button toggles favorite; favorite uses yellow fill, others have no fill.
-- Name field is limited to 96 UTF-16 code units by the UI/IPC and must not be blank.
-- Body uses MonacoEditor; save button / Cmd+S save name and formatted description together.
+- Inline list rename (F2) is limited to 96 UTF-16 code units by the UI/IPC and must not be blank.
+- Body uses MonacoEditor; save button / Cmd+S save formatted description. Name is saved separately by inline rename.
 - Unsaved notes are registered with DraftGuard for selection, navigation, mode change and exit.
 - Note list width is drag-resizable, stored in app_settings under noteSidebarWidth.
   Default 220px, allowed 140–480px. Arrow keys change 10px; Home/End set limits.

@@ -6,7 +6,7 @@
   This application-level native preference affects other text inputs in the same process too,
   not only Monaco. No defaults write -g command is run. In unbundled development, Electron's
   preference domain can be shared with other unbundled Electron apps.
-- TextWrap icon is immediately left of the preview icon. ON: lime background and black icon.
+- TextWrap icon is immediately right of the Save icon. ON: lime background and black icon.
   OFF: toolbar background and gray icon. It only changes editor word wrapping.
   Initial state uses the wordWrap prop (default false). Later changes to that prop synchronize it;
   user toggles are local and are not saved to the database.

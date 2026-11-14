@@ -194,13 +194,14 @@ export function MonacoEditor({
             onClick={() => { void runRef.current(true) }}>
             <Save size={16} aria-hidden />
           </button>
-          <span className="gtd-monaco-status" role="status">{busy ? '処理中…' : ''}</span>
-        </div>
-        <div className="gtd-monaco-toolbar-right">
           <button type="button" className="gtd-monaco-wrap" aria-label="Word Wrap" aria-pressed={wrapEnabled}
             title={`Word Wrap: ${wrapEnabled ? 'ON' : 'OFF'}`} onClick={() => setWrapEnabled((current) => !current)}>
             <TextWrap size={16} aria-hidden />
           </button>
+          <span className="gtd-monaco-status" role="status">{busy ? '処理中…' : ''}</span>
+        </div>
+        <div className="gtd-monaco-toolbar-right">
+
           <button type="button" aria-label="Markdownプレビュー" title="Markdownプレビュー"
             aria-pressed={previewOpen} aria-expanded={previewOpen} aria-controls={previewId}
             onClick={() => { setPreviewValue(editorRef.current?.getValue() ?? latest.current.value); setPreviewOpen((current) => !current) }}>

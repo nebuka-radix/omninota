@@ -1,4 +1,4 @@
-import { NOTE_SIDEBAR, type FavoriteNoteInput, type NoteDto, type SaveNoteInput } from '../../shared/contracts/notes'
+import { NOTE_SIDEBAR, type FavoriteNoteInput, type NoteDto, type RenameNoteInput, type SaveNoteInput } from '../../shared/contracts/notes'
 import type { NoteRepository } from '../repositories/note-repository'
 import { SETTINGS_KEYS, type SettingsRepository } from '../repositories/settings-repository'
 import { BusinessError } from './errors'
@@ -6,6 +6,7 @@ export type NoteService = {
   list(): NoteDto[]
   create(): NoteDto
   save(input: SaveNoteInput): NoteDto
+  rename(input: RenameNoteInput): NoteDto
   setFavorite(input: FavoriteNoteInput): NoteDto
   getSidebarWidth(): number
   saveSidebarWidth(width: number): number
@@ -24,8 +25,16 @@ export function createNoteService(deps: { repository: NoteRepository; settings: 
     create: () => deps.repository.create(now().toISOString()),
     save(input) {
       const previous = find(input.id)
-      if (previous.name === input.name && previous.description === input.description) return previous
-      const row = deps.repository.save(input.id, input.name, input.description, timestamp(previous.updatedOn))
+      const name = input.name ?? previous.name
+      if (previous.name === name && previous.description === input.description) return previous
+      const row = deps.repository.save(input.id, name, input.description, timestamp(previous.updatedOn))
+      if (!row) throw missing()
+      return row
+    },
+    rename(input) {
+      const previous = find(input.id)
+      if (previous.name === input.name) return previous
+      const row = deps.repository.rename(input.id, input.name, timestamp(previous.updatedOn))
       if (!row) throw missing()
       return row
     },

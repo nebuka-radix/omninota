@@ -8,6 +8,7 @@ const api: GtdApi = {
     list: () => ipcRenderer.invoke(IPC_CHANNELS.notesList),
     create: () => ipcRenderer.invoke(IPC_CHANNELS.notesCreate),
     save: (input) => ipcRenderer.invoke(IPC_CHANNELS.notesSave, input),
+    rename: (input) => ipcRenderer.invoke(IPC_CHANNELS.notesRename, input),
     setFavorite: (input) => ipcRenderer.invoke(IPC_CHANNELS.notesSetFavorite, input),
     getSidebarWidth: () => ipcRenderer.invoke(IPC_CHANNELS.notesGetSidebarWidth),
     saveSidebarWidth: (width) => ipcRenderer.invoke(IPC_CHANNELS.notesSaveSidebarWidth, width)

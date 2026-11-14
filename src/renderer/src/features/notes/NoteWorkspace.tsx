@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { Alert, Box, Button, IconButton, List, ListItemButton, Typography } from '@mui/material'
 import { Star } from 'lucide-react'
 import { useQueryClient } from '@tanstack/react-query'
@@ -7,6 +7,7 @@ import { unwrapIpc } from '../../lib/ipc'
 import { useDraftGuard } from '../drafts/DraftGuard'
 import { vscodeColors } from '../../theme'
 import { NoteEditor } from './NoteEditor'
+import { InlineNoteName } from './InlineNoteName'
 import { noteWidthQueryOptions, useNoteMutations } from './note-queries'
 
 export function NoteWorkspace({ notes, initialWidth }: { notes: readonly NoteDto[]; initialWidth: number }) {
@@ -14,6 +15,20 @@ export function NoteWorkspace({ notes, initialWidth }: { notes: readonly NoteDto
   const client = useQueryClient()
   const mutations = useNoteMutations()
   const [selectedId, setSelectedId] = useState<number | null>(null)
+  const [renamingId, setRenamingId] = useState<number | null>(null)
+  const listRef = useRef<HTMLUListElement>(null)
+  useLayoutEffect(() => {
+    if (selectedId === null) return
+    const list = listRef.current
+    const row = list?.querySelector<HTMLElement>(`[data-note-id="${selectedId}"]`)
+    if (!list || !row) return
+    const outer = list.getBoundingClientRect()
+    const inner = row.getBoundingClientRect()
+    const top = inner.top - outer.top
+    const bottom = inner.bottom - outer.top
+    if (top < 0) list.scrollTop += top
+    else if (bottom > list.clientHeight) list.scrollTop += bottom - list.clientHeight
+  }, [selectedId, renamingId, notes.length])
   const [width, setWidth] = useState(initialWidth)
   const [available, setAvailable] = useState(0)
   const [error, setError] = useState<string | null>(null)
@@ -67,7 +82,7 @@ export function NoteWorkspace({ notes, initialWidth }: { notes: readonly NoteDto
   const selectNote = async (id: number) => {
     if (id === selectedId || actionBusy.current) return
     actionBusy.current = true
-    try { if (await confirmLeave()) setSelectedId(id) } finally { actionBusy.current = false }
+    try { if (await confirmLeave()) { setRenamingId(null); setSelectedId(id) } } finally { actionBusy.current = false }
   }
   const createNote = async () => {
     if (actionBusy.current) return
@@ -78,6 +93,7 @@ export function NoteWorkspace({ notes, initialWidth }: { notes: readonly NoteDto
       setError(null)
       const note = await mutations.create.mutateAsync()
       setSelectedId(note.id)
+      setRenamingId(note.id)
     } catch (caught) { setError(caught instanceof Error ? caught.message : String(caught)) }
     finally { actionBusy.current = false; setActionPending(false) }
   }
@@ -94,25 +110,39 @@ export function NoteWorkspace({ notes, initialWidth }: { notes: readonly NoteDto
   const selected = notes.find((note) => note.id === selectedId)
   return (
     <Box ref={rootRef} sx={{ display: 'flex', height: '100%', minHeight: 0, minWidth: 0, overflow: 'hidden' }} data-testid="note-workspace">
-      <Box component="aside" aria-label="ノート一覧" sx={{ width: visibleWidth, flexShrink: 0, minHeight: 0, display: 'flex', flexDirection: 'column', bgcolor: vscodeColors.sideBarBackground }}>
-        <Button onClick={() => void createNote()} disabled={actionPending} sx={{ height: 34, justifyContent: 'flex-start', px: 2, flexShrink: 0, textTransform: 'none' }} data-testid="new-note">
+      <Box component="aside" aria-label="ノート一覧" sx={{ width: visibleWidth, flexShrink: 0, minHeight: 0, display: 'flex', flexDirection: 'column', bgcolor: vscodeColors.sideBarBackground, height: '100%', overflow: 'hidden' }}>
+        <Box sx={{ flexShrink: 0, position: 'sticky', top: 0, zIndex: 1, bgcolor: vscodeColors.sideBarBackground }}>
+        <Button onClick={() => void createNote()} disabled={actionPending} sx={{ height: 34, width: '100%', justifyContent: 'flex-start', px: 2, flexShrink: 0, textTransform: 'none' }} data-testid="new-note">
           + New Note
         </Button>
+        </Box>
         {error && <Alert severity="error" onClose={() => setError(null)}>{error}</Alert>}
         {widthError && <Alert severity="error">幅を保存できませんでした: {widthError}</Alert>}
-        <List sx={{ m: 0, p: 0, flex: 1, minHeight: 0, overflowY: 'auto' }} aria-label="ノート">
+        <List ref={listRef} sx={{ m: 0, p: 0, flex: 1, minHeight: 0, overflowY: 'auto', overflowX: 'hidden', overscrollBehavior: 'contain' }} aria-label="ノート"
+          onKeyDown={(event) => {
+            if (event.key !== 'F2' || event.nativeEvent.isComposing || event.target instanceof HTMLInputElement) return
+            if (selectedId === null || actionBusy.current) return
+            event.preventDefault(); event.stopPropagation(); setRenamingId(selectedId)
+          }}>
           {notes.map((note) => (
-            <Box component="li" key={note.id} sx={{ display: 'flex', alignItems: 'center', bgcolor: note.id === selectedId ? vscodeColors.listActiveSelection : 'transparent' }}>
+            <Box component="li" key={note.id} data-note-id={note.id} sx={{ display: 'flex', alignItems: 'center', bgcolor: note.id === selectedId ? vscodeColors.listActiveSelection : 'transparent' }}>
               <IconButton aria-label={`${note.name}のお気に入りを${note.favorite ? '解除' : '設定'}`} aria-pressed={note.favorite}
                 disabled={actionPending} onClick={() => void favorite(note)}
                 sx={{ width: 28, height: 30, flexShrink: 0, color: note.favorite ? '#e2c541' : 'text.secondary' }}>
                 <Star size={15} fill={note.favorite ? '#e2c541' : 'none'} aria-hidden />
               </IconButton>
-              <ListItemButton component="button" selected={note.id === selectedId} onClick={() => void selectNote(note.id)}
-                aria-current={note.id === selectedId ? 'true' : undefined}
-                sx={{ flex: 1, minWidth: 0, height: 30, p: 0, pr: 2, textAlign: 'left' }}>
-                <Typography component="span" noWrap title={note.name} sx={{ fontSize: 13, minWidth: 0 }}>{note.name}</Typography>
-              </ListItemButton>
+              {renamingId === note.id ? (
+                <InlineNoteName key={note.id} note={note} onDone={(restoreFocus) => {
+                  setRenamingId(null)
+                  if (restoreFocus) requestAnimationFrame(() => listRef.current?.querySelector<HTMLButtonElement>(`[data-note-id="${note.id}"] [data-note-select]`)?.focus({ preventScroll: true }))
+                }} />
+              ) : (
+                <ListItemButton component="button" data-note-select selected={note.id === selectedId} onClick={() => void selectNote(note.id)}
+                  aria-current={note.id === selectedId ? 'true' : undefined}
+                  sx={{ flex: 1, minWidth: 0, height: 30, p: 0, pr: 2, textAlign: 'left' }}>
+                  <Typography component="span" noWrap title={note.name} sx={{ fontSize: 13, minWidth: 0 }}>{note.name}</Typography>
+                </ListItemButton>
+              )}
             </Box>
           ))}
         </List>
