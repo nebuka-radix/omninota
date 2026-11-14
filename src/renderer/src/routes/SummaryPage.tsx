@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Alert, Box, CircularProgress, Typography } from '@mui/material'
 import { useQuery } from '@tanstack/react-query'
-import { CalendarCheck, CheckCheck, ClockCheck } from 'lucide-react'
+import { CalendarCheck, CheckCheck, ClockCheck, ClockExclamationPoint } from 'lucide-react'
 import type { SummaryReview } from '../../../shared/contracts/summary'
 import type { TaskDto } from '../../../shared/contracts/tasks'
 import { Page } from '../components/Page'
@@ -43,7 +43,7 @@ export function SummaryPage({ compact = false, showQuickAdd = true }: {
   compact?: boolean
   showQuickAdd?: boolean
 }) {
-  const sections = compact ? SECTIONS.filter((section) => section.key === 'todayItems' || section.key === 'tomorrowItems') : SECTIONS
+  const sections = compact ? SECTIONS.filter((section) => section.key === 'todayItems' || section.key === 'tomorrowItems' || section.key === 'overdueItems') : SECTIONS
   const [sectionExpanded, setSectionExpanded] = useState<Partial<Record<SectionKey, boolean>>>({})
   const [sectionError, setSectionError] = useState<string | null>(null)
   const sectionBusy = useRef(false)
@@ -82,7 +82,7 @@ export function SummaryPage({ compact = false, showQuickAdd = true }: {
     },
     [query.data, tasksQuery.data, excluded, compact]
   )
-  const total = summary ? compact ? summary.todayItems.length + summary.tomorrowItems.length : summaryTotal(summary) : 0
+  const total = summary ? compact ? summary.todayItems.length + summary.tomorrowItems.length + summary.overdueItems.length : summaryTotal(summary) : 0
 
   return (
     <Page title={compact ? 'コンパクト' : 'Summary Review'} icon={CalendarCheck} fill titleHidden>
@@ -134,6 +134,7 @@ export function SummaryPage({ compact = false, showQuickAdd = true }: {
         >
           {sections.map((section) => {
             const items = summary ? summary[section.key] : []
+            if (compact && section.key === 'overdueItems' && items.length === 0) return null
             const isExpanded = !compact || sectionExpanded[section.key] !== false
             return (
               <Box
@@ -160,7 +161,7 @@ export function SummaryPage({ compact = false, showQuickAdd = true }: {
                   <SectionRow
                     title={section.label}
                     titleId={`summary-heading-${section.key}`}
-                    icon={section.key === 'todayItems' ? CheckCheck : ClockCheck}
+                    icon={section.key === 'todayItems' ? CheckCheck : section.key === 'tomorrowItems' ? ClockCheck : ClockExclamationPoint}
                     expanded={isExpanded}
                     onExpandedChange={(next) => void changeSectionExpanded(section.key, next)}
                     controlsId={`summary-content-${section.key}`}
