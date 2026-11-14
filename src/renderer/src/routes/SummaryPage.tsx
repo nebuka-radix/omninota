@@ -1,10 +1,12 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Alert, Box, CircularProgress, Typography } from '@mui/material'
 import { useQuery } from '@tanstack/react-query'
-import { CalendarCheck } from 'lucide-react'
+import { CalendarCheck, CheckCheck, ClockCheck } from 'lucide-react'
 import type { SummaryReview } from '../../../shared/contracts/summary'
 import type { TaskDto } from '../../../shared/contracts/tasks'
 import { Page } from '../components/Page'
+import { SectionRow } from '../components/SectionRow'
+import { useDraftGuard } from '../features/drafts/DraftGuard'
 import { CompactSplitHandle } from '../features/summary/CompactSplitHandle'
 import { ShellSlot } from '../components/ShellSlots'
 import { projectListQueryOptions } from '../features/projects/project-queries'
@@ -47,6 +49,28 @@ export function SummaryPage({ compact = false, showQuickAdd = true, compactSplit
   const compactTodayPercent = compactSplit?.value ?? localTodayPercent
   const setCompactTodayPercent = compactSplit?.onChange ?? setLocalTodayPercent
   const sections = compact ? SECTIONS.filter((section) => section.key === 'todayItems' || section.key === 'tomorrowItems') : SECTIONS
+  const [sectionExpanded, setSectionExpanded] = useState<Partial<Record<SectionKey, boolean>>>({})
+  const [sectionError, setSectionError] = useState<string | null>(null)
+  const sectionBusy = useRef(false)
+  const { confirmLeave } = useDraftGuard()
+  const todayExpanded = sectionExpanded.todayItems !== false
+  const tomorrowExpanded = sectionExpanded.tomorrowItems !== false
+  const changeSectionExpanded = async (key: SectionKey, next: boolean) => {
+    if (sectionBusy.current) return
+    sectionBusy.current = true
+    try {
+      if (!next && !(await confirmLeave())) return
+      setSectionError(null)
+      setSectionExpanded((current) => ({ ...current, [key]: next }))
+    } catch (error) {
+      setSectionError(error instanceof Error ? error.message : 'セクションの表示を変更できませんでした')
+    } finally { sectionBusy.current = false }
+  }
+  const compactRows = todayExpanded && tomorrowExpanded
+    ? `minmax(0, ${compactTodayPercent}fr) minmax(0, ${100 - compactTodayPercent}fr)`
+    : todayExpanded ? `minmax(${HEADING_HEIGHT}px, 1fr) ${HEADING_HEIGHT}px`
+    : tomorrowExpanded ? `${HEADING_HEIGHT}px minmax(${HEADING_HEIGHT}px, 1fr)`
+    : `${HEADING_HEIGHT}px ${HEADING_HEIGHT}px`
   const day = useLocalDay()
   const query = useQuery(summaryQueryOptions(day))
   const tasksQuery = useQuery(taskListQueryOptions)
@@ -90,6 +114,7 @@ export function SummaryPage({ compact = false, showQuickAdd = true, compactSplit
       >
         {announcement}
       </Box>
+      {sectionError && <Alert severity="error" onClose={() => setSectionError(null)}>{sectionError}</Alert>}
       <Box sx={{ flexShrink: 0 }}>{rowActions.alerts}</Box>
       {query.isPending ? (
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }} role="status">
@@ -112,15 +137,16 @@ export function SummaryPage({ compact = false, showQuickAdd = true, compactSplit
             display: 'grid',
             gridTemplateColumns: compact ? 'minmax(0, 1fr)' : 'minmax(0, 1fr) minmax(0, 1fr)',
             gridTemplateRows: compact
-              ? `minmax(0, ${compactTodayPercent}fr) minmax(0, ${100 - compactTodayPercent}fr)`
+              ? compactRows
               : 'minmax(0, 1fr) minmax(0, 1fr)',
             position: 'relative',
-            border: `1px solid ${vscodeColors.gridLine}`
+            border: compact ? 'none' : `1px solid ${vscodeColors.gridLine}`
           }}
         >
-          {compact && <CompactSplitHandle value={compactTodayPercent} onChange={setCompactTodayPercent} />}
+          {compact && todayExpanded && tomorrowExpanded && <CompactSplitHandle value={compactTodayPercent} onChange={setCompactTodayPercent} />}
           {sections.map((section) => {
             const items = summary ? summary[section.key] : []
+            const isExpanded = !compact || sectionExpanded[section.key] !== false
             return (
               <Box
                 key={section.key}
@@ -138,9 +164,20 @@ export function SummaryPage({ compact = false, showQuickAdd = true, compactSplit
                   overflow: 'hidden',
                   // 中央の罫線は左の列の右と上の行の下だけ（二重線にしない）
                   borderRight: !compact && section.column === 1 ? `1px solid ${vscodeColors.gridLine}` : 'none',
-                  borderBottom: section.row === 1 ? `1px solid ${vscodeColors.gridLine}` : 'none'
+                  borderBottom: !compact && section.row === 1 ? `1px solid ${vscodeColors.gridLine}` : 'none'
                 }}
               >
+                {compact ? (
+                  <SectionRow
+                    title={section.label}
+                    titleId={`summary-heading-${section.key}`}
+                    icon={section.key === 'todayItems' ? CheckCheck : ClockCheck}
+                    expanded={isExpanded}
+                    onExpandedChange={(next) => void changeSectionExpanded(section.key, next)}
+                    controlsId={`summary-content-${section.key}`}
+                    height={HEADING_HEIGHT}
+                  />
+                ) : (
                 <Box sx={{ height: HEADING_HEIGHT, flexShrink: 0, display: 'flex', alignItems: 'center', px: 1.5, minWidth: 0 }}>
                   <Typography
                     id={`summary-heading-${section.key}`}
@@ -156,6 +193,16 @@ export function SummaryPage({ compact = false, showQuickAdd = true, compactSplit
                     {items.length} 件
                   </Typography>
                 </Box>
+                )}
+                <Box
+                  id={`summary-content-${section.key}`}
+                  hidden={!isExpanded}
+                  sx={{
+                    display: isExpanded ? 'flex' : 'none', flexDirection: 'column',
+                    flex: 1, minHeight: 0, minWidth: 0,
+                    pl: compact ? '24px' : 0
+                  }}
+                >
                 {items.length === 0 ? (
                   <Typography sx={{ px: 2, py: 1, fontSize: 12, color: 'text.secondary' }} data-testid="summary-empty">
                     該当なし
@@ -175,6 +222,7 @@ export function SummaryPage({ compact = false, showQuickAdd = true, compactSplit
                     onRequestDelete={(task) => rowActions.deleteTasks([task])}
                   />
                 )}
+                </Box>
               </Box>
             )
           })}

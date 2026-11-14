@@ -84,7 +84,7 @@ export function CompactSplitHandle({ value, onChange }: { value: number; onChang
       sx={{
         position: 'absolute', left: 0, right: 0, top: `calc(${value}% - 4px)`, height: 8,
         zIndex: 2, cursor: 'row-resize', touchAction: 'none', userSelect: 'none',
-        '&::after': { content: '""', position: 'absolute', left: 0, right: 0, top: 3, height: 2, bgcolor: vscodeColors.gridLine },
+        '&::after': { content: '""', position: 'absolute', left: 0, right: 0, top: 3, height: 2, bgcolor: 'transparent' },
         '&:hover::after, &:focus-visible::after': { bgcolor: vscodeColors.focusBorder },
         '&:focus-visible': { outline: `1px solid ${vscodeColors.focusBorder}`, outlineOffset: -1 }
       }}
