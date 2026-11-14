@@ -220,7 +220,7 @@ export function SummaryPage({ compact = false, showQuickAdd = true }: {
                   <TaskList
                     variant="section"
                     optionIdPrefix={section.key === 'importantItems' ? 'important' : undefined}
-                    rowMode="Standard"
+                    rowMode={compact ? 'Compact' : 'Standard'}
                     multiSelect={compact ? {
                       selection: dayDrag.selection,
                       onChange: dayDrag.changeSelection,
