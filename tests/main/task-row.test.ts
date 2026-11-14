@@ -171,17 +171,18 @@ describe('期限の表示（TaskRow）', () => {
 })
 
 const task = (id: string, patch: Partial<TaskDto> = {}): TaskDto => ({
-  id,
-  title: id,
-  createdAt: '2026-11-01T00:00:00.000Z',
-  updatedAt: '2026-11-01T00:00:00.000Z',
-  doneOn: null,
-  projectId: null,
-  milestoneId: null,
-  position: null,
-  dueto: '2026-11-12',
-  favorite: false,
-  ...patch
+    id,
+    title: id,
+    createdAt: '2026-11-01T00:00:00.000Z',
+    updatedAt: '2026-11-01T00:00:00.000Z',
+    doneOn: null,
+    projectId: null,
+    milestoneId: null,
+    position: null,
+    dueto: '2026-11-12',
+    favorite: false,
+    ...patch,
+    important: patch.important ?? false
 })
 const item = (id: string, patch: Partial<TaskDto> = {}): SummaryItem => {
   const base = task(id, patch)

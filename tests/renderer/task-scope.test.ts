@@ -18,7 +18,7 @@ import type { TaskDto } from '../../src/shared/contracts/tasks'
 const P1 = '00000000-0000-4000-8000-000000000001'
 const P2 = '00000000-0000-4000-8000-000000000002'
 
-const task = (id: string, title: string, projectId: string | null, completed = false, createdAt = '2026-11-10T00:00:00.000Z'): TaskDto => ({
+const task = (id: string, title: string, projectId: string | null, completed = false, createdAt = '2026-11-10T00:00:00.000Z'): TaskDto => ({ important: false,
   id,
   title,
   createdAt,

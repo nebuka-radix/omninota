@@ -7,6 +7,8 @@ import { vscodeColors } from '../theme'
 import { dueLabelOf } from '../features/tasks/due-format'
 import { InlineTitleInput, type InlineTitleEditController } from '../features/tasks/inline-title-edit'
 import { CompactTaskRow } from './CompactTaskRow'
+import { TaskImportantButton } from './TaskImportantButton'
+import { importantTitleStyle } from '../features/tasks/important-presentation'
 
 // タスクの行（Inbox の一覧・プロジェクトのマイルストンカード・Summary Review のセクションで共通）。
 // 2行構成:
@@ -50,6 +52,8 @@ export const taskOptionId = (taskId: string) => `task-option-${taskId}`
 export type TaskRowActions = {
   // お気に入りの表示（保存待ち・保存中なら押した後の状態）
   isFavorite: (task: TaskDto) => boolean
+  isImportant?: (task: TaskDto) => boolean
+  toggleImportant?: (task: TaskDto) => void
   toggleCompleted: (task: TaskDto) => void
   toggleFavorite: (task: TaskDto) => void
   openDue: (task: TaskDto, anchor: HTMLElement) => void
@@ -67,6 +71,7 @@ const stop = (event: SyntheticEvent) => event.stopPropagation()
 export type TaskRowMode = 'Standard' | 'Compact'
 export type TaskRowProps = {
   mode?: TaskRowMode
+  optionId?: string
   /** 所属するプロジェクト／マイルストン名の表示。既定はtrue。 */
   parentVisible?: boolean
   task: TaskDto
@@ -121,10 +126,11 @@ export function TaskRow(props: TaskRowProps) {
   if (props.mode === 'Compact') return <CompactTaskRow {...props} />
   const completed = isTaskCompleted(task)
   const favorite = actions.isFavorite(task)
+  const important = actions.isImportant?.(task) ?? task.important ?? false
   const due = dueLabelOf(task.dueto, today)
   const withHandle = handle !== undefined
   const leftEdge = (withHandle ? HANDLE_COLUMN_WIDTH : 0) + CHECK_COLUMN_WIDTH
-  const editing = actions.inlineEdit.state?.taskId === task.id
+  const editing = actions.inlineEdit.state?.taskId === task.id && (!actions.inlineEdit.state.scopeId || actions.inlineEdit.state.scopeId === listId)
   const editError = editing ? actions.inlineEdit.state?.error ?? null : null
   const assignment = actions.assignmentLabel(task)
   const assignmentText = assignment ?? 'Inbox'
@@ -165,6 +171,10 @@ export function TaskRow(props: TaskRowProps) {
           {handle}
         </Box>
       )}
+      <Box sx={{ position: 'absolute', left: leftEdge, top: 0, width: 20, height: LINE1_HEIGHT, display: 'flex', alignItems: 'center', pointerEvents: 'auto' }}>
+        <TaskImportantButton title={task.title} important={important} disabled={pending}
+          onToggle={actions.toggleImportant ? () => actions.toggleImportant?.(task) : undefined} />
+      </Box>
       {/* 2行目（左寄せ）: 星・期限・紐付け・…・所属。左端はタスク名の列の左端 */}
       <Box
         sx={{
@@ -290,7 +300,7 @@ export function TaskRow(props: TaskRowProps) {
       {editing && (
         <Box
           data-testid="inline-title-editor-row"
-          sx={{ position: 'absolute', top: 1, left: leftEdge, right: 4, height: LINE1_HEIGHT - 2, display: 'flex', alignItems: 'center', pointerEvents: 'auto', zIndex: 1 }}
+          sx={{ position: 'absolute', top: 1, left: leftEdge + 20, right: 4, height: LINE1_HEIGHT - 2, display: 'flex', alignItems: 'center', pointerEvents: 'auto', zIndex: 1 }}
         >
           <InlineTitleInput controller={actions.inlineEdit} taskTitle={task.title} onDone={onInlineDone} />
         </Box>
@@ -324,12 +334,12 @@ export function TaskRow(props: TaskRowProps) {
   return (
     <>
       <Box
-        id={taskOptionId(task.id)}
+        id={props.optionId ?? taskOptionId(task.id)}
         role="option"
         aria-selected={selected}
         aria-busy={pending || undefined}
         // 読み上げ名: タスク名・完了状態・お気に入り・期限（チェックボックス・操作ボタンは option の外）
-        aria-label={`${task.title}、${completed ? '完了' : '未完了'}${favorite ? '、お気に入り' : ''}${due ? `、${due.description}` : ''}${assignment ? `、${assignment}` : ''}${pending ? '、保存中' : ''}`}
+        aria-label={`${task.title}、${completed ? '完了' : '未完了'}${favorite ? '、お気に入り' : ''}${important ? '、重要' : ''}${due ? `、${due.description}` : ''}${assignment ? `、${assignment}` : ''}${pending ? '、保存中' : ''}`}
         data-task-id={task.id}
         data-task-row=""
         data-pending={pending || undefined}
@@ -377,6 +387,7 @@ export function TaskRow(props: TaskRowProps) {
           />
         </Box>
         <Box sx={{ display: 'flex', alignItems: 'center', minWidth: 0, pr: 1 }}>
+          <Box component="span" aria-hidden sx={{ width: 20, flexShrink: 0 }} />
           <Typography
             component="span"
             noWrap
@@ -393,9 +404,7 @@ export function TaskRow(props: TaskRowProps) {
               borderRadius: 0.5,
               cursor: 'pointer',
               // 完了は色だけでなく取り消し線でも示す
-              textDecoration: completed ? 'line-through' : 'none',
-              color: completed ? 'text.secondary' : 'text.primary',
-              '&:hover': { textDecoration: completed ? 'line-through underline' : 'underline' }
+              ...importantTitleStyle(important, completed)
             }}
           >
             {task.title}

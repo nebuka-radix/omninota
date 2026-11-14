@@ -69,7 +69,7 @@ describe('migration 0010（completed_at → done_on、projects.done、milestones
       runMigrations(db, MIGRATIONS_DIR)
       const after = (table: string) => db.$client.prepare(`SELECT * FROM ${table} ORDER BY id`).all() as Row[]
       const rename = ({ completed_at: doneOn, ...rest }: Row) => ({ ...rest, done_on: doneOn })
-      expect(after('tasks')).toEqual(before.tasks.map(rename))
+      expect(after('tasks')).toEqual((/* 049-important-default */ (before.tasks.map(rename))).map((row) => ({ ...row, important: 0 })))
       expect(after('projects')).toEqual((before.projects.map((row) => ({ ...rename(row), done: row['completed_at'] === null ? 0 : 1 }))).map((row) => ({ ...row, favorite: 0 })))
       expect(after('milestones')).toEqual((before.milestones.map((row) => ({ ...row, done: 0, done_on: null }))).map((row) => ({ ...row, favorite: 0 })))
       // 旧列は残さない
@@ -213,7 +213,7 @@ describe('完了管理（Service・一時DB）', () => {
   })
 })
 
-const item = (id: string, projectId: string | null, dueto: string): SummaryItem => ({
+const item = (id: string, projectId: string | null, dueto: string): SummaryItem => ({ important: false,
   id,
   title: id,
   createdAt: '2026-11-01T00:00:00.000Z',

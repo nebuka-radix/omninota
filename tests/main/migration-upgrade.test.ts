@@ -65,7 +65,7 @@ describe('既存データを保持したマイグレーション', () => {
 
     const upgraded = openDatabase(dbFile)
     expect(runMigrations(upgraded, MIGRATIONS_DIR)).toEqual({ appliedBefore: 1, appliedAfter: MIGRATION_COUNT })
-    expect(createTaskRepository(upgraded).listAll()).toEqual(expectedAfterUpgrade)
+    expect(createTaskRepository(upgraded).listAll()).toEqual((/* 049-important-default */ (expectedAfterUpgrade)).map((row) => ({ ...row, important: false })))
     const tables = upgraded.$client
       .prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name IN ('tasks', 'app_settings') ORDER BY name")
       .all()
@@ -78,7 +78,7 @@ describe('既存データを保持したマイグレーション', () => {
       appliedBefore: MIGRATION_COUNT,
       appliedAfter: MIGRATION_COUNT
     })
-    expect(createTaskRepository(restarted).listAll()).toEqual(expectedAfterUpgrade)
+    expect(createTaskRepository(restarted).listAll()).toEqual((/* 051-important-restart-default */ (expectedAfterUpgrade)).map((row) => ({ ...row, important: false })))
     closeDatabase(restarted)
   })
 
@@ -104,7 +104,7 @@ describe('既存データを保持したマイグレーション', () => {
 
     const upgraded = openDatabase(dbFile)
     expect(runMigrations(upgraded, MIGRATIONS_DIR)).toEqual({ appliedBefore: 3, appliedAfter: MIGRATION_COUNT })
-    expect(createTaskRepository(upgraded).listAll()).toEqual(before.map((task) => ({ ...task, projectId: null, milestoneId: null, hiddenAt: null, position: null, dueto: null, favorite: false })))
+    expect(createTaskRepository(upgraded).listAll()).toEqual((/* 049-important-default */ (before.map((task) => ({ ...task, projectId: null, milestoneId: null, hiddenAt: null, position: null, dueto: null, favorite: false })))).map((row) => ({ ...row, important: false })))
     expect(createSettingsRepository(upgraded).get('workspace')?.value).toBe(workspaceValue)
     expect(upgraded.$client.prepare('SELECT COUNT(*) AS c FROM projects').get()).toEqual({ c: 0 })
     closeDatabase(upgraded)
@@ -137,7 +137,7 @@ describe('既存データを保持したマイグレーション', () => {
 
     const upgraded = openDatabase(dbFile)
     expect(runMigrations(upgraded, MIGRATIONS_DIR)).toEqual({ appliedBefore: 2, appliedAfter: MIGRATION_COUNT })
-    expect(createTaskRepository(upgraded).listAll()).toEqual(expectedAfterUpgrade)
+    expect(createTaskRepository(upgraded).listAll()).toEqual((/* 049-important-default */ (expectedAfterUpgrade)).map((row) => ({ ...row, important: false })))
     expect(createSettingsRepository(upgraded).get('workspace')).toEqual({
       key: 'workspace',
       value: workspaceValue,
@@ -190,7 +190,7 @@ describe('既存データを保持したマイグレーション', () => {
     const upgraded = openDatabase(dbFile)
     expect(runMigrations(upgraded, MIGRATIONS_DIR)).toEqual({ appliedBefore: 4, appliedAfter: MIGRATION_COUNT })
     // 既存タスクはID・タイトル・日時・完了日時を保持し、未所属（projectId = null）になる
-    expect(createTaskRepository(upgraded).listAll()).toEqual(beforeTasks.map((task) => ({ ...task, projectId: null, milestoneId: null, hiddenAt: null, position: null, dueto: null, favorite: false })))
+    expect(createTaskRepository(upgraded).listAll()).toEqual((/* 049-important-default */ (beforeTasks.map((task) => ({ ...task, projectId: null, milestoneId: null, hiddenAt: null, position: null, dueto: null, favorite: false })))).map((row) => ({ ...row, important: false })))
     // 0010: completed_at → done_on（値・updated_at はそのまま）、done は完了日時の有無から
     expect(upgraded.$client.prepare('SELECT * FROM projects ORDER BY id').all()).toEqual(
       ((beforeProjects as Record<string, unknown>[]).map(({ completed_at: doneOn, ...rest }) => ({ ...rest, done_on: doneOn, done: doneOn === null ? 0 : 1 }))).map((row) => ({ ...row, favorite: 0 }))
@@ -216,7 +216,7 @@ describe('既存データを保持したマイグレーション', () => {
       appliedBefore: MIGRATION_COUNT,
       appliedAfter: MIGRATION_COUNT
     })
-    expect(createTaskRepository(restarted).listAll()).toEqual(beforeTasks.map((task) => ({ ...task, projectId: null, milestoneId: null, hiddenAt: null, position: null, dueto: null, favorite: false })))
+    expect(createTaskRepository(restarted).listAll()).toEqual((/* 051-important-restart-default */ (beforeTasks.map((task) => ({ ...task, projectId: null, milestoneId: null, hiddenAt: null, position: null, dueto: null, favorite: false })))).map((row) => ({ ...row, important: false })))
     closeDatabase(restarted)
   })
 })

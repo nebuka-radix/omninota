@@ -93,6 +93,8 @@ export type TaskDto = {
   dueto: string | null
   // お気に入り（0009で追加）。未設定はなく、既定は false
   favorite: boolean
+  // 重要フラグ。未設定はなく、既定は false
+  important: boolean
 }
 
 // 期限の設定・変更・解除（フェーズ6）。「今日」「明日」は Main が操作の時点のローカルの暦日で決める
@@ -112,6 +114,8 @@ export type SetTaskFavoriteInput = {
   id: string
   favorite: boolean
 }
+
+export type SetTaskImportantInput = { id: string; important: boolean }
 
 export function isTaskCompleted(task: Pick<TaskDto, 'doneOn'>): boolean {
   return task.doneOn !== null

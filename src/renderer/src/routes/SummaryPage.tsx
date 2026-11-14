@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Alert, Box, CircularProgress, Typography } from '@mui/material'
 import { useQuery } from '@tanstack/react-query'
-import { CalendarCheck, CheckCheck, ClockCheck, ClockExclamationPoint } from 'lucide-react'
+import { CalendarCheck, CheckCheck, ClockCheck, ClockExclamationPoint, SquareExclamationPoint } from 'lucide-react'
 import type { SummaryReview } from '../../../shared/contracts/summary'
 import type { TaskDto } from '../../../shared/contracts/tasks'
 import { Page } from '../components/Page'
@@ -17,11 +17,12 @@ import { TaskQuickAdd } from '../features/tasks/TaskQuickAdd'
 import { TaskList } from '../features/tasks/TaskList'
 import { taskListQueryOptions, usePendingTaskIds } from '../features/tasks/task-queries'
 import { useTaskRowActions } from '../features/tasks/use-task-row-actions'
+import { importantTasks } from '../features/tasks/important-presentation'
 import { useLocalDay } from '../lib/local-day'
 import { vscodeColors } from '../theme'
 
 const HEADING_HEIGHT = 32
-type SectionKey = keyof Omit<SummaryReview, 'today'>
+type SectionKey = keyof Omit<SummaryReview, 'today'> | 'importantItems'
 // 「田」の字の配置: 左上 Today・右上 This Week・左下 Tomorrow・右下 Overdue
 const SECTIONS: { key: SectionKey; label: string; row: 1 | 2; column: 1 | 2 }[] = [
   { key: 'todayItems', label: 'Actions for Today', row: 1, column: 1 },
@@ -44,7 +45,7 @@ export function SummaryPage({ compact = false, showQuickAdd = true }: {
   compact?: boolean
   showQuickAdd?: boolean
 }) {
-  const sections = compact ? SECTIONS.filter((section) => section.key === 'todayItems' || section.key === 'tomorrowItems' || section.key === 'overdueItems') : SECTIONS
+  const sections = compact ? [{ key: 'importantItems', label: 'Important', row: 1, column: 1 } as const, ...SECTIONS.filter((section) => section.key === 'todayItems' || section.key === 'tomorrowItems' || section.key === 'overdueItems')] : SECTIONS
   const [sectionExpanded, setSectionExpanded] = useState<Partial<Record<SectionKey, boolean>>>({})
   const [sectionError, setSectionError] = useState<string | null>(null)
   const sectionBusy = useRef(false)
@@ -83,20 +84,22 @@ export function SummaryPage({ compact = false, showQuickAdd = true }: {
     },
     [query.data, tasksQuery.data, excluded, compact]
   )
+  const importantItems = useMemo(() => importantTasks(tasksQuery.data ?? EMPTY_TASKS), [tasksQuery.data])
+  const itemsOf = (key: SectionKey): readonly TaskDto[] => key === 'importantItems' ? importantItems : summary?.[key] ?? []
   const dayDrag = useDayTaskDrag({
     enabled: compact,
     rows: sections.flatMap((section) => !compact || sectionExpanded[section.key] === false ? [] :
-      (summary?.[section.key] ?? []).map((task) => ({ task, section: section.key }))),
+      itemsOf(section.key).map((task) => ({ task, section: section.key }))),
     pendingIds: pendingTaskIds,
     onMoved: (day) => setSectionExpanded((current) => ({ ...current, [day === 'today' ? 'todayItems' : 'tomorrowItems']: true })),
     onAnnounce: setAnnouncement
   })
-  const total = summary ? compact ? summary.todayItems.length + summary.tomorrowItems.length + summary.overdueItems.length : summaryTotal(summary) : 0
+  const total = summary ? compact ? new Set(sections.flatMap((section) => itemsOf(section.key).map((task) => task.id))).size : summaryTotal(summary) : 0
 
   return (
     <Page title={compact ? 'コンパクト' : 'Summary Review'} icon={CalendarCheck} fill titleHidden>
       {compact && showQuickAdd && <Box sx={{ flexShrink: 0 }}><TaskQuickAdd projectId={null} /></Box>}
-      {query.isSuccess && (
+      {query.isSuccess && (!compact || tasksQuery.data !== undefined) && (
         <ShellSlot name="status-count">
           <Typography component="span" role="status" data-testid="task-count" sx={{ fontVariantNumeric: 'tabular-nums' }}>
             {total} 件
@@ -114,15 +117,15 @@ export function SummaryPage({ compact = false, showQuickAdd = true }: {
       {sectionError && <Alert severity="error" onClose={() => setSectionError(null)}>{sectionError}</Alert>}
       {compact && dayDrag.error && <Alert severity="error" onClose={dayDrag.clearError}>{dayDrag.error}</Alert>}
       <Box sx={{ flexShrink: 0 }}>{rowActions.alerts}</Box>
-      {query.isPending ? (
+      {query.isPending || (compact && tasksQuery.data === undefined && tasksQuery.isPending) ? (
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }} role="status">
           <CircularProgress size={14} aria-hidden />
           <Typography variant="body2">読み込み中…</Typography>
         </Box>
-      ) : query.isError ? (
+      ) : query.isError || (compact && tasksQuery.data === undefined && tasksQuery.isError) ? (
         // 取得に失敗した時は0件として表示しない
         <Alert severity="error" variant="outlined" data-testid="summary-error">
-          Summary Review を読み込めませんでした: {query.error.message}
+          Summary Review を読み込めませんでした: {query.error?.message ?? tasksQuery.error?.message}
         </Alert>
       ) : (
         <Box
@@ -146,7 +149,7 @@ export function SummaryPage({ compact = false, showQuickAdd = true }: {
           }}
         >
           {sections.map((section) => {
-            const items = summary ? summary[section.key] : []
+            const items = itemsOf(section.key)
             if (compact && section.key === 'overdueItems' && items.length === 0) return null
             const isExpanded = !compact || sectionExpanded[section.key] !== false
             return (
@@ -177,7 +180,7 @@ export function SummaryPage({ compact = false, showQuickAdd = true }: {
                   <SectionRow
                     title={section.label}
                     titleId={`summary-heading-${section.key}`}
-                    icon={section.key === 'todayItems' ? CheckCheck : section.key === 'tomorrowItems' ? ClockCheck : ClockExclamationPoint}
+                    icon={section.key === 'importantItems' ? SquareExclamationPoint : section.key === 'todayItems' ? CheckCheck : section.key === 'tomorrowItems' ? ClockCheck : ClockExclamationPoint}
                     expanded={isExpanded}
                     onExpandedChange={(next) => void changeSectionExpanded(section.key, next)}
                     controlsId={`summary-content-${section.key}`}
@@ -216,6 +219,7 @@ export function SummaryPage({ compact = false, showQuickAdd = true }: {
                 ) : (
                   <TaskList
                     variant="section"
+                    optionIdPrefix={section.key === 'importantItems' ? 'important' : undefined}
                     rowMode="Standard"
                     multiSelect={compact ? {
                       selection: dayDrag.selection,
@@ -223,11 +227,11 @@ export function SummaryPage({ compact = false, showQuickAdd = true }: {
                       onShowDetail: (id) => {
                         setSelectedId(id)
                         const task = tasksQuery.data?.find((item) => item.id === id)
-                        const anchor = document.getElementById(`task-option-${id}`)
+                        const anchor = document.querySelector<HTMLElement>(`[data-section="${section.key}"] [data-task-id="${id}"]`)
                         if (task && anchor) rowActions.actions.openEditor(task, anchor)
                       }
                     } : undefined}
-                    onRowDragStart={compact ? dayDrag.start : undefined}
+                    onRowDragStart={compact ? (task, point) => dayDrag.start(task, point, section.key) : undefined}
                     maxVisibleRows={compact ? Math.max(1, items.length) : undefined}
                     tasks={items}
                     actions={rowActions.actions}

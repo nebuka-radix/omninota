@@ -85,7 +85,8 @@ export function toTaskDto(row: TaskRow): TaskDto {
     milestoneId: row.milestoneId,
     position: row.position,
     dueto: row.dueto,
-    favorite: row.favorite
+    favorite: row.favorite,
+    important: row.important ?? false
   }
 }
 const toDto = toTaskDto
@@ -155,7 +156,8 @@ export function createTaskService(deps: {
           position: nextPosition(milestoneId),
           // 期限は作成時には設定しない（作成日時などから補完しない）
           dueto: null,
-          favorite: false
+          favorite: false,
+        important: false
         }
         repository.insert(row)
         return toDto(row)

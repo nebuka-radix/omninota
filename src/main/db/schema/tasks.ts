@@ -40,7 +40,8 @@ export const tasks = sqliteTable(
     hiddenAt: text('hidden_at'),
     position: integer('position'),
     dueto: text('dueto'),
-    favorite: integer('favorite', { mode: 'boolean' }).notNull().default(false)
+    favorite: integer('favorite', { mode: 'boolean' }).notNull().default(false),
+    important: integer('important', { mode: 'boolean' }).notNull().default(false)
   },
   (table) => [
     index('tasks_created_at_id_idx').on(table.createdAt, table.id),

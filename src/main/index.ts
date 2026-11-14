@@ -11,6 +11,9 @@ import { createTransactionRunner } from './db/transaction'
 import { resolveDatabaseFile, resolveMigrationsDir, resolveUserDataDir } from './infrastructure/app-paths'
 import { fitWindowBounds, resolveTestMode, selectTestDisplay } from './infrastructure/test-mode'
 import { registerIpcHandlers } from './ipc'
+import { registerTaskImportantHandler } from './ipc/task-important'
+import { createTaskImportantService } from './services/task-important-service'
+import { createTaskImportantRepository } from './repositories/task-important-repository'
 import {
   createExitCoordinator,
   createFlushRequester,
@@ -359,6 +362,10 @@ if (!app.requestSingleInstanceLock()) {
     const taskRepository = createTaskRepository(database)
     const transaction = createTransactionRunner(database)
     const milestoneRepository = createMilestoneRepository(database)
+    registerTaskImportantHandler({
+      policy: { getWindow: () => mainWindow, isAllowedUrl: isAppUrl },
+      service: createTaskImportantService({ repository: createTaskImportantRepository(database), transaction, now })
+    })
     registerIpcHandlers({
       policy: { getWindow: () => mainWindow, isAllowedUrl: isAppUrl },
       getAppInfo,

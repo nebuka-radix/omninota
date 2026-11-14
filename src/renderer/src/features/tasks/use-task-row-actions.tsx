@@ -19,7 +19,8 @@ import {
   usePendingTaskIds,
   useSetTaskAssignmentMutation,
   useSetTaskCompletedMutation,
-  useTaskFavorite
+  useTaskFavorite,
+  useTaskImportant
 } from './task-queries'
 import { reopenBlockedReason } from './task-rules'
 
@@ -50,6 +51,7 @@ export function useTaskRowActions(options: {
   const setAssignment = useSetTaskAssignmentMutation()
   const assignInbox = useAssignInboxTasksMutation()
   const favorite = useTaskFavorite()
+  const important = useTaskImportant()
   const inlineEdit = useInlineTitleEdit(options.tasks)
   const editDialog = useTaskEditDialog()
   const optionsRef = useRef(options)
@@ -132,9 +134,18 @@ export function useTaskRowActions(options: {
     return milestoneName === undefined ? projectName : `${projectName} / ${milestoneName}`
   }
 
+  const toggleImportant = async (task: TaskDto) => {
+    if (pendingTaskIds.has(task.id)) return
+    if (!await confirmLeave({ target: { kind: 'task', id: task.id } })) return
+    const latest = optionsRef.current.tasks.find((item) => item.id === task.id)
+    if (latest) important.toggle(latest)
+  }
+
   // 行へ渡す操作
   const actions: TaskRowActions = {
     isFavorite: favorite.isFavorite,
+    isImportant: important.isImportant,
+    toggleImportant: (task) => { void toggleImportant(task) },
     toggleCompleted: (task) => void toggleCompleted(task),
     toggleFavorite: favorite.toggle,
     openDue: (task, anchor) => due.open(task, anchor),
@@ -155,6 +166,9 @@ export function useTaskRowActions(options: {
           {assignError}
         </Alert>
       )}
+      {important.error && <Alert severity="error" variant="outlined" sx={{ mb: 2 }} onClose={important.clearError} data-testid="task-important-error">
+        {important.error}
+      </Alert>}
       {favorite.error && (
         <Alert severity="error" variant="outlined" sx={{ mb: 2 }} onClose={favorite.clearError} data-testid="task-favorite-error">
           {favorite.error}

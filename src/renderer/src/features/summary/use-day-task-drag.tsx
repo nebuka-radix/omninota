@@ -44,18 +44,18 @@ export function useDayTaskDrag(options: {
     cleanupRef.current?.()
   }, [])
 
-  const start = (task: TaskDto, point: { x: number; y: number }) => {
+  const start = (task: TaskDto, point: { x: number; y: number }, section?: string) => {
     const opts = optionsRef.current
     if (!opts.enabled || savingRef.current || opts.pendingIds.has(task.id) || task.doneOn !== null) return
     cleanupRef.current?.()
     const initial = selectionRef.current
     const moving = initial.ids.has(task.id)
     const rows = opts.rows
-    const origin = rows.find((row) => row.task.id === task.id)
+    const origin = rows.find((row) => row.task.id === task.id && (!section || row.section === section))
     if (!origin) return
     const order = rows.filter((row) => row.section === origin.section).map((row) => row.task.id)
     const from = order.indexOf(task.id)
-    const ids = moving ? rows.filter((row) => initial.ids.has(row.task.id)).map((row) => row.task.id) : [task.id]
+    const ids = moving ? [...new Set(rows.filter((row) => initial.ids.has(row.task.id)).map((row) => row.task.id))] : [task.id]
     if (ids.length > TASK_BULK_MAX || ids.some((id) => opts.pendingIds.has(id))) {
       setError(`保存中のタスクが含まれるか、選択件数が上限（${TASK_BULK_MAX}件）を超えています。`)
       return
@@ -188,7 +188,7 @@ export function useDayTaskDrag(options: {
       if (native.pointerId !== pointerId || Math.hypot(native.clientX - x, native.clientY - y) < 5) return
       cleanup()
       suppressBlankClickRef.current = true
-      start(task, { x: native.clientX, y: native.clientY })
+      start(task, { x: native.clientX, y: native.clientY }, row.closest<HTMLElement>('[data-section]')?.dataset.section)
     }
     const release = (native: PointerEvent) => {
       if (native.pointerId === pointerId) cleanup()

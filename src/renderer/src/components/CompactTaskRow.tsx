@@ -7,6 +7,8 @@ import { vscodeColors } from '../theme'
 import { InlineTitleInput } from '../features/tasks/inline-title-edit'
 import { dueLabelOf } from '../features/tasks/due-format'
 import type { TaskRowProps } from './TaskRow'
+import { TaskImportantButton } from './TaskImportantButton'
+import { importantTitleStyle } from '../features/tasks/important-presentation'
 const COMPACT_TASK_ROW_HEIGHT = 28
 const HANDLE_COLUMN_WIDTH = 18
 const taskOptionId = (id: string) => `task-option-${id}`
@@ -18,20 +20,21 @@ const titleStyle = {
   px: 0.5, cursor: 'pointer', overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis'
 } as const
 
-export function CompactTaskRow({ parentVisible = true, task, top, listId, controlsLayer, today, actions, selected, active, pending, dimmed, handle,
+export function CompactTaskRow({ parentVisible = true, optionId, task, top, listId, controlsLayer, today, actions, selected, active, pending, dimmed, handle,
   onRowPointerDown, onRowClick, onRowContextMenu, onTitleClick, onTitleDoubleClick, onInlineDone }: TaskRowProps) {
   const completed = isTaskCompleted(task)
   const favorite = actions.isFavorite(task)
+  const important = actions.isImportant?.(task) ?? task.important ?? false
   const assignment = actions.assignmentLabel(task)
   const due = dueLabelOf(task.dueto, today)
   const withHandle = handle !== undefined
-  const editing = actions.inlineEdit.state?.taskId === task.id
+  const editing = actions.inlineEdit.state?.taskId === task.id && (!actions.inlineEdit.state.scopeId || actions.inlineEdit.state.scopeId === listId)
   const error = editing ? actions.inlineEdit.state?.error : null
   const opacity = pending || dimmed ? 0.5 : 1
   // 実表示と操作レイヤーで同じ列を使用し、タスク名の直後に…を配置する。
   const grid = {
     display: 'grid', alignItems: 'center', minWidth: 0, width: '100%', height: COMPACT_TASK_ROW_HEIGHT,
-    gridTemplateColumns: `${withHandle ? `${HANDLE_COLUMN_WIDTH}px ` : ''}28px 20px minmax(0, max-content) 20px minmax(0, 1fr)`,
+    gridTemplateColumns: `${withHandle ? `${HANDLE_COLUMN_WIDTH}px ` : ''}28px 20px 20px minmax(0, max-content) 20px minmax(0, 1fr)`,
     boxSizing: 'border-box', pr: 0.5
   } as const
   const icon = { width: 20, height: 22, minWidth: 0, color: 'text.secondary', pointerEvents: 'auto', borderRadius: 0.5,
@@ -56,9 +59,11 @@ export function CompactTaskRow({ parentVisible = true, task, top, listId, contro
         onClick={() => actions.toggleFavorite(task)} sx={{ ...icon, color: favorite ? STAR_ON : '#9a9a9a' }}>
         <Star size={14} aria-hidden fill={favorite ? STAR_ON : 'none'} />
       </ButtonBase>
+      <TaskImportantButton title={task.title} important={important} disabled={pending}
+        onToggle={actions.toggleImportant ? () => actions.toggleImportant?.(task) : undefined} />
       {/* 見えない同一テキストで、行本体と列幅を一致させる。編集欄は同じセルに重ねる。 */}
       <Box sx={{ minWidth: 0, position: 'relative', display: 'flex', alignItems: 'center' }}>
-        <Typography aria-hidden component="span" noWrap sx={{ ...titleStyle, visibility: 'hidden' }}>{task.title}</Typography>
+        <Typography aria-hidden component="span" noWrap sx={{ ...titleStyle, fontWeight: important ? 800 : 400, visibility: 'hidden' }}>{task.title}</Typography>
         {editing && <Box data-testid="inline-title-editor-row" sx={{ position: 'absolute', inset: 0, minWidth: 0, pointerEvents: 'auto' }}>
           <InlineTitleInput controller={actions.inlineEdit} taskTitle={task.title} onDone={onInlineDone} />
         </Box>}
@@ -74,8 +79,8 @@ export function CompactTaskRow({ parentVisible = true, task, top, listId, contro
     </Box>
   )
   return <>
-    <Box id={taskOptionId(task.id)} role="option" aria-selected={selected} aria-busy={pending || undefined}
-      aria-label={`${task.title}、${completed ? '完了' : '未完了'}${favorite ? '、お気に入り' : ''}${due ? `、${due.description}` : ''}${assignment ? `、${assignment}` : ''}`}
+    <Box id={optionId ?? taskOptionId(task.id)} role="option" aria-selected={selected} aria-busy={pending || undefined}
+      aria-label={`${task.title}、${completed ? '完了' : '未完了'}${favorite ? '、お気に入り' : ''}${important ? '、重要' : ''}${due ? `、${due.description}` : ''}${assignment ? `、${assignment}` : ''}`}
       data-task-id={task.id} data-task-row="" data-task-row-mode="Compact" data-pending={pending || undefined}
       onPointerDown={onRowPointerDown} onClick={onRowClick} onContextMenu={onRowContextMenu}
       sx={{ ...grid, position: 'absolute', left: 0, top: 0, transform: `translateY(${top}px)`, opacity,
@@ -88,10 +93,10 @@ export function CompactTaskRow({ parentVisible = true, task, top, listId, contro
           slotProps={{ input: { 'aria-hidden': true, tabIndex: -1, 'data-testid': 'task-complete-checkbox' } as Record<string, unknown> }} sx={{ p: 0 }} />
       </Box>
       <span aria-hidden />
+      <span aria-hidden />
       <Typography component="span" noWrap data-testid="task-title" title={task.title}
         onClick={onTitleClick} onDoubleClick={onTitleDoubleClick}
-        sx={{ ...titleStyle, visibility: editing ? 'hidden' : 'visible', textDecoration: completed ? 'line-through' : 'none',
-          color: completed ? 'text.secondary' : 'text.primary', '&:hover': { textDecoration: 'underline' } }}>{task.title}</Typography>
+        sx={{ ...titleStyle, visibility: editing ? 'hidden' : 'visible', ...importantTitleStyle(important, completed) }}>{task.title}</Typography>
       <span aria-hidden />
       <Box component="span" aria-hidden title={assignment ?? undefined} data-testid="task-assignment" sx={assignmentStyle}>{parentVisible ? assignment : null}</Box>
     </Box>

@@ -58,16 +58,20 @@ describe('notes persistence', () => {
     const legacy = join(directory, 'legacy-migrations')
     mkdirSync(join(legacy, 'meta'), { recursive: true })
     const journal = JSON.parse(readFileSync(join(migrations, 'meta', '_journal.json'), 'utf8')) as { entries: { tag: string }[] }
-    journal.entries = journal.entries.slice(0, -1)
+    // 049-note-migration-boundary: start immediately before note was introduced.
+    const noteMigrationIndex = journal.entries.findIndex((entry) =>
+      /CREATE\s+TABLE\s+[`"]?note[`"]?\s*\(/i.test(readFileSync(join(migrations, `${entry.tag}.sql`), 'utf8')))
+    expect(noteMigrationIndex).toBeGreaterThanOrEqual(0)
+    journal.entries = journal.entries.slice(0, noteMigrationIndex)
     for (const entry of journal.entries) copyFileSync(join(migrations, `${entry.tag}.sql`), join(legacy, `${entry.tag}.sql`))
     writeFileSync(join(legacy, 'meta', '_journal.json'), JSON.stringify(journal))
     db = openDatabase(join(directory, 'legacy.sqlite'))
     runMigrations(db, legacy)
     db.$client.prepare('INSERT INTO tasks (id, title, created_at, updated_at) VALUES (?, ?, ?, ?)')
       .run('legacy-task', 'Keep this', '2026-01-01', '2026-01-01')
-    const before = db.$client.prepare('SELECT * FROM tasks').all()
+    const before = db.$client.prepare('SELECT * FROM tasks').all() as Record<string, unknown>[]
     runMigrations(db, migrations)
-    expect(db.$client.prepare('SELECT * FROM tasks').all()).toEqual(before)
+    expect(db.$client.prepare('SELECT * FROM tasks').all()).toEqual((/* 049-important-default */ (before)).map((row) => ({ ...row, important: 0 })))
     const columns = db.$client.prepare('PRAGMA table_info(note)').all() as { name: string; type: string }[]
     expect(columns.map((column) => column.name)).toEqual(['id', 'favorite', 'name', 'description', 'active', 'created_on', 'updated_on'])
     expect(columns.find((column) => column.name === 'name')?.type.toLowerCase()).toBe('varchar(96)')

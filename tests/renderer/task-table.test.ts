@@ -12,7 +12,7 @@ import {
 } from '../../src/renderer/src/features/tasks/task-table'
 import type { TaskDto } from '../../src/shared/contracts/tasks'
 
-const task = (id: string, title: string, createdAt: string, doneOn: string | null = null): TaskDto => ({
+const task = (id: string, title: string, createdAt: string, doneOn: string | null = null): TaskDto => ({ important: false,
   id,
   title,
   createdAt,

@@ -31,6 +31,7 @@ import type {
   SetTaskDueInput,
   SetTasksDayInput,
   SetTaskFavoriteInput,
+  SetTaskImportantInput,
   SetTaskAssignmentInput,
   SetTaskCompletedInput,
   TaskDto,
@@ -62,6 +63,7 @@ export const IPC_CHANNELS = {
   tasksSetDue: 'tasks:set-due',
   tasksSetDayMany: 'tasks:set-day-many',
   tasksSetFavorite: 'tasks:set-favorite',
+  tasksSetImportant: 'tasks:set-important',
   summaryGet: 'summary:get',
   summaryToday: 'summary:today',
   projectsList: 'projects:list',
@@ -194,6 +196,7 @@ export type GtdApi = {
     setDayMany: (input: SetTasksDayInput) => Promise<IpcResult<TaskDto[]>>
     // お気に入りの設定・解除。お気に入りだけを更新し、保存後のタスクを返す
     setFavorite: (input: SetTaskFavoriteInput) => Promise<IpcResult<TaskDto>>
+    setImportant: (input: SetTaskImportantInput) => Promise<IpcResult<TaskDto>>
   }
   // Summary Review（フェーズ6）。条件は Main で適用し、該当するタスクだけを返す
   summary: {

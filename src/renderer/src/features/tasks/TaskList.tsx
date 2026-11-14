@@ -121,6 +121,7 @@ export function TaskList({
   variant = 'table',
   rowMode = 'Standard',
   parentVisible = true,
+  optionIdPrefix,
   listLabel,
   cardKey,
   emptyLabel,
@@ -144,6 +145,7 @@ export function TaskList({
   variant?: 'table' | 'card' | 'section'
   rowMode?: TaskRowMode
   parentVisible?: boolean
+  optionIdPrefix?: string
   // 一覧の読み上げ名（省略時は「タスク一覧（N件表示 / 全N件）」）
   listLabel?: string
   // カードの識別（隣のカードへの移動で使う）
@@ -180,13 +182,14 @@ export function TaskList({
   const inlineEdit = actions.inlineEdit
   const today = useLocalDay()
   const listId = `task-list-${useId().replace(/:/g, '')}`
+  const optionIdOf = (id: string) => optionIdPrefix ? `${optionIdPrefix}-${taskOptionId(id)}` : taskOptionId(id)
   // 行の操作ボタン（TaskRow がポータルで描画する重ね合わせ層）
   const [controlsLayer, setControlsLayer] = useState<HTMLElement | null>(null)
   const pendingClick = usePendingClick()
   // キーボード移動の対象となるタスクの並び（行の並びと同じ）
   const orderedTasks = tasks
   const order = tasks.map((task) => task.id)
-  const editingTaskId = inlineEdit.state?.taskId ?? null
+  const editingTaskId = !inlineEdit.state?.scopeId || inlineEdit.state.scopeId === listId ? inlineEdit.state?.taskId ?? null : null
   const editingIndex = editingTaskId === null ? -1 : tasks.findIndex((task) => task.id === editingTaskId)
 
   // 並べ替えのドラッグ中の状態（挿入位置 0..n）
@@ -273,11 +276,11 @@ export function TaskList({
     pendingClick.cancel()
     if (pendingTaskIds.has(task.id)) return
     setActiveTaskId(task.id)
-    void inlineEdit.start(task)
+    void inlineEdit.start(task, listId)
   }
 
   // 現在行の要素（キーボードから開くメニュー・モーダルの位置と、閉じた後のフォーカスの戻り先）
-  const anchorOf = (task: TaskDto) => document.getElementById(taskOptionId(task.id)) ?? listRef.current
+  const anchorOf = (task: TaskDto) => document.getElementById(optionIdOf(task.id)) ?? listRef.current
 
   // 並べ替え（キーボード Alt+↑↓・ハンドルのドラッグ）で、このカードのタスクの新しい順序を作る
   const moveRow = (taskId: string, toIndex: number) => {
@@ -631,7 +634,7 @@ export function TaskList({
   const virtualItems = virtualizer.getVirtualItems()
   const activeRendered = activeIndex >= 0 && virtualItems.some((item) => item.index === activeIndex)
   const activeTask = activeIndex >= 0 ? orderedTasks[activeIndex] : undefined
-  const activeId = activeRendered && activeTask ? taskOptionId(activeTask.id) : undefined
+  const activeId = activeRendered && activeTask ? optionIdOf(activeTask.id) : undefined
 
   const selectedIds = multiSelect?.selection.ids
   const fixedHeight = maxVisibleRows !== undefined ? Math.max(1, Math.min(maxVisibleRows, tasks.length)) * rowHeight : undefined
@@ -722,6 +725,7 @@ export function TaskList({
                 <TaskRow
                   key={task.id}
                   task={task}
+                  optionId={optionIdOf(task.id)}
                   mode={rowMode}
                   parentVisible={parentVisible}
                   top={item.start}

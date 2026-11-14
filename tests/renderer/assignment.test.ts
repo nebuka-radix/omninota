@@ -31,7 +31,7 @@ const milestone = (id: string, projectId: string, name: string, createdAt: strin
   doneOn: null,
   position: null
 })
-const task = (id: string, milestoneId: string | null, projectId: string | null = P): TaskDto => ({
+const task = (id: string, milestoneId: string | null, projectId: string | null = P): TaskDto => ({ important: false,
   id,
   title: id,
   createdAt: '2026-11-10T00:00:00.000Z',

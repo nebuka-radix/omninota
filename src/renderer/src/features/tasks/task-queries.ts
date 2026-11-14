@@ -249,6 +249,39 @@ export const taskFavoriteSaver = createFavoriteSaver<TaskDto>({
   }
 })
 
+let importantError: string | null = null
+const importantErrorListeners = new Set<() => void>()
+const setImportantError = (message: string | null) => {
+  importantError = message
+  for (const listener of importantErrorListeners) listener()
+}
+export const taskImportantSaver = createFavoriteSaver<TaskDto>({
+  enqueue: (taskId, save) => taskSaveQueue.run(taskId, save),
+  save: (id, important) => unwrapIpc(window.gtd.tasks.setImportant({ id, important })),
+  onSaved: (saved) => {
+    replaceTaskInList(appQueryClient, saved)
+    void appQueryClient.invalidateQueries({ queryKey: ['summary'] })
+  },
+  onError: (_taskId, error) => {
+    setImportantError(`重要フラグを保存できませんでした: ${(error as Error).message}`)
+    void appQueryClient.invalidateQueries({ queryKey: taskKeys.list() })
+    void appQueryClient.invalidateQueries({ queryKey: ['summary'] })
+  }
+})
+export function useTaskImportant() {
+  useSyncExternalStore(taskImportantSaver.subscribe, () => taskImportantSaver.version())
+  const error = useSyncExternalStore((listener) => {
+    importantErrorListeners.add(listener)
+    return () => { importantErrorListeners.delete(listener) }
+  }, () => importantError)
+  const isImportant = useCallback((task: TaskDto) => taskImportantSaver.desired(task.id) ?? task.important ?? false, [])
+  const toggle = useCallback((task: TaskDto) => {
+    setImportantError(null)
+    taskImportantSaver.toggle(task.id, task.important ?? false)
+  }, [])
+  return { isImportant, toggle, error, clearError: () => setImportantError(null) }
+}
+
 export function useTaskFavorite() {
   // 目的の状態・エラーが変わったら再描画する
   useSyncExternalStore(taskFavoriteSaver.subscribe, () => taskFavoriteSaver.version())

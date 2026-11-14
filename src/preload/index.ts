@@ -30,7 +30,8 @@ const api: GtdApi = {
     reorderInMilestone: (input) => ipcRenderer.invoke(IPC_CHANNELS.tasksReorderInMilestone, input),
     setDue: (input) => ipcRenderer.invoke(IPC_CHANNELS.tasksSetDue, input),
     setDayMany: (input) => ipcRenderer.invoke(IPC_CHANNELS.tasksSetDayMany, input),
-    setFavorite: (input) => ipcRenderer.invoke(IPC_CHANNELS.tasksSetFavorite, input)
+    setFavorite: (input) => ipcRenderer.invoke(IPC_CHANNELS.tasksSetFavorite, input),
+    setImportant: (input) => ipcRenderer.invoke(IPC_CHANNELS.tasksSetImportant, input)
   },
   summary: {
     get: () => ipcRenderer.invoke(IPC_CHANNELS.summaryGet),
