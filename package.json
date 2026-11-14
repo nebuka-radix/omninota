@@ -46,7 +46,8 @@
     "npmRebuild": false,
     "mac": {
       "identity": null,
-      "executableName": "omninota"
+      "executableName": "omninota",
+      "icon": "resources/omninota.icns"
     },
     "executableName": "omninota"
   },
