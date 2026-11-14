@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react'
-import { Menu, MenuItem } from '@mui/material'
-import { Trash2 } from 'lucide-react'
+import { Divider, Menu, MenuItem } from '@mui/material'
+import { CalendarPlus, Link2, Trash2 } from 'lucide-react'
 import type { TaskDto } from '../../../../shared/contracts/tasks'
 import { useDraftGuard } from '../drafts/DraftGuard'
 import { useWorkspace } from '../workspace/WorkspaceContext'
@@ -14,11 +14,17 @@ export function TaskRowMenu({
   task,
   anchor,
   onDelete,
+  onDue,
+  onAssign,
+  pending = false,
   onClose
 }: {
   task: TaskDto
   anchor: HTMLElement
   onDelete: () => void
+  onDue?: () => void
+  onAssign?: () => void
+  pending?: boolean
   onClose: () => void
 }) {
   return (
@@ -34,8 +40,15 @@ export function TaskRowMenu({
       }}
       data-testid="task-row-menu"
     >
+      {onDue && <MenuItem autoFocus disabled={pending} onClick={onDue} sx={{ fontSize: 13, gap: 1 }} data-testid="task-row-menu-due">
+        <CalendarPlus size={14} aria-hidden />{task.dueto ? `期限を変更（${task.dueto}）` : '期限を設定'}
+      </MenuItem>}
+      {onAssign && <MenuItem disabled={pending} onClick={onAssign} sx={{ fontSize: 13, gap: 1 }} data-testid="task-row-menu-assign">
+        <Link2 size={14} aria-hidden />紐付け
+      </MenuItem>}
+      {(onDue || onAssign) && <Divider />}
       <MenuItem
-        autoFocus
+        autoFocus={!onDue}
         onClick={() => {
           onClose()
           onDelete()
@@ -96,3 +109,4 @@ export function useTaskDeletion(options: { onDeleted?: (tasks: readonly TaskDto[
     pending: deleteTask.isPending || deleteTasks.isPending
   }
 }
+

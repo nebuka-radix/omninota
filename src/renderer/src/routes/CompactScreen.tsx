@@ -93,7 +93,7 @@ function CompactTaskBrowser({ kind }: { kind: 'inbox' | 'project' }) {
     else void guarded(apply)
   }
   const renderList = (tasks: readonly TaskDto[], label: string, fixed = false) => (
-    <TaskList variant="section" tasks={tasks} actions={rowActions.actions} listLabel={label}
+    <TaskList variant="section" rowMode="Compact" tasks={tasks} actions={rowActions.actions} listLabel={label}
       totalCount={tasks.length} selectedTaskId={selectedId} pendingTaskIds={pendingTaskIds}
       resetScrollKey={`${kind}:${selectedProjectId}`} onSelect={setSelectedId}
       onRequestDelete={(task) => rowActions.deleteTasks([task])}

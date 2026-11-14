@@ -13,7 +13,7 @@ import { useInlineTitleEdit } from './inline-title-edit'
 import { TaskRowMenu, useTaskDeletion } from './TaskDeletion'
 import { useFocusReturn, useTaskDue } from './TaskDue'
 import { useTaskEditDialog } from './TaskEditDialog'
-import type { TaskRowActions } from './TaskRow'
+import type { TaskRowActions, TaskRowMode } from './TaskRow'
 import {
   useAssignInboxTasksMutation,
   usePendingTaskIds,
@@ -59,7 +59,7 @@ export function useTaskRowActions(options: {
   const [blockedNotice, setBlockedNotice] = useState<string | null>(null)
   const [assignError, setAssignError] = useState<string | null>(null)
   const [assignTarget, setAssignTarget] = useState<{ task: TaskDto; anchor: HTMLElement; returnFocus: () => void } | null>(null)
-  const [rowMenu, setRowMenu] = useState<{ task: TaskDto; anchor: HTMLElement; returnFocus: () => void } | null>(null)
+  const [rowMenu, setRowMenu] = useState<{ task: TaskDto; anchor: HTMLElement; mode: TaskRowMode; returnFocus: () => void } | null>(null)
   const assigningRef = useRef(false)
   const focusReturn = useFocusReturn()
 
@@ -142,7 +142,7 @@ export function useTaskRowActions(options: {
       setAssignError(null)
       setAssignTarget({ task, anchor, returnFocus: focusReturn.capture(anchor) })
     },
-    openMenu: (task, anchor) => setRowMenu({ task, anchor, returnFocus: focusReturn.capture(anchor) }),
+    openMenu: (task, anchor, mode = 'Standard') => setRowMenu({ task, anchor, mode, returnFocus: focusReturn.capture(anchor) }),
     openEditor: (task, anchor) => editDialog.open(task.id, anchor),
     assignmentLabel,
     inlineEdit
@@ -189,6 +189,18 @@ export function useTaskRowActions(options: {
         <TaskRowMenu
           task={rowMenu.task}
           anchor={rowMenu.anchor}
+          onDue={rowMenu.mode === 'Compact' ? () => {
+            const current = rowMenu
+            setRowMenu(null)
+            due.open(current.task, current.anchor)
+          } : undefined}
+          onAssign={rowMenu.mode === 'Compact' ? () => {
+            const current = rowMenu
+            setRowMenu(null)
+            setAssignError(null)
+            setAssignTarget({ task: current.task, anchor: current.anchor, returnFocus: current.returnFocus })
+          } : undefined}
+          pending={pendingTaskIds.has(rowMenu.task.id)}
           onDelete={() => deletion.request([rowMenu.task])}
           onClose={() => {
             rowMenu.returnFocus()
@@ -225,3 +237,4 @@ export function useTaskRowActions(options: {
     }
   }
 }
+

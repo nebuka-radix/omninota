@@ -6,6 +6,7 @@ import { isTaskCompleted, type TaskDto } from '../../../../shared/contracts/task
 import { vscodeColors } from '../../theme'
 import { dueLabelOf } from './due-format'
 import { InlineTitleInput, type InlineTitleEditController } from './inline-title-edit'
+import { CompactTaskRow } from './CompactTaskRow'
 
 // タスクの行（Inbox の一覧・プロジェクトのマイルストンカード・Summary Review のセクションで共通）。
 // 2行構成:
@@ -24,6 +25,8 @@ import { InlineTitleInput, type InlineTitleEditController } from './inline-title
 //
 // 画面ごとの違い（取得条件・選択集合・セクション・カード構成）は持たない。操作は TaskRowActions（呼び出し側の共通フック）を呼ぶだけ。
 export const TASK_ROW_HEIGHT = 52
+export const COMPACT_TASK_ROW_HEIGHT = 28
+export const taskRowHeight = (mode: TaskRowMode = 'Standard') => mode === 'Compact' ? COMPACT_TASK_ROW_HEIGHT : TASK_ROW_HEIGHT
 // 1行目（チェックボックス・タスク名）と2行目（操作）の位置
 const LINE1_HEIGHT = 28
 const LINE2_TOP = 26
@@ -51,7 +54,7 @@ export type TaskRowActions = {
   toggleFavorite: (task: TaskDto) => void
   openDue: (task: TaskDto, anchor: HTMLElement) => void
   openAssign: (task: TaskDto, anchor: HTMLElement) => void
-  openMenu: (task: TaskDto, anchor: HTMLElement) => void
+  openMenu: (task: TaskDto, anchor: HTMLElement, mode?: TaskRowMode) => void
   openEditor: (task: TaskDto, anchor: HTMLElement) => void
   // 現在の所属（「{プロジェクト名} / {マイルストン名}」）。所属がない（Inbox）・名前を取得できない時は null
   assignmentLabel: (task: TaskDto) => string | null
@@ -61,25 +64,9 @@ export type TaskRowActions = {
 // 重ね合わせ層の操作を、行（option）・一覧へ伝えない
 const stop = (event: SyntheticEvent) => event.stopPropagation()
 
-export function TaskRow({
-  task,
-  top,
-  listId,
-  controlsLayer,
-  today,
-  actions,
-  selected,
-  active,
-  pending,
-  dimmed,
-  handle,
-  onRowPointerDown,
-  onRowClick,
-  onRowContextMenu,
-  onTitleClick,
-  onTitleDoubleClick,
-  onInlineDone
-}: {
+export type TaskRowMode = 'Standard' | 'Compact'
+export type TaskRowProps = {
+  mode?: TaskRowMode
   task: TaskDto
   // 行の上端（仮想リスト内の位置）
   top: number
@@ -106,7 +93,29 @@ export function TaskRow({
   onTitleDoubleClick: (event: ReactMouseEvent<HTMLElement>) => void
   // インライン編集を Enter・Esc で閉じた時（一覧へフォーカスを戻す）
   onInlineDone: () => void
-}) {
+}
+
+export function TaskRow(props: TaskRowProps) {
+  const {
+  task,
+  top,
+  listId,
+  controlsLayer,
+  today,
+  actions,
+  selected,
+  active,
+  pending,
+  dimmed,
+  handle,
+  onRowPointerDown,
+  onRowClick,
+  onRowContextMenu,
+  onTitleClick,
+  onTitleDoubleClick,
+  onInlineDone
+  } = props
+  if (props.mode === 'Compact') return <CompactTaskRow {...props} />
   const completed = isTaskCompleted(task)
   const favorite = actions.isFavorite(task)
   const due = dueLabelOf(task.dueto, today)
@@ -394,3 +403,4 @@ export function TaskRow({
     </>
   )
 }
+

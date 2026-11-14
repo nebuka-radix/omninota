@@ -19,7 +19,7 @@ import { vscodeColors } from '../../theme'
 import { usePendingClick } from './pending-click'
 import { nearestRemaining, selectAll, selectOnly, selectRange, toggleSelection, EMPTY_SELECTION, type TaskSelection } from './selection'
 import type { TaskSortColumn } from './task-table'
-import { TaskRow, TASK_ROW_HEIGHT, taskOptionId, type TaskRowActions } from './TaskRow'
+import { TaskRow, TASK_ROW_HEIGHT, taskRowHeight, taskOptionId, type TaskRowActions, type TaskRowMode } from './TaskRow'
 
 export { TASK_ROW_HEIGHT, taskOptionId }
 const PAGE_STEP = 10
@@ -119,6 +119,7 @@ export function TaskList({
   tasks,
   actions,
   variant = 'table',
+  rowMode = 'Standard',
   listLabel,
   cardKey,
   emptyLabel,
@@ -140,6 +141,7 @@ export function TaskList({
   tasks: readonly TaskDto[]
   actions: TaskRowActions
   variant?: 'table' | 'card' | 'section'
+  rowMode?: TaskRowMode
   // 一覧の読み上げ名（省略時は「タスク一覧（N件表示 / 全N件）」）
   listLabel?: string
   // カードの識別（隣のカードへの移動で使う）
@@ -170,6 +172,7 @@ export function TaskList({
   const listRef = useRef<HTMLDivElement>(null)
   const [activeTaskId, setActiveTaskId] = useState<string | null>(null)
   const [listFocused, setListFocused] = useState(false)
+  const rowHeight = taskRowHeight(rowMode)
   const card = variant === 'card'
   const withHandle = card && reorder !== undefined
   const inlineEdit = actions.inlineEdit
@@ -191,7 +194,7 @@ export function TaskList({
     count: tasks.length,
     // スクロール領域の寸法の変化（区画・カードの大きさの変更）は virtualizer が監視して測り直す
     getScrollElement: () => scrollRef.current,
-    estimateSize: () => TASK_ROW_HEIGHT,
+    estimateSize: () => rowHeight,
     // 安定したキー（タスクID）。1つのタスクは1つのカードにだけ表示されるため、カード間でも衝突しない
     getItemKey: (index) => tasks[index]?.id ?? index,
     overscan: 8,
@@ -205,6 +208,8 @@ export function TaskList({
       [editingIndex]
     )
   })
+
+  useLayoutEffect(() => { virtualizer.measure() }, [rowHeight, virtualizer])
 
   // 条件（resetScrollKey）が変わった時だけ先頭へ戻す。virtualizerは毎回同じインスタンス。
   useEffect(() => {
@@ -436,7 +441,7 @@ export function TaskList({
         }
         if (activeTask) {
           const anchor = anchorOf(activeTask)
-          if (anchor) actions.openMenu(activeTask, anchor)
+          if (anchor) actions.openMenu(activeTask, anchor, rowMode)
         } else moveTo(current)
         break
       }
@@ -548,7 +553,7 @@ export function TaskList({
     if (!scroller) return 0
     const rect = scroller.getBoundingClientRect()
     const y = clientY - rect.top + scroller.scrollTop
-    return Math.max(0, Math.min(tasks.length, Math.round(y / TASK_ROW_HEIGHT)))
+    return Math.max(0, Math.min(tasks.length, Math.round(y / rowHeight)))
   }
 
   const handleReorderPointerDown = (event: ReactPointerEvent<HTMLElement>, task: TaskDto, index: number) => {
@@ -627,7 +632,7 @@ export function TaskList({
   const activeId = activeRendered && activeTask ? taskOptionId(activeTask.id) : undefined
 
   const selectedIds = multiSelect?.selection.ids
-  const fixedHeight = maxVisibleRows !== undefined ? Math.max(1, Math.min(maxVisibleRows, tasks.length)) * TASK_ROW_HEIGHT : undefined
+  const fixedHeight = maxVisibleRows !== undefined ? Math.max(1, Math.min(maxVisibleRows, tasks.length)) * rowHeight : undefined
 
   const reorderHandle = (task: TaskDto, index: number) => {
     if (!withHandle || !reorder) return undefined
@@ -661,7 +666,7 @@ export function TaskList({
   }
 
   return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', minHeight: 0, flex: fixedHeight === undefined ? 1 : '0 0 auto' }}>
+    <Box sx={{ containerType: 'inline-size', containerName: 'taskRows', display: 'flex', flexDirection: 'column', minHeight: 0, flex: fixedHeight === undefined ? 1 : '0 0 auto' }}>
       {variant === 'table' && sorting && onSort && (
         // 並べ替えの見出し（作成日時は表示しないが、作成日時での並べ替えは残す）
         <Box sx={{ display: 'flex', justifyContent: 'space-between', height: 28, flexShrink: 0, borderBottom: `1px solid ${vscodeColors.border}` }}>
@@ -715,6 +720,7 @@ export function TaskList({
                 <TaskRow
                   key={task.id}
                   task={task}
+                  mode={rowMode}
                   top={item.start}
                   listId={listId}
                   controlsLayer={controlsLayer}
@@ -732,7 +738,7 @@ export function TaskList({
                     event.preventDefault()
                     pendingClick.cancel()
                     setActiveTaskId(task.id)
-                    actions.openMenu(task, event.currentTarget)
+                    actions.openMenu(task, event.currentTarget, rowMode)
                   }}
                   onTitleClick={(event) => handleTitleClick(event, task)}
                   onTitleDoubleClick={(event) => {
@@ -762,7 +768,7 @@ export function TaskList({
                   left: 0,
                   right: 0,
                   height: 2,
-                  top: reorderDrag.insertIndex * TASK_ROW_HEIGHT - 1,
+                  top: reorderDrag.insertIndex * rowHeight - 1,
                   bgcolor: vscodeColors.focusBorder
                 }}
               />
@@ -773,3 +779,4 @@ export function TaskList({
     </Box>
   )
 }
+

@@ -163,6 +163,7 @@ export function SummaryPage({ compact = false, showQuickAdd = true, compactSplit
                 ) : (
                   <TaskList
                     variant="section"
+                    rowMode={compact ? 'Compact' : 'Standard'}
                     tasks={items}
                     actions={rowActions.actions}
                     listLabel={`${section.label}（${items.length}件）`}
