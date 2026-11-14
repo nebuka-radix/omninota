@@ -1,7 +1,8 @@
-import { useLayoutEffect, useRef, useState, type ReactNode } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import { Alert, Box, CircularProgress, Tab, Tabs, ToggleButton, ToggleButtonGroup, Typography } from '@mui/material'
 import { useQuery } from '@tanstack/react-query'
 import { useDraftGuard } from '../features/drafts/DraftGuard'
+import { adjacentCompactTab, compactTabDirection } from '../features/workspace/compact-tab-shortcuts'
 import { projectListQueryOptions } from '../features/projects/project-queries'
 import { compareFavoriteProjects, sortProjects } from '../features/projects/project-order'
 import { milestoneListQueryOptions } from '../features/milestones/milestone-queries'
@@ -74,6 +75,25 @@ export function CompactScreen() {
       setError(cause instanceof Error ? cause.message : 'タブを切り替えられませんでした')
     } finally { switching.current = false }
   }
+  const keyboardTabRef = useRef(tab)
+  const keyboardSwitchRef = useRef(changeTab)
+  keyboardTabRef.current = tab
+  keyboardSwitchRef.current = changeTab
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      const direction = compactTabDirection(event)
+      if (direction === 0) return
+      event.preventDefault()
+      event.stopImmediatePropagation()
+      const dialogVisible = Array.from(document.querySelectorAll<HTMLElement>('[role="dialog"], [role="alertdialog"]'))
+        .some((element) => element.getAttribute('aria-hidden') !== 'true' && element.getClientRects().length > 0)
+      if (dialogVisible) return
+      const next = adjacentCompactTab(Object.keys(labels) as CompactTab[], keyboardTabRef.current, direction)
+      if (next !== undefined) void keyboardSwitchRef.current(next)
+    }
+    window.addEventListener('keydown', onKeyDown, true)
+    return () => window.removeEventListener('keydown', onKeyDown, true)
+  }, [])
   return (
     <Box sx={{ height: '100%', minWidth: 0, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
       {tab !== 'note' && <Box sx={{ px: 2, pt: 3, flexShrink: 0,

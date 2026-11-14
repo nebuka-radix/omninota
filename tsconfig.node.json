@@ -51,6 +51,7 @@
     "src/renderer/src/components/monaco-editor/markdown-headings.ts",
     "src/renderer/src/components/monaco-editor/table-display-width.ts",
     "src/renderer/src/features/tasks/important-presentation.ts",
-    "src/renderer/src/features/summary/day-task-order.ts"
+    "src/renderer/src/features/summary/day-task-order.ts",
+    "src/renderer/src/features/workspace/compact-tab-shortcuts.ts"
   ]
 }
