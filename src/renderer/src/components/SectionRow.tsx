@@ -39,7 +39,7 @@ export function SectionRow({
 }: SectionRowProps) {
   // TypeScriptのnumberには実数も渡せるため、有限の非負整数に正規化する。
   const normalizedLevel = Number.isFinite(level) ? Math.max(0, Math.floor(level)) : 0
-  const leftMargin = normalizedLevel * 12
+  const leftMargin = normalizedLevel * 32
   const fontSize = Math.max(10, 16 - normalizedLevel * 2)
   const shade = Math.max(0, 43 - normalizedLevel * 4)
   const backgroundColor = `rgb(${shade}, ${shade}, ${shade})`

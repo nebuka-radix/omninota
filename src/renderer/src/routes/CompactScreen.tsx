@@ -1,4 +1,4 @@
-import { useRef, useState, type ReactNode } from 'react'
+import { useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import { Alert, Box, CircularProgress, Tab, Tabs, Typography } from '@mui/material'
 import { useQuery } from '@tanstack/react-query'
 import { FolderKanban, Flag } from 'lucide-react'
@@ -48,6 +48,32 @@ export function CompactScreen() {
       </Box>
     </Box>
   )
+}
+
+
+// マイルストン名と、実際に描画されたチェックアイコンの左端を揃える。
+function MilestoneTaskIndent({ titleId, children }: { titleId: string; children: ReactNode }) {
+  const ref = useRef<HTMLDivElement>(null)
+  const [indent, setIndent] = useState(102)
+  useLayoutEffect(() => {
+    const element = ref.current
+    const title = document.getElementById(titleId)
+    if (!element || !title) return
+    const align = () => {
+      const checkbox = element.querySelector('.MuiCheckbox-root svg')
+      const left = element.getBoundingClientRect().left
+      const padding = Number.parseFloat(getComputedStyle(element).paddingLeft) || 0
+      const iconOffset = checkbox ? checkbox.getBoundingClientRect().left - left - padding : 0
+      const next = Math.max(0, title.getBoundingClientRect().left - left - iconOffset)
+      setIndent((current) => Math.abs(current - next) > 0.5 ? next : current)
+    }
+    align()
+    const observer = new ResizeObserver(align)
+    observer.observe(element)
+    observer.observe(title)
+    return () => observer.disconnect()
+  })
+  return <Box ref={ref} sx={{ pl: `${indent}px`, minWidth: 0, boxSizing: 'border-box' }}>{children}</Box>
 }
 
 function CompactTaskBrowser({ kind }: { kind: 'inbox' | 'project' }) {
@@ -132,6 +158,7 @@ function CompactTaskBrowser({ kind }: { kind: 'inbox' | 'project' }) {
         return (
           <Box component="li" key={project.id} sx={{ minWidth: 0 }}>
             <SectionRow level={0} title={projectLabel} titleId={projectTitleId} icon={FolderKanban}
+              height={32} sx={{ mt: '8px' }}
               expanded={projectExpanded} onExpandedChange={() => void toggle(projectKey)} controlsId={projectContentId} />
             <Box id={projectContentId} hidden={!projectExpanded}>
               {projectExpanded && (
@@ -145,11 +172,14 @@ function CompactTaskBrowser({ kind }: { kind: 'inbox' | 'project' }) {
                     return (
                       <Box component="li" key={group.key} sx={{ minWidth: 0 }}>
                         <SectionRow level={1} title={group.label} titleId={titleId} icon={Flag}
+                          height={28}
                           expanded={milestoneExpanded} onExpandedChange={() => void toggle(milestoneKey)} controlsId={contentId} />
-                        <Box id={contentId} hidden={!milestoneExpanded} sx={{ pl: '36px', minWidth: 0 }}>
+                        <Box id={contentId} hidden={!milestoneExpanded}>
+                          <MilestoneTaskIndent titleId={titleId}>
                           {milestoneExpanded && (group.tasks.length > 0
                             ? renderList(group.tasks, `${projectLabel} / ${group.label}の未完了タスク`, true)
                             : <Typography sx={{ py: 1, px: 1, fontSize: 12, color: 'text.secondary' }}>未完了のタスクはありません</Typography>)}
+                          </MilestoneTaskIndent>
                         </Box>
                       </Box>
                     )
