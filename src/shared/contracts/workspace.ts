@@ -4,7 +4,7 @@
 // - 固定のルートは列挙した値だけ
 // - プロジェクトのルートは「/projects/」+ 小文字のUUID だけ（任意のパスや外部URLは受け付けない）
 // フェーズ6で /summary（Summary Review）を追加
-export const WORKSPACE_STATIC_ROUTES = ['/inbox', '/settings', '/projects', '/summary'] as const
+export const WORKSPACE_STATIC_ROUTES = ['/inbox', '/settings', '/projects', '/summary', '/notes'] as const
 export type WorkspaceStaticRoute = (typeof WORKSPACE_STATIC_ROUTES)[number]
 export type ProjectRoute = `/projects/${string}`
 export type WorkspaceRoute = WorkspaceStaticRoute | ProjectRoute

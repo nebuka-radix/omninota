@@ -7,7 +7,8 @@ import type {
   ProjectDeletionSummary,
   ProjectDto,
   RenameProjectInput,
-  SetProjectCompletedInput
+  SetProjectCompletedInput,
+  SetProjectFavoriteInput
 } from '../../shared/contracts/projects'
 import type { MilestoneRow, ProjectRow } from '../db/schema'
 import type { RunInTransaction } from '../db/transaction'
@@ -26,6 +27,7 @@ export type ProjectService = {
   // 完了するには、所属する全タスク（画面の絞り込みとは無関係にDBで数える）が完了済みであること。0件なら完了できる。
   // 所属タスクの状態・日時・所属は変えない。タスクが全件完了しても自動では完了しない。
   setCompleted(input: SetProjectCompletedInput): ProjectDto
+  setFavorite(input: SetProjectFavoriteInput): ProjectDto
   // 削除の確認内容（フェーズ5.6）。件数はDBで数える（タスクは既に非表示のものを含む）
   getDeletionSummary(input: { id: string }): ProjectDeletionSummary
   // 削除（フェーズ5.6）。未完了・完了済みのどちらでも削除できる（完了の条件とは無関係）。1つのトランザクションで:
@@ -42,6 +44,7 @@ function toDto(row: ProjectRow): ProjectDto {
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
     done: row.done,
+    favorite: row.favorite,
     doneOn: row.doneOn
   }
 }
@@ -76,6 +79,7 @@ export function createProjectService(deps: {
         const row: ProjectRow = {
           id: generateId(),
           name: input.name,
+          favorite: false,
           createdAt: timestamp,
           updatedAt: timestamp,
           done: false,
@@ -86,6 +90,7 @@ export function createProjectService(deps: {
           id: generateId(),
           projectId: row.id,
           name: INITIAL_MILESTONE_NAME,
+          favorite: false,
           createdAt: timestamp,
           updatedAt: timestamp,
           done: false,
@@ -103,6 +108,16 @@ export function createProjectService(deps: {
       const updated = repository.updateName(input.id, input.name, now().toISOString())
       if (!updated) throw projectNotFound()
       return toDto(updated)
+    },
+    setFavorite(input) {
+      return deps.transaction(() => {
+        const current = repository.findById(input.id)
+        if (!current) throw projectNotFound()
+        if (current.favorite === input.favorite) return toDto(current)
+        const updated = repository.updateFavorite(input.id, input.favorite, now().toISOString())
+        if (!updated) throw projectNotFound()
+        return toDto(updated)
+      })
     },
     setCompleted(input) {
       return deps.transaction(() => {

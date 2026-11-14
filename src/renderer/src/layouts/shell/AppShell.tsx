@@ -1,5 +1,6 @@
 import { useCallback, useRef, useState, type Ref } from 'react'
-import { Box } from '@mui/material'
+import { Alert, Box } from '@mui/material'
+import { unwrapIpc } from '../../lib/ipc'
 import { useRouterState } from '@tanstack/react-router'
 import { Group, Panel, Separator } from 'react-resizable-panels'
 import { WORKSPACE_LIMITS } from '../../../../shared/contracts/workspace'
@@ -9,6 +10,7 @@ import { usePaneLayout } from '../../features/workspace/use-pane-layout'
 import { useWorkspace } from '../../features/workspace/WorkspaceContext'
 import { vscodeColors } from '../../theme'
 import { ShellSlotsProvider } from '../../components/ShellSlots'
+import { CompactScreen } from '../../routes/CompactScreen'
 import { TaskDragProvider } from '../../features/tasks/TaskDragContext'
 import { DetailPanel } from './DetailPanel'
 import { MainPanel } from './MainPanel'
@@ -93,11 +95,28 @@ function DetailPane({
   )
 }
 
-export function AppShell() {
+export function AppShell({ initialCompact = false }: { initialCompact?: boolean }) {
   const { settings, setDetailVisible } = useWorkspace()
   const { confirmLeave } = useDraftGuard()
   const pathname = useRouterState({ select: (state) => state.location.pathname })
-  const pane = usePaneLayout()
+  const [compact, setCompact] = useState(initialCompact)
+  const [modeError, setModeError] = useState<string | null>(null)
+  const switchingRef = useRef(false)
+  const changeMode = async (next: boolean) => {
+    if (switchingRef.current || next === compact) return
+    switchingRef.current = true
+    try {
+      if (!(await confirmLeave())) return
+      setModeError(null)
+      await unwrapIpc(window.gtd.app.setCompact(next))
+      setCompact(next)
+    } catch (error) {
+      setModeError(error instanceof Error ? error.message : '表示モードを変更できませんでした')
+    } finally {
+      switchingRef.current = false
+    }
+  }
+  const pane = usePaneLayout(compact, pathname === '/notes')
   const [initialSidebarWidth] = useState(settings.sidebarWidth)
 
   const toggleButtonRef = useRef<HTMLButtonElement>(null)
@@ -132,9 +151,15 @@ export function AppShell() {
           color: 'text.primary'
         }}
       >
-        <TopBar detailVisible={settings.detailVisible} onToggleDetail={() => void toggleDetail()} toggleButtonRef={toggleButtonRef} />
+        <TopBar compact={compact || pathname === '/notes'} detailVisible={settings.detailVisible} onToggleDetail={() => void toggleDetail()} toggleButtonRef={toggleButtonRef} />
 
-        <Box sx={{ gridArea: 'body', display: 'flex', minWidth: 0, minHeight: 0, ...separatorStyles }}>
+        <Box sx={{ gridArea: 'body', display: 'flex', flexDirection: modeError ? 'column' : 'row', minWidth: 0, minHeight: 0, ...separatorStyles }}>
+          {modeError && <Alert severity="error" onClose={() => setModeError(null)}>{modeError}</Alert>}
+          {compact ? (
+            <Box component="main" aria-label="メインパネル" data-testid="compact-screen" sx={{ flex: 1, minWidth: 0, minHeight: 0, overflow: 'hidden' }}>
+              <CompactScreen />
+            </Box>
+          ) : (
           <Group
             id="workspace-panes"
             orientation="horizontal"
@@ -171,7 +196,7 @@ export function AppShell() {
             >
               <MainPanel />
             </Panel>
-            {settings.detailVisible && (
+            {settings.detailVisible && pathname !== '/notes' && (
               <>
                 <PaneSeparator
                   id="detail-separator"
@@ -190,11 +215,13 @@ export function AppShell() {
               </>
             )}
           </Group>
+          )}
         </Box>
 
-        <StatusBar pathname={pathname} />
+        <StatusBar pathname={pathname} compact={compact} onChangeMode={(next) => void changeMode(next)} />
       </Box>
       </TaskDragProvider>
     </ShellSlotsProvider>
   )
 }
+

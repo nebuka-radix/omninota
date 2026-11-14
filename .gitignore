@@ -25,3 +25,5 @@ logs/
 
 # macOS
 .DS_Store
+
+gemini-scripts/

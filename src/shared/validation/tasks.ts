@@ -90,6 +90,10 @@ export const setTaskDueInputSchema = z.strictObject({
   ])
 })
 export const tasksSetDueArgsSchema = z.tuple([setTaskDueInputSchema])
+export const tasksSetDayManyArgsSchema = z.tuple([z.strictObject({
+  ids: taskIdListSchema,
+  day: z.enum(['today', 'tomorrow'])
+})])
 
 // お気に入り: 目的の状態（真偽値だけ。0 / 1 や文字列は受け付けない）
 export const setTaskFavoriteInputSchema = z.strictObject({
@@ -97,4 +101,6 @@ export const setTaskFavoriteInputSchema = z.strictObject({
   favorite: z.boolean({ error: 'お気に入りは true / false で指定してください。' })
 })
 export const tasksSetFavoriteArgsSchema = z.tuple([setTaskFavoriteInputSchema])
+export const setTaskImportantInputSchema = z.strictObject({ id: taskIdSchema, important: z.boolean() })
+export const tasksSetImportantArgsSchema = z.tuple([setTaskImportantInputSchema])
 export const summaryGetArgsSchema = z.tuple([])

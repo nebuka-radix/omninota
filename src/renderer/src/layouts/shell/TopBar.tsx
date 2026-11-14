@@ -12,10 +12,12 @@ export const TOP_BAR_HEIGHT = 40
 // フェーズ5.8: 中央に現在の画面の表示設定（キーワード・状態・並べ替え）の差し込み先を置く。
 // 表示設定を持つ画面（Inbox・プロジェクト）だけが中身を描画する。差し込み先は縮められ、狭い時も右の切り替えボタンへ重ならない。
 export function TopBar({
+  compact = false,
   detailVisible,
   onToggleDetail,
   toggleButtonRef
 }: {
+  compact?: boolean
   detailVisible: boolean
   onToggleDetail: () => void
   toggleButtonRef: Ref<HTMLButtonElement>
@@ -48,7 +50,7 @@ export function TopBar({
         data-testid="top-bar-controls"
         sx={{ flex: 1, minWidth: 0, height: '100%', display: 'flex', alignItems: 'center', overflow: 'hidden', px: 0.5 }}
       />
-      <Tooltip title={label}>
+      {!compact && <Tooltip title={label}>
         <IconButton
           ref={toggleButtonRef}
           aria-label={label}
@@ -59,7 +61,8 @@ export function TopBar({
         >
           <Icon size={16} strokeWidth={1.75} aria-hidden />
         </IconButton>
-      </Tooltip>
+      </Tooltip>}
     </Box>
   )
 }
+

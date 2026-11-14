@@ -2,10 +2,13 @@ import type { MouseEvent as ReactMouseEvent, PointerEvent as ReactPointerEvent, 
 import { createPortal } from 'react-dom'
 import { Box, ButtonBase, Checkbox, Typography } from '@mui/material'
 import { AlertTriangle, CalendarPlus, Link2, MoreHorizontal, Star } from 'lucide-react'
-import { isTaskCompleted, type TaskDto } from '../../../../shared/contracts/tasks'
-import { vscodeColors } from '../../theme'
-import { dueLabelOf } from './due-format'
-import { InlineTitleInput, type InlineTitleEditController } from './inline-title-edit'
+import { isTaskCompleted, type TaskDto } from '../../../shared/contracts/tasks'
+import { vscodeColors } from '../theme'
+import { dueLabelOf } from '../features/tasks/due-format'
+import { InlineTitleInput, type InlineTitleEditController } from '../features/tasks/inline-title-edit'
+import { CompactTaskRow } from './CompactTaskRow'
+import { TaskImportantButton } from './TaskImportantButton'
+import { importantTitleStyle } from '../features/tasks/important-presentation'
 
 // タスクの行（Inbox の一覧・プロジェクトのマイルストンカード・Summary Review のセクションで共通）。
 // 2行構成:
@@ -24,6 +27,8 @@ import { InlineTitleInput, type InlineTitleEditController } from './inline-title
 //
 // 画面ごとの違い（取得条件・選択集合・セクション・カード構成）は持たない。操作は TaskRowActions（呼び出し側の共通フック）を呼ぶだけ。
 export const TASK_ROW_HEIGHT = 52
+export const COMPACT_TASK_ROW_HEIGHT = 28
+export const taskRowHeight = (mode: TaskRowMode = 'Standard') => mode === 'Compact' ? COMPACT_TASK_ROW_HEIGHT : TASK_ROW_HEIGHT
 // 1行目（チェックボックス・タスク名）と2行目（操作）の位置
 const LINE1_HEIGHT = 28
 const LINE2_TOP = 26
@@ -47,11 +52,13 @@ export const taskOptionId = (taskId: string) => `task-option-${taskId}`
 export type TaskRowActions = {
   // お気に入りの表示（保存待ち・保存中なら押した後の状態）
   isFavorite: (task: TaskDto) => boolean
+  isImportant?: (task: TaskDto) => boolean
+  toggleImportant?: (task: TaskDto) => void
   toggleCompleted: (task: TaskDto) => void
   toggleFavorite: (task: TaskDto) => void
   openDue: (task: TaskDto, anchor: HTMLElement) => void
   openAssign: (task: TaskDto, anchor: HTMLElement) => void
-  openMenu: (task: TaskDto, anchor: HTMLElement) => void
+  openMenu: (task: TaskDto, anchor: HTMLElement, mode?: TaskRowMode) => void
   openEditor: (task: TaskDto, anchor: HTMLElement) => void
   // 現在の所属（「{プロジェクト名} / {マイルストン名}」）。所属がない（Inbox）・名前を取得できない時は null
   assignmentLabel: (task: TaskDto) => string | null
@@ -61,25 +68,12 @@ export type TaskRowActions = {
 // 重ね合わせ層の操作を、行（option）・一覧へ伝えない
 const stop = (event: SyntheticEvent) => event.stopPropagation()
 
-export function TaskRow({
-  task,
-  top,
-  listId,
-  controlsLayer,
-  today,
-  actions,
-  selected,
-  active,
-  pending,
-  dimmed,
-  handle,
-  onRowPointerDown,
-  onRowClick,
-  onRowContextMenu,
-  onTitleClick,
-  onTitleDoubleClick,
-  onInlineDone
-}: {
+export type TaskRowMode = 'Standard' | 'Compact'
+export type TaskRowProps = {
+  mode?: TaskRowMode
+  optionId?: string
+  /** 所属するプロジェクト／マイルストン名の表示。既定はtrue。 */
+  parentVisible?: boolean
   task: TaskDto
   // 行の上端（仮想リスト内の位置）
   top: number
@@ -106,13 +100,37 @@ export function TaskRow({
   onTitleDoubleClick: (event: ReactMouseEvent<HTMLElement>) => void
   // インライン編集を Enter・Esc で閉じた時（一覧へフォーカスを戻す）
   onInlineDone: () => void
-}) {
+}
+
+export function TaskRow(props: TaskRowProps) {
+  const {
+  parentVisible = true,
+  task,
+  top,
+  listId,
+  controlsLayer,
+  today,
+  actions,
+  selected,
+  active,
+  pending,
+  dimmed,
+  handle,
+  onRowPointerDown,
+  onRowClick,
+  onRowContextMenu,
+  onTitleClick,
+  onTitleDoubleClick,
+  onInlineDone
+  } = props
+  if (props.mode === 'Compact') return <CompactTaskRow {...props} />
   const completed = isTaskCompleted(task)
   const favorite = actions.isFavorite(task)
+  const important = actions.isImportant?.(task) ?? task.important ?? false
   const due = dueLabelOf(task.dueto, today)
   const withHandle = handle !== undefined
   const leftEdge = (withHandle ? HANDLE_COLUMN_WIDTH : 0) + CHECK_COLUMN_WIDTH
-  const editing = actions.inlineEdit.state?.taskId === task.id
+  const editing = actions.inlineEdit.state?.taskId === task.id && (!actions.inlineEdit.state.scopeId || actions.inlineEdit.state.scopeId === listId)
   const editError = editing ? actions.inlineEdit.state?.error ?? null : null
   const assignment = actions.assignmentLabel(task)
   const assignmentText = assignment ?? 'Inbox'
@@ -153,6 +171,10 @@ export function TaskRow({
           {handle}
         </Box>
       )}
+      <Box sx={{ position: 'absolute', left: leftEdge, top: 0, width: 20, height: LINE1_HEIGHT, display: 'flex', alignItems: 'center', pointerEvents: 'auto' }}>
+        <TaskImportantButton title={task.title} important={important} disabled={pending}
+          onToggle={actions.toggleImportant ? () => actions.toggleImportant?.(task) : undefined} />
+      </Box>
       {/* 2行目（左寄せ）: 星・期限・紐付け・…・所属。左端はタスク名の列の左端 */}
       <Box
         sx={{
@@ -251,7 +273,7 @@ export function TaskRow({
         >
           <MoreHorizontal size={14} aria-hidden />
         </ButtonBase>
-        {assignment && (
+        {parentVisible && assignment && (
           // 所属（読み上げは行の名前に含めるため、ここは読み上げない）。操作の領域を先に確保し、残りの幅で省略表示する
           <Box
             component="span"
@@ -278,7 +300,7 @@ export function TaskRow({
       {editing && (
         <Box
           data-testid="inline-title-editor-row"
-          sx={{ position: 'absolute', top: 1, left: leftEdge, right: 4, height: LINE1_HEIGHT - 2, display: 'flex', alignItems: 'center', pointerEvents: 'auto', zIndex: 1 }}
+          sx={{ position: 'absolute', top: 1, left: leftEdge + 20, right: 4, height: LINE1_HEIGHT - 2, display: 'flex', alignItems: 'center', pointerEvents: 'auto', zIndex: 1 }}
         >
           <InlineTitleInput controller={actions.inlineEdit} taskTitle={task.title} onDone={onInlineDone} />
         </Box>
@@ -312,12 +334,12 @@ export function TaskRow({
   return (
     <>
       <Box
-        id={taskOptionId(task.id)}
+        id={props.optionId ?? taskOptionId(task.id)}
         role="option"
         aria-selected={selected}
         aria-busy={pending || undefined}
         // 読み上げ名: タスク名・完了状態・お気に入り・期限（チェックボックス・操作ボタンは option の外）
-        aria-label={`${task.title}、${completed ? '完了' : '未完了'}${favorite ? '、お気に入り' : ''}${due ? `、${due.description}` : ''}${assignment ? `、${assignment}` : ''}${pending ? '、保存中' : ''}`}
+        aria-label={`${task.title}、${completed ? '完了' : '未完了'}${favorite ? '、お気に入り' : ''}${important ? '、重要' : ''}${due ? `、${due.description}` : ''}${assignment ? `、${assignment}` : ''}${pending ? '、保存中' : ''}`}
         data-task-id={task.id}
         data-task-row=""
         data-pending={pending || undefined}
@@ -365,6 +387,7 @@ export function TaskRow({
           />
         </Box>
         <Box sx={{ display: 'flex', alignItems: 'center', minWidth: 0, pr: 1 }}>
+          <Box component="span" aria-hidden sx={{ width: 20, flexShrink: 0 }} />
           <Typography
             component="span"
             noWrap
@@ -381,9 +404,7 @@ export function TaskRow({
               borderRadius: 0.5,
               cursor: 'pointer',
               // 完了は色だけでなく取り消し線でも示す
-              textDecoration: completed ? 'line-through' : 'none',
-              color: completed ? 'text.secondary' : 'text.primary',
-              '&:hover': { textDecoration: completed ? 'line-through underline' : 'underline' }
+              ...importantTitleStyle(important, completed)
             }}
           >
             {task.title}
@@ -394,3 +415,4 @@ export function TaskRow({
     </>
   )
 }
+

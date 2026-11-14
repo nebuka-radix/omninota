@@ -15,10 +15,11 @@ import { useDraftGuard, type DraftTarget } from '../drafts/DraftGuard'
 import type { TaskGroup } from '../tasks/assignment'
 import { taskListQueryOptions, useCreateTaskMutation, useReorderMilestoneTasksMutation } from '../tasks/task-queries'
 import type { TaskSortColumn } from '../tasks/task-table'
-import type { TaskRowActions } from '../tasks/TaskRow'
+import type { TaskRowActions } from '../../components/TaskRow'
 import { TaskList } from '../tasks/TaskList'
 import { useWorkspace } from '../workspace/WorkspaceContext'
 import { MilestoneNameEditor } from './MilestoneForms'
+import { MilestoneFavoriteButton } from './MilestoneFavoriteButton'
 import {
   fetchMilestoneDeletionSummary,
   milestoneListQueryOptions,
@@ -755,6 +756,7 @@ export function MilestoneBoard({
                       onKeyMove={(target) => moveCardByKey(group.milestoneId, target)}
                       onDragStart={(event) => startCardDrag(event, group.milestoneId, index)}
                     />
+                    <MilestoneFavoriteButton milestoneId={group.milestoneId} />
                     <Typography
                       component="h2"
                       noWrap

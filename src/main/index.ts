@@ -1,6 +1,8 @@
 import { readFileSync, realpathSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { app, BrowserWindow, dialog, screen, session } from 'electron'
+import { createWindowState } from './lifecycle/window-state'
+import { app, BrowserWindow, dialog, screen, session, systemPreferences } from 'electron'
+import { enableNativeKeyRepeat } from './infrastructure/key-repeat'
 import { APP_IDENTITY } from '../shared/app-identity'
 import { IPC_CHANNELS, type AppInfo } from '../shared/contracts/ipc'
 import { closeDatabase, openDatabase, type AppDatabase } from './db/client'
@@ -9,6 +11,9 @@ import { createTransactionRunner } from './db/transaction'
 import { resolveDatabaseFile, resolveMigrationsDir, resolveUserDataDir } from './infrastructure/app-paths'
 import { fitWindowBounds, resolveTestMode, selectTestDisplay } from './infrastructure/test-mode'
 import { registerIpcHandlers } from './ipc'
+import { registerTaskImportantHandler } from './ipc/task-important'
+import { createTaskImportantService } from './services/task-important-service'
+import { createTaskImportantRepository } from './repositories/task-important-repository'
 import {
   createExitCoordinator,
   createFlushRequester,
@@ -21,6 +26,8 @@ import { createScriptedMessageBox, type MessageBoxAdapter } from './lifecycle/me
 import { watchParentProcess, type ParentWatcher } from './lifecycle/parent-watch'
 import { createMilestoneRepository } from './repositories/milestone-repository'
 import { createProjectRepository } from './repositories/project-repository'
+import { createNoteRepository } from './repositories/note-repository'
+import { createNoteService } from './services/note-service'
 import { createSettingsRepository } from './repositories/settings-repository'
 import { createTaskRepository } from './repositories/task-repository'
 import { createMilestoneService } from './services/milestone-service'
@@ -36,6 +43,9 @@ import {
   MIN_WINDOW_WIDTH,
   type WindowPresentation
 } from './window'
+
+// Use native macOS key repeat instead of the press-and-hold accent picker.
+enableNativeKeyRepeat(process.platform, systemPreferences)
 
 // 自動テスト用の起動モード（GTD_TEST_UI=hidden / secondary）。未パッケージ時だけ有効。
 // 詳細は docs/testing.md。通常起動・パッケージ版の動作は変えない。
@@ -113,6 +123,7 @@ const migrationsDir = resolveMigrationsDir({
   resourcesPath: process.resourcesPath
 })
 
+let windowState: ReturnType<typeof createWindowState> | null = null
 let mainWindow: BrowserWindow | null = null
 let database: AppDatabase | null = null
 
@@ -205,7 +216,12 @@ function startParentWatch(): void {
 function showMainWindow(): void {
   if (!mainWindow || mainWindow.isDestroyed()) {
     exitCoordinator.resetForNewWindow()
-    mainWindow = createMainWindow(windowPresentation)
+    if (!database) throw new Error('DBが初期化されていません')
+    windowState ??= createWindowState(createSettingsRepository(database), MIN_WINDOW_WIDTH)
+    const restoring = windowPresentation.kind === 'normal'
+    mainWindow = createMainWindow(windowPresentation, restoring ? { compact: windowState.compact, bounds: windowState.restoreBounds() } : undefined)
+    // 自動UIテストでは従来の起動サイズと表示方法を維持する。
+    if (restoring) windowState.attach(mainWindow)
     if (testConfig) {
       // 実行スクリプトが「表示されていない」「フォーカスを取っていない」「表示位置」を確認するためのログ
       const win = mainWindow
@@ -278,6 +294,7 @@ function initializeDatabase(): AppDatabase {
 
 function getAppInfo(): AppInfo {
   return {
+    compact: windowPresentation.kind === 'normal' ? windowState?.compact ?? false : false,
     name: APP_IDENTITY.displayName,
     version: app.getVersion(),
     environment: app.isPackaged ? 'production' : 'development',
@@ -345,9 +362,24 @@ if (!app.requestSingleInstanceLock()) {
     const taskRepository = createTaskRepository(database)
     const transaction = createTransactionRunner(database)
     const milestoneRepository = createMilestoneRepository(database)
+    registerTaskImportantHandler({
+      policy: { getWindow: () => mainWindow, isAllowedUrl: isAppUrl },
+      service: createTaskImportantService({ repository: createTaskImportantRepository(database), transaction, now })
+    })
     registerIpcHandlers({
       policy: { getWindow: () => mainWindow, isAllowedUrl: isAppUrl },
       getAppInfo,
+    setCompact: (compact) => {
+      if (windowPresentation.kind !== 'normal') {
+        if (!mainWindow || mainWindow.isDestroyed()) throw new Error('ウィンドウがありません')
+        mainWindow.setMinimumSize(compact ? 240 : MIN_WINDOW_WIDTH, MIN_WINDOW_HEIGHT)
+      } else {
+        if (!windowState) throw new Error('ウィンドウ設定が初期化されていません')
+        windowState.setCompact(compact)
+      }
+      return null
+    },
+      noteService: createNoteService({ repository: createNoteRepository(database), settings: createSettingsRepository(database), now }),
       taskService: createTaskService({
         repository: taskRepository,
         findProject: projectRepository.findById,

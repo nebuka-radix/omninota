@@ -78,6 +78,34 @@
       "when": 1794390044263,
       "tag": "0010_done_and_done_on",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "6",
+      "when": 1794671949633,
+      "tag": "0011_brief_tag",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "6",
+      "when": 1794673322487,
+      "tag": "0012_panoramic_phil_sheldon",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "6",
+      "when": 1794676459536,
+      "tag": "0013_add_note",
+      "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "6",
+      "when": 1794682516127,
+      "tag": "0014_task_important",
+      "breakpoints": true
     }
   ]
 }

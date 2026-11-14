@@ -1,4 +1,7 @@
 import { ipcMain } from 'electron'
+import { z } from 'zod'
+import type { NoteService } from '../services/note-service'
+import { notesListArgsSchema, notesCreateArgsSchema, notesSaveArgsSchema, notesRenameArgsSchema, notesFavoriteArgsSchema, notesGetSidebarWidthArgsSchema, notesSaveSidebarWidthArgsSchema } from '../../shared/validation/notes'
 import { IPC_CHANNELS, type AppInfo } from '../../shared/contracts/ipc'
 import { appGetInfoArgsSchema } from '../../shared/validation/app'
 import {
@@ -7,7 +10,8 @@ import {
   milestonesGetDeletionSummaryArgsSchema,
   milestonesListArgsSchema,
   milestonesRenameArgsSchema,
-  milestonesReorderArgsSchema
+  milestonesReorderArgsSchema,
+  milestonesSetFavoriteArgsSchema
 } from '../../shared/validation/milestones'
 import {
   projectsCreateArgsSchema,
@@ -15,7 +19,8 @@ import {
   projectsGetDeletionSummaryArgsSchema,
   projectsListArgsSchema,
   projectsRenameArgsSchema,
-  projectsSetCompletedArgsSchema
+  projectsSetCompletedArgsSchema,
+  projectsSetFavoriteArgsSchema
 } from '../../shared/validation/projects'
 import {
   tasksAssignFromInboxArgsSchema,
@@ -24,6 +29,7 @@ import {
   tasksDeleteManyArgsSchema,
   tasksReorderInMilestoneArgsSchema,
   tasksSetDueArgsSchema,
+  tasksSetDayManyArgsSchema,
   summaryGetArgsSchema,
   tasksSetFavoriteArgsSchema,
   tasksListArgsSchema,
@@ -49,6 +55,8 @@ import { createIpcHandler, type SenderPolicy } from './handler'
 export function registerIpcHandlers(deps: {
   policy: SenderPolicy
   getAppInfo: () => AppInfo
+  setCompact: (compact: boolean) => null
+  noteService: NoteService
   taskService: TaskService
   projectService: ProjectService
   milestoneService: MilestoneService
@@ -57,6 +65,35 @@ export function registerIpcHandlers(deps: {
   flushRequester: FlushRequester
 }): void {
   const { policy, taskService, projectService, milestoneService, workspaceSettingsService } = deps
+  ipcMain.handle(IPC_CHANNELS.notesList,
+    createIpcHandler({ channel: IPC_CHANNELS.notesList, argsSchema: notesListArgsSchema, policy, run: () => deps.noteService.list() }))
+  ipcMain.handle(IPC_CHANNELS.notesCreate,
+    createIpcHandler({ channel: IPC_CHANNELS.notesCreate, argsSchema: notesCreateArgsSchema, policy, run: () => deps.noteService.create() }))
+  ipcMain.handle(IPC_CHANNELS.notesSave,
+    createIpcHandler({ channel: IPC_CHANNELS.notesSave, argsSchema: notesSaveArgsSchema, policy, run: ([input]) => deps.noteService.save(input) }))
+  ipcMain.handle(IPC_CHANNELS.notesRename,
+    createIpcHandler({ channel: IPC_CHANNELS.notesRename, argsSchema: notesRenameArgsSchema, policy, run: ([input]) => deps.noteService.rename(input) }))
+  ipcMain.handle(IPC_CHANNELS.notesSetFavorite,
+    createIpcHandler({ channel: IPC_CHANNELS.notesSetFavorite, argsSchema: notesFavoriteArgsSchema, policy, run: ([input]) => deps.noteService.setFavorite(input) }))
+  ipcMain.handle(IPC_CHANNELS.notesGetSidebarWidth,
+    createIpcHandler({ channel: IPC_CHANNELS.notesGetSidebarWidth, argsSchema: notesGetSidebarWidthArgsSchema, policy, run: () => deps.noteService.getSidebarWidth() }))
+  ipcMain.handle(IPC_CHANNELS.notesSaveSidebarWidth,
+    createIpcHandler({ channel: IPC_CHANNELS.notesSaveSidebarWidth, argsSchema: notesSaveSidebarWidthArgsSchema, policy, run: ([width]) => deps.noteService.saveSidebarWidth(width) }))
+  ipcMain.handle(IPC_CHANNELS.milestonesSetFavorite,
+    createIpcHandler({ channel: IPC_CHANNELS.milestonesSetFavorite, argsSchema: milestonesSetFavoriteArgsSchema, policy,
+      run: ([input]) => milestoneService.setFavorite(input) }))
+  ipcMain.handle(IPC_CHANNELS.projectsSetFavorite,
+    createIpcHandler({ channel: IPC_CHANNELS.projectsSetFavorite, argsSchema: projectsSetFavoriteArgsSchema, policy,
+      run: ([input]) => projectService.setFavorite(input) }))
+  ipcMain.handle(
+    IPC_CHANNELS.appSetCompact,
+    createIpcHandler({
+      channel: IPC_CHANNELS.appSetCompact,
+      argsSchema: z.tuple([z.boolean()]),
+      policy,
+      run: ([compact]) => deps.setCompact(compact)
+    })
+  )
 
   ipcMain.handle(
     IPC_CHANNELS.appGetInfo,
@@ -157,6 +194,12 @@ export function registerIpcHandlers(deps: {
       policy,
       run: ([input]) => taskService.reorderInMilestone(input)
     })
+  )
+
+  ipcMain.handle(
+    IPC_CHANNELS.tasksSetDayMany,
+    createIpcHandler({ channel: IPC_CHANNELS.tasksSetDayMany, argsSchema: tasksSetDayManyArgsSchema, policy,
+      run: ([input]) => taskService.setDayMany(input) })
   )
 
   // フェーズ6: 期限の設定・変更・解除と Summary Review

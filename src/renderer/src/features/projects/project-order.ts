@@ -16,6 +16,12 @@ export function compareProjects(a: ProjectDto, b: ProjectDto): number {
   return a.id < b.id ? -1 : a.id > b.id ? 1 : 0
 }
 
+// サイドバー用。共通sortProjectsの順序は変更しない。
+export function compareFavoriteProjects(a: ProjectDto, b: ProjectDto): number {
+  if (a.favorite !== b.favorite) return a.favorite ? -1 : 1
+  return compareProjects(a, b)
+}
+
 export function sortProjects(projects: readonly ProjectDto[]): ProjectDto[] {
   return [...projects].sort(compareProjects)
 }

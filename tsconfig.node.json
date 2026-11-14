@@ -3,10 +3,14 @@
     "composite": true,
     "tsBuildInfoFile": "./node_modules/.cache/tsconfig.node.tsbuildinfo",
     "target": "ES2023",
-    "lib": ["ES2023"],
+    "lib": [
+      "ES2023"
+    ],
     "module": "ESNext",
     "moduleResolution": "bundler",
-    "types": ["node"],
+    "types": [
+      "node"
+    ],
     "strict": true,
     "noUncheckedIndexedAccess": true,
     "noImplicitOverride": true,
@@ -37,6 +41,18 @@
     "src/renderer/src/features/tasks/selection.ts",
     "src/renderer/src/features/tasks/favorite-saver.ts",
     "src/renderer/src/features/tasks/due-format.ts",
-    "src/renderer/src/features/summary/summary-merge.ts"
+    "src/renderer/src/features/summary/summary-merge.ts",
+    "src/renderer/src/features/projects/project-tree-display.ts",
+    "src/renderer/src/components/monaco-editor/markdown-tables.ts",
+    "src/renderer/src/components/monaco-editor/preview-layout.ts",
+    "src/renderer/src/layouts/shell/screens.ts",
+    "src/renderer/src/features/notes/note-list-scroll.ts",
+    "src/renderer/src/features/notes/compact-note-layout.ts",
+    "src/renderer/src/components/monaco-editor/markdown-headings.ts",
+    "src/renderer/src/components/monaco-editor/table-display-width.ts",
+    "src/renderer/src/features/tasks/important-presentation.ts",
+    "src/renderer/src/features/summary/day-task-order.ts",
+    "src/renderer/src/features/workspace/compact-tab-shortcuts.ts",
+    "src/renderer/src/components/monaco-editor/outline-layout.ts"
   ]
 }

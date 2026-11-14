@@ -89,7 +89,7 @@ export type ExitKind = 'quit' | 'close'
 // 未保存ドラフトがある時の終了ダイアログの文言。対象が伝えられなかった場合はタスクのタイトルとして扱う（フェーズ4.1の文言）。
 export function unsavedDraftDialogText(draftKind: DraftKind | null, kind: ExitKind) {
   const verb = kind === 'quit' ? '終了' : '閉じる'
-  const target = draftKind === 'project' ? 'プロジェクト名' : draftKind === 'milestone' ? 'マイルストン名' : 'タスクのタイトル'
+  const target = draftKind === 'note' ? 'ノート' : draftKind === 'project' ? 'プロジェクト名' : draftKind === 'milestone' ? 'マイルストン名' : 'タスクのタイトル'
   return {
     buttons: [`保存して${verb}`, `保存せずに${verb}`, 'キャンセル'],
     message: `${target}に未保存の変更があります`,

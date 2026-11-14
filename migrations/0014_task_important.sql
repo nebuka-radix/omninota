@@ -1,0 +1,1 @@
+ALTER TABLE `tasks` ADD `important` integer DEFAULT false NOT NULL;

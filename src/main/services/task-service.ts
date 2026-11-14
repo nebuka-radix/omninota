@@ -9,6 +9,7 @@ import type {
   DeleteTasksResult,
   ReorderMilestoneTasksInput,
   SetTaskDueInput,
+  SetTasksDayInput,
   SetTaskFavoriteInput,
   SetTaskAssignmentInput,
   SetTaskCompletedInput,
@@ -19,6 +20,7 @@ import type { MilestoneRow, ProjectRow, TaskRow } from '../db/schema'
 import type { RunInTransaction } from '../db/transaction'
 import type { TaskRepository } from '../repositories/task-repository'
 import {
+  BusinessError,
   milestoneProjectMismatch,
   milestoneRequired,
   orderChanged,
@@ -65,6 +67,7 @@ export type TaskService = {
   // 表示中のタスクだけ（非表示・削除済みは NOT_FOUND。遅れた保存で対象を作り直さない）。期限だけを更新し、
   // タイトル・所属・完了状態・手動順は変えない。同じ期限なら更新しない（updatedAt も変えない）
   setDue(input: SetTaskDueInput): TaskDto
+  setDayMany(input: SetTasksDayInput): TaskDto[]
   // お気に入りの設定・解除。表示中のタスクだけ（非表示・削除済みは NOT_FOUND。遅れた保存で対象を作り直さない）。
   // お気に入りだけを更新し、他の項目は変えない。同じ値なら更新しない（updatedAt も変えない）
   setFavorite(input: SetTaskFavoriteInput): TaskDto
@@ -82,7 +85,8 @@ export function toTaskDto(row: TaskRow): TaskDto {
     milestoneId: row.milestoneId,
     position: row.position,
     dueto: row.dueto,
-    favorite: row.favorite
+    favorite: row.favorite,
+    important: row.important ?? false
   }
 }
 const toDto = toTaskDto
@@ -152,7 +156,8 @@ export function createTaskService(deps: {
           position: nextPosition(milestoneId),
           // 期限は作成時には設定しない（作成日時などから補完しない）
           dueto: null,
-          favorite: false
+          favorite: false,
+        important: false
         }
         repository.insert(row)
         return toDto(row)
@@ -252,6 +257,21 @@ export function createTaskService(deps: {
           if (repository.updatePosition(id, index) !== 1) throw orderChanged('task')
         })
         return repository.listVisibleByMilestone(input.milestoneId).map(toDto)
+      })
+    },
+    setDayMany(input) {
+      return transaction(() => {
+        const rows = input.ids.map(findOrThrow)
+        if (rows.some((row) => row.doneOn !== null)) throw new BusinessError('CONFLICT', '完了済みのタスクが含まれています。表示を更新してください。')
+        const at = now()
+        const today = localDateOnly(at)
+        const dueto = input.day === 'today' ? today : addDaysToDateOnly(today, 1)
+        return rows.map((row) => {
+          if (row.dueto === dueto) return toDto(row)
+          const updated = repository.updateDue(row.id, dueto, at.toISOString())
+          if (!updated) throw taskNotFound()
+          return toDto(updated)
+        })
       })
     },
     setDue(input) {

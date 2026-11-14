@@ -7,7 +7,8 @@ import type {
   ProjectDeletionSummary,
   ProjectDto,
   RenameProjectInput,
-  SetProjectCompletedInput
+  SetProjectCompletedInput,
+  SetProjectFavoriteInput
 } from './projects'
 import type {
   CreateMilestoneInput,
@@ -16,7 +17,8 @@ import type {
   MilestoneDeletionSummary,
   MilestoneDto,
   RenameMilestoneInput,
-  ReorderMilestonesInput
+  ReorderMilestonesInput,
+  SetMilestoneFavoriteInput
 } from './milestones'
 import type {
   AssignInboxTasksInput,
@@ -27,7 +29,9 @@ import type {
   DeleteTasksResult,
   ReorderMilestoneTasksInput,
   SetTaskDueInput,
+  SetTasksDayInput,
   SetTaskFavoriteInput,
+  SetTaskImportantInput,
   SetTaskAssignmentInput,
   SetTaskCompletedInput,
   TaskDto,
@@ -35,9 +39,18 @@ import type {
 } from './tasks'
 import type { SummaryReview } from './summary'
 import type { WorkspaceSettings } from './workspace'
+import type { NoteDto, SaveNoteInput, RenameNoteInput, FavoriteNoteInput } from './notes'
 
 export const IPC_CHANNELS = {
+  notesList: 'notes:list',
+  notesCreate: 'notes:create',
+  notesSave: 'notes:save',
+  notesRename: 'notes:rename',
+  notesSetFavorite: 'notes:set-favorite',
+  notesGetSidebarWidth: 'notes:get-sidebar-width',
+  notesSaveSidebarWidth: 'notes:save-sidebar-width',
   appGetInfo: 'app:get-info',
+  appSetCompact: 'app:set-compact',
   tasksCreate: 'tasks:create',
   tasksList: 'tasks:list',
   tasksUpdateTitle: 'tasks:update-title',
@@ -48,18 +61,22 @@ export const IPC_CHANNELS = {
   tasksDeleteMany: 'tasks:delete-many',
   tasksReorderInMilestone: 'tasks:reorder-in-milestone',
   tasksSetDue: 'tasks:set-due',
+  tasksSetDayMany: 'tasks:set-day-many',
   tasksSetFavorite: 'tasks:set-favorite',
+  tasksSetImportant: 'tasks:set-important',
   summaryGet: 'summary:get',
   summaryToday: 'summary:today',
   projectsList: 'projects:list',
   projectsCreate: 'projects:create',
   projectsRename: 'projects:rename',
   projectsSetCompleted: 'projects:set-completed',
+  projectsSetFavorite: 'projects:set-favorite',
   projectsGetDeletionSummary: 'projects:get-deletion-summary',
   projectsDelete: 'projects:delete',
   milestonesList: 'milestones:list',
   milestonesCreate: 'milestones:create',
   milestonesRename: 'milestones:rename',
+  milestonesSetFavorite: 'milestones:set-favorite',
   milestonesGetDeletionSummary: 'milestones:get-deletion-summary',
   milestonesDelete: 'milestones:delete',
   milestonesReorder: 'milestones:reorder',
@@ -90,7 +107,7 @@ export type WorkspaceFlushRequest = {
 }
 
 // 未保存ドラフトの対象（終了時のダイアログの文言に使う。フェーズ5.1）
-export const DRAFT_KINDS = ['task', 'project', 'milestone'] as const
+export const DRAFT_KINDS = ['task', 'project', 'milestone', 'note'] as const
 export type DraftKind = (typeof DRAFT_KINDS)[number]
 
 export type WorkspaceFlushResult = {
@@ -128,6 +145,7 @@ export type IpcResult<T> = { ok: true; data: T } | { ok: false; error: IpcError 
 export type AppEnvironment = 'development' | 'production'
 
 export type AppInfo = {
+  compact?: boolean
   name: string
   version: string
   environment: AppEnvironment
@@ -144,8 +162,18 @@ export type AppInfo = {
 
 // Preloadがwindow.gtdとして公開するAPI
 export type GtdApi = {
+  notes: {
+    list: () => Promise<IpcResult<NoteDto[]>>
+    create: () => Promise<IpcResult<NoteDto>>
+    save: (input: SaveNoteInput) => Promise<IpcResult<NoteDto>>
+    rename: (input: RenameNoteInput) => Promise<IpcResult<NoteDto>>
+    setFavorite: (input: FavoriteNoteInput) => Promise<IpcResult<NoteDto>>
+    getSidebarWidth: () => Promise<IpcResult<number>>
+    saveSidebarWidth: (width: number) => Promise<IpcResult<number>>
+  }
   app: {
     getInfo: () => Promise<IpcResult<AppInfo>>
+    setCompact: (compact: boolean) => Promise<IpcResult<null>>
   }
   tasks: {
     create: (input: CreateTaskInput) => Promise<IpcResult<TaskDto>>
@@ -165,8 +193,10 @@ export type GtdApi = {
     reorderInMilestone: (input: ReorderMilestoneTasksInput) => Promise<IpcResult<TaskDto[]>>
     // 期限の設定・変更・解除（フェーズ6）。期限だけを更新し、保存後のタスクを返す
     setDue: (input: SetTaskDueInput) => Promise<IpcResult<TaskDto>>
+    setDayMany: (input: SetTasksDayInput) => Promise<IpcResult<TaskDto[]>>
     // お気に入りの設定・解除。お気に入りだけを更新し、保存後のタスクを返す
     setFavorite: (input: SetTaskFavoriteInput) => Promise<IpcResult<TaskDto>>
+    setImportant: (input: SetTaskImportantInput) => Promise<IpcResult<TaskDto>>
   }
   // Summary Review（フェーズ6）。条件は Main で適用し、該当するタスクだけを返す
   summary: {
@@ -181,6 +211,7 @@ export type GtdApi = {
     rename: (input: RenameProjectInput) => Promise<IpcResult<ProjectDto>>
     // 完了・完了の取り消し（フェーズ5.3）。未完了のタスクがあれば CONFLICT（details: project-has-open-tasks）
     setCompleted: (input: SetProjectCompletedInput) => Promise<IpcResult<ProjectDto>>
+    setFavorite: (input: SetProjectFavoriteInput) => Promise<IpcResult<ProjectDto>>
     // 削除（フェーズ5.6）。確認内容（件数）を取得してから、その件数を添えて削除する。
     // 配下のマイルストン・タスクは削除せず、所属を外して非表示にする（Inboxにも表示しない）
     getDeletionSummary: (input: { id: string }) => Promise<IpcResult<ProjectDeletionSummary>>
@@ -191,6 +222,7 @@ export type GtdApi = {
     list: () => Promise<IpcResult<MilestoneDto[]>>
     create: (input: CreateMilestoneInput) => Promise<IpcResult<MilestoneDto>>
     rename: (input: RenameMilestoneInput) => Promise<IpcResult<MilestoneDto>>
+    setFavorite: (input: SetMilestoneFavoriteInput) => Promise<IpcResult<MilestoneDto>>
     // 削除（フェーズ5.6）。所属タスクは削除せず、所属を外して非表示にする
     getDeletionSummary: (input: { id: string }) => Promise<IpcResult<MilestoneDeletionSummary>>
     delete: (input: DeleteMilestoneInput) => Promise<IpcResult<DeleteMilestoneResult>>

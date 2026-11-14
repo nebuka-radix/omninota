@@ -60,7 +60,7 @@ describe('DB・マイグレーション・Repository（ホストNode.js）', () 
       generateId: () => 'id-1'
     })
     const created = service.create({ title: '牛乳を買う' })
-    expect(created).toEqual({
+    expect(created).toEqual(({ ...(/* 049-important-default */ ({
       id: 'id-1',
       title: '牛乳を買う',
       projectId: null,
@@ -71,7 +71,7 @@ describe('DB・マイグレーション・Repository（ホストNode.js）', () 
       position: null,
       dueto: null,
       favorite: false
-    })
+    })), important: false }))
     closeDatabase(db)
 
     const reopened = open()

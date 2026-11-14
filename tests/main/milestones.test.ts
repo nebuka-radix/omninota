@@ -233,7 +233,8 @@ describe('マイルストンと所属（Service・一時DB）', () => {
     const t = tasks.create({ title: 't', projectId: p.id, milestoneId: initialOf(p.id).id })
     expect(() => createTaskRepository(db).updateAssignment(t.id, p.id, MISSING_ID, null, '2026-11-10T10:00:00.000Z')).toThrow(/FOREIGN KEY/)
     expect(() =>
-      createMilestoneRepository(db).insert({ id: ANY_ID, projectId: MISSING_ID, name: 'x', createdAt: 'a', updatedAt: 'a', done: false, doneOn: null, position: null })
+      createMilestoneRepository(db).insert({ favorite: false,
+      id: ANY_ID, projectId: MISSING_ID, name: 'x', createdAt: 'a', updatedAt: 'a', done: false, doneOn: null, position: null })
     ).toThrow(/FOREIGN KEY/)
   })
 

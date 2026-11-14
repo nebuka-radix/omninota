@@ -13,13 +13,14 @@ import { useInlineTitleEdit } from './inline-title-edit'
 import { TaskRowMenu, useTaskDeletion } from './TaskDeletion'
 import { useFocusReturn, useTaskDue } from './TaskDue'
 import { useTaskEditDialog } from './TaskEditDialog'
-import type { TaskRowActions } from './TaskRow'
+import type { TaskRowActions, TaskRowMode } from '../../components/TaskRow'
 import {
   useAssignInboxTasksMutation,
   usePendingTaskIds,
   useSetTaskAssignmentMutation,
   useSetTaskCompletedMutation,
-  useTaskFavorite
+  useTaskFavorite,
+  useTaskImportant
 } from './task-queries'
 import { reopenBlockedReason } from './task-rules'
 
@@ -50,6 +51,7 @@ export function useTaskRowActions(options: {
   const setAssignment = useSetTaskAssignmentMutation()
   const assignInbox = useAssignInboxTasksMutation()
   const favorite = useTaskFavorite()
+  const important = useTaskImportant()
   const inlineEdit = useInlineTitleEdit(options.tasks)
   const editDialog = useTaskEditDialog()
   const optionsRef = useRef(options)
@@ -59,7 +61,7 @@ export function useTaskRowActions(options: {
   const [blockedNotice, setBlockedNotice] = useState<string | null>(null)
   const [assignError, setAssignError] = useState<string | null>(null)
   const [assignTarget, setAssignTarget] = useState<{ task: TaskDto; anchor: HTMLElement; returnFocus: () => void } | null>(null)
-  const [rowMenu, setRowMenu] = useState<{ task: TaskDto; anchor: HTMLElement; returnFocus: () => void } | null>(null)
+  const [rowMenu, setRowMenu] = useState<{ task: TaskDto; anchor: HTMLElement; mode: TaskRowMode; returnFocus: () => void } | null>(null)
   const assigningRef = useRef(false)
   const focusReturn = useFocusReturn()
 
@@ -132,9 +134,18 @@ export function useTaskRowActions(options: {
     return milestoneName === undefined ? projectName : `${projectName} / ${milestoneName}`
   }
 
+  const toggleImportant = async (task: TaskDto) => {
+    if (pendingTaskIds.has(task.id)) return
+    if (!await confirmLeave({ target: { kind: 'task', id: task.id } })) return
+    const latest = optionsRef.current.tasks.find((item) => item.id === task.id)
+    if (latest) important.toggle(latest)
+  }
+
   // 行へ渡す操作
   const actions: TaskRowActions = {
     isFavorite: favorite.isFavorite,
+    isImportant: important.isImportant,
+    toggleImportant: (task) => { void toggleImportant(task) },
     toggleCompleted: (task) => void toggleCompleted(task),
     toggleFavorite: favorite.toggle,
     openDue: (task, anchor) => due.open(task, anchor),
@@ -142,7 +153,7 @@ export function useTaskRowActions(options: {
       setAssignError(null)
       setAssignTarget({ task, anchor, returnFocus: focusReturn.capture(anchor) })
     },
-    openMenu: (task, anchor) => setRowMenu({ task, anchor, returnFocus: focusReturn.capture(anchor) }),
+    openMenu: (task, anchor, mode = 'Standard') => setRowMenu({ task, anchor, mode, returnFocus: focusReturn.capture(anchor) }),
     openEditor: (task, anchor) => editDialog.open(task.id, anchor),
     assignmentLabel,
     inlineEdit
@@ -155,6 +166,9 @@ export function useTaskRowActions(options: {
           {assignError}
         </Alert>
       )}
+      {important.error && <Alert severity="error" variant="outlined" sx={{ mb: 2 }} onClose={important.clearError} data-testid="task-important-error">
+        {important.error}
+      </Alert>}
       {favorite.error && (
         <Alert severity="error" variant="outlined" sx={{ mb: 2 }} onClose={favorite.clearError} data-testid="task-favorite-error">
           {favorite.error}
@@ -189,6 +203,18 @@ export function useTaskRowActions(options: {
         <TaskRowMenu
           task={rowMenu.task}
           anchor={rowMenu.anchor}
+          onDue={rowMenu.mode === 'Compact' ? () => {
+            const current = rowMenu
+            setRowMenu(null)
+            due.open(current.task, current.anchor)
+          } : undefined}
+          onAssign={rowMenu.mode === 'Compact' ? () => {
+            const current = rowMenu
+            setRowMenu(null)
+            setAssignError(null)
+            setAssignTarget({ task: current.task, anchor: current.anchor, returnFocus: current.returnFocus })
+          } : undefined}
+          pending={pendingTaskIds.has(rowMenu.task.id)}
           onDelete={() => deletion.request([rowMenu.task])}
           onClose={() => {
             rowMenu.returnFocus()
@@ -225,3 +251,4 @@ export function useTaskRowActions(options: {
     }
   }
 }
+

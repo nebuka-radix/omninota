@@ -10,6 +10,7 @@ export type ProjectRepository = {
   listAll(): ProjectRow[]
   // 更新した行を返す。対象がなければundefined
   updateName(id: string, name: string, updatedAt: string): ProjectRow | undefined
+  updateFavorite(id: string, favorite: boolean, updatedAt: string): ProjectRow | undefined
   // 完了状態の更新（done と done_on を同じ更新で書き換える）。完了は done = true・done_on = 日時、取り消しは false・NULL
   updateDone(id: string, doneOn: string | null, updatedAt: string): ProjectRow | undefined
   // 物理削除（フェーズ5.6）。所属するマイルストン・タスクの所属解除はServiceが先に行う。削除した件数を返す
@@ -26,6 +27,9 @@ export function createProjectRepository(db: AppDatabase): ProjectRepository {
     },
     listAll() {
       return db.select().from(projects).orderBy(asc(projects.createdAt), asc(projects.id)).all()
+    },
+    updateFavorite(id, favorite, updatedAt) {
+      return db.update(projects).set({ favorite, updatedAt }).where(eq(projects.id, id)).returning().get()
     },
     updateName(id, name, updatedAt) {
       return db.update(projects).set({ name, updatedAt }).where(eq(projects.id, id)).returning().get()

@@ -3,14 +3,27 @@ gtd
 ├── docs/
 │   ├── architecture.md
 │   ├── claude-code-start.md
+│   ├── compact-project-tree.md
+│   ├── compact-tabs.md
 │   ├── database.md
+│   ├── day-task-drag.md
+│   ├── display-modes.md
 │   ├── getting-started.md
 │   ├── implementation-plan.md
 │   ├── ipc-api.md
 │   ├── manual-checks.md
+│   ├── project-favorite.md
 │   ├── requirements.md
+│   ├── task-row-modes.md
 │   ├── technology-decisions.md
 │   └── testing.md
+├── gemini-scripts/
+│   ├── 032-view.sh
+│   ├── 033-fix.sh
+│   ├── 034-milestone-favorite.sh
+│   ├── 036-badge.sh
+│   ├── 037-update.sh
+│   └── patch.sh
 ├── migrations/
 │   ├── meta/
 │   │   ├── 0000_snapshot.json
@@ -24,6 +37,8 @@ gtd
 │   │   ├── 0008_snapshot.json
 │   │   ├── 0009_snapshot.json
 │   │   ├── 0010_snapshot.json
+│   │   ├── 0011_snapshot.json
+│   │   ├── 0012_snapshot.json
 │   │   └── _journal.json
 │   ├── 0000_init_tasks.sql
 │   ├── 0001_add_app_settings.sql
@@ -35,7 +50,9 @@ gtd
 │   ├── 0007_task_and_milestone_order.sql
 │   ├── 0008_task_dueto.sql
 │   ├── 0009_task_favorite.sql
-│   └── 0010_done_and_done_on.sql
+│   ├── 0010_done_and_done_on.sql
+│   ├── 0011_brief_tag.sql
+│   └── 0012_panoramic_phil_sheldon.sql
 ├── scripts/
 │   ├── ui-test/
 │   │   ├── lib.mjs
@@ -75,6 +92,7 @@ gtd
 │   │   ├── lifecycle/
 │   │   │   ├── message-box.ts
 │   │   │   ├── parent-watch.ts
+│   │   │   ├── window-state.ts
 │   │   │   └── workspace-flush.ts
 │   │   ├── repositories/
 │   │   │   ├── milestone-repository.ts
@@ -95,10 +113,13 @@ gtd
 │   ├── renderer/
 │   │   ├── src/
 │   │   │   ├── components/
+│   │   │   │   ├── CompactTaskRow.tsx
 │   │   │   │   ├── ConfirmDeleteDialog.tsx
 │   │   │   │   ├── InlineCreate.tsx
 │   │   │   │   ├── Page.tsx
-│   │   │   │   └── ShellSlots.tsx
+│   │   │   │   ├── SectionRow.tsx
+│   │   │   │   ├── ShellSlots.tsx
+│   │   │   │   └── TaskRow.tsx
 │   │   │   ├── features/
 │   │   │   │   ├── app-info/
 │   │   │   │   │   └── app-info-query.ts
@@ -107,21 +128,26 @@ gtd
 │   │   │   │   ├── milestones/
 │   │   │   │   │   ├── milestone-queries.ts
 │   │   │   │   │   ├── MilestoneBoard.tsx
+│   │   │   │   │   ├── MilestoneFavoriteButton.tsx
 │   │   │   │   │   └── MilestoneForms.tsx
 │   │   │   │   ├── projects/
 │   │   │   │   │   ├── new-project.ts
 │   │   │   │   │   ├── project-order.ts
 │   │   │   │   │   ├── project-queries.ts
 │   │   │   │   │   ├── project-route.ts
+│   │   │   │   │   ├── project-tree-display.ts
 │   │   │   │   │   ├── ProjectCompletionControl.tsx
 │   │   │   │   │   ├── ProjectDeleteControl.tsx
+│   │   │   │   │   ├── ProjectFavoriteButton.tsx
 │   │   │   │   │   ├── ProjectNameEditor.tsx
 │   │   │   │   │   └── ProjectsSidebar.tsx
 │   │   │   │   ├── summary/
+│   │   │   │   │   ├── CompactSplitHandle.tsx
 │   │   │   │   │   ├── summary-merge.ts
 │   │   │   │   │   ├── summary-project-filter.ts
 │   │   │   │   │   ├── summary-queries.ts
-│   │   │   │   │   └── SummaryProjectFilter.tsx
+│   │   │   │   │   ├── SummaryProjectFilter.tsx
+│   │   │   │   │   └── use-day-task-drag.tsx
 │   │   │   │   ├── tasks/
 │   │   │   │   │   ├── assignment.ts
 │   │   │   │   │   ├── AssignMenu.tsx
@@ -144,7 +170,6 @@ gtd
 │   │   │   │   │   ├── TaskEditor.tsx
 │   │   │   │   │   ├── TaskList.tsx
 │   │   │   │   │   ├── TaskQuickAdd.tsx
-│   │   │   │   │   ├── TaskRow.tsx
 │   │   │   │   │   ├── TaskScopeView.tsx
 │   │   │   │   │   └── use-task-row-actions.tsx
 │   │   │   │   └── workspace/
@@ -171,6 +196,7 @@ gtd
 │   │   │   │   ├── local-day.tsx
 │   │   │   │   └── query-client.ts
 │   │   │   ├── routes/
+│   │   │   │   ├── CompactScreen.tsx
 │   │   │   │   ├── InboxPage.tsx
 │   │   │   │   ├── NotFoundPage.tsx
 │   │   │   │   ├── ProjectsPage.tsx
@@ -209,7 +235,7 @@ gtd
 ├── tsconfig.web.json
 └── vitest.config.mts
 
-33 directories, 175 files
+34 directories, 200 files
 ````
 
 ````CLAUDE.md
@@ -8517,7 +8543,8 @@ export default defineConfig({
     "src/renderer/src/features/tasks/selection.ts",
     "src/renderer/src/features/tasks/favorite-saver.ts",
     "src/renderer/src/features/tasks/due-format.ts",
-    "src/renderer/src/features/summary/summary-merge.ts"
+    "src/renderer/src/features/summary/summary-merge.ts",
+    "src/renderer/src/features/projects/project-tree-display.ts"
   ]
 }
 
@@ -8696,6 +8723,16 @@ ALTER TABLE `projects` ADD `done` integer DEFAULT false NOT NULL;--> statement-b
 UPDATE `projects` SET `done` = (`done_on` IS NOT NULL);--> statement-breakpoint
 ALTER TABLE `milestones` ADD `done` integer DEFAULT false NOT NULL;--> statement-breakpoint
 ALTER TABLE `milestones` ADD `done_on` text;
+
+````
+
+````migrations/0011_brief_tag.sql
+ALTER TABLE `projects` ADD `favorite` integer DEFAULT false NOT NULL;
+
+````
+
+````migrations/0012_panoramic_phil_sheldon.sql
+ALTER TABLE `milestones` ADD `favorite` integer DEFAULT false NOT NULL;
 
 ````
 
@@ -11123,6 +11160,710 @@ ALTER TABLE `milestones` ADD `done_on` text;
 
 ````
 
+````migrations/meta/0011_snapshot.json
+{
+  "version": "6",
+  "dialect": "sqlite",
+  "id": "ca2cdccf-b026-4466-a39b-a6f12445e508",
+  "prevId": "de09d3ea-7941-4b4e-b9dd-eee03beae213",
+  "tables": {
+    "app_settings": {
+      "name": "app_settings",
+      "columns": {
+        "key": {
+          "name": "key",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "value": {
+          "name": "value",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "milestones": {
+      "name": "milestones",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "project_id": {
+          "name": "project_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "done": {
+          "name": "done",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": false
+        },
+        "done_on": {
+          "name": "done_on",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "position": {
+          "name": "position",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "milestones_project_id_idx": {
+          "name": "milestones_project_id_idx",
+          "columns": [
+            "project_id"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "milestones_project_id_projects_id_fk": {
+          "name": "milestones_project_id_projects_id_fk",
+          "tableFrom": "milestones",
+          "tableTo": "projects",
+          "columnsFrom": [
+            "project_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "projects": {
+      "name": "projects",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "done": {
+          "name": "done",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": false
+        },
+        "favorite": {
+          "name": "favorite",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": false
+        },
+        "done_on": {
+          "name": "done_on",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "tasks": {
+      "name": "tasks",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "title": {
+          "name": "title",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "done_on": {
+          "name": "done_on",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "project_id": {
+          "name": "project_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "milestone_id": {
+          "name": "milestone_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "hidden_at": {
+          "name": "hidden_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "position": {
+          "name": "position",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "dueto": {
+          "name": "dueto",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "favorite": {
+          "name": "favorite",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": false
+        }
+      },
+      "indexes": {
+        "tasks_created_at_id_idx": {
+          "name": "tasks_created_at_id_idx",
+          "columns": [
+            "created_at",
+            "id"
+          ],
+          "isUnique": false
+        },
+        "tasks_project_id_idx": {
+          "name": "tasks_project_id_idx",
+          "columns": [
+            "project_id"
+          ],
+          "isUnique": false
+        },
+        "tasks_milestone_id_idx": {
+          "name": "tasks_milestone_id_idx",
+          "columns": [
+            "milestone_id"
+          ],
+          "isUnique": false
+        },
+        "tasks_dueto_idx": {
+          "name": "tasks_dueto_idx",
+          "columns": [
+            "dueto"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "tasks_project_id_projects_id_fk": {
+          "name": "tasks_project_id_projects_id_fk",
+          "tableFrom": "tasks",
+          "tableTo": "projects",
+          "columnsFrom": [
+            "project_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "tasks_milestone_id_milestones_id_fk": {
+          "name": "tasks_milestone_id_milestones_id_fk",
+          "tableFrom": "tasks",
+          "tableTo": "milestones",
+          "columnsFrom": [
+            "milestone_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    }
+  },
+  "views": {},
+  "enums": {},
+  "_meta": {
+    "schemas": {},
+    "tables": {},
+    "columns": {}
+  },
+  "internal": {
+    "indexes": {}
+  }
+}
+
+````
+
+````migrations/meta/0012_snapshot.json
+{
+  "version": "6",
+  "dialect": "sqlite",
+  "id": "195d9be4-4bd8-48c2-9f39-4e21133ee35b",
+  "prevId": "ca2cdccf-b026-4466-a39b-a6f12445e508",
+  "tables": {
+    "app_settings": {
+      "name": "app_settings",
+      "columns": {
+        "key": {
+          "name": "key",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "value": {
+          "name": "value",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "milestones": {
+      "name": "milestones",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "project_id": {
+          "name": "project_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "done": {
+          "name": "done",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": false
+        },
+        "favorite": {
+          "name": "favorite",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": false
+        },
+        "done_on": {
+          "name": "done_on",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "position": {
+          "name": "position",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "milestones_project_id_idx": {
+          "name": "milestones_project_id_idx",
+          "columns": [
+            "project_id"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "milestones_project_id_projects_id_fk": {
+          "name": "milestones_project_id_projects_id_fk",
+          "tableFrom": "milestones",
+          "tableTo": "projects",
+          "columnsFrom": [
+            "project_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "projects": {
+      "name": "projects",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "done": {
+          "name": "done",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": false
+        },
+        "favorite": {
+          "name": "favorite",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": false
+        },
+        "done_on": {
+          "name": "done_on",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "tasks": {
+      "name": "tasks",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "title": {
+          "name": "title",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "done_on": {
+          "name": "done_on",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "project_id": {
+          "name": "project_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "milestone_id": {
+          "name": "milestone_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "hidden_at": {
+          "name": "hidden_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "position": {
+          "name": "position",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "dueto": {
+          "name": "dueto",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "favorite": {
+          "name": "favorite",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": false
+        }
+      },
+      "indexes": {
+        "tasks_created_at_id_idx": {
+          "name": "tasks_created_at_id_idx",
+          "columns": [
+            "created_at",
+            "id"
+          ],
+          "isUnique": false
+        },
+        "tasks_project_id_idx": {
+          "name": "tasks_project_id_idx",
+          "columns": [
+            "project_id"
+          ],
+          "isUnique": false
+        },
+        "tasks_milestone_id_idx": {
+          "name": "tasks_milestone_id_idx",
+          "columns": [
+            "milestone_id"
+          ],
+          "isUnique": false
+        },
+        "tasks_dueto_idx": {
+          "name": "tasks_dueto_idx",
+          "columns": [
+            "dueto"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "tasks_project_id_projects_id_fk": {
+          "name": "tasks_project_id_projects_id_fk",
+          "tableFrom": "tasks",
+          "tableTo": "projects",
+          "columnsFrom": [
+            "project_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "tasks_milestone_id_milestones_id_fk": {
+          "name": "tasks_milestone_id_milestones_id_fk",
+          "tableFrom": "tasks",
+          "tableTo": "milestones",
+          "columnsFrom": [
+            "milestone_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    }
+  },
+  "views": {},
+  "enums": {},
+  "_meta": {
+    "schemas": {},
+    "tables": {},
+    "columns": {}
+  },
+  "internal": {
+    "indexes": {}
+  }
+}
+
+````
+
 ````migrations/meta/_journal.json
 {
   "version": "7",
@@ -11204,9 +11945,373 @@ ALTER TABLE `milestones` ADD `done_on` text;
       "when": 1794390044263,
       "tag": "0010_done_and_done_on",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "6",
+      "when": 1794671949633,
+      "tag": "0011_brief_tag",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "6",
+      "when": 1794673322487,
+      "tag": "0012_panoramic_phil_sheldon",
+      "breakpoints": true
     }
   ]
 }
+
+````
+
+````gemini-scripts/032-view.sh
+#!/bin/zsh
+set -euo pipefail
+cd -- "${0:A:h:h}"
+[[ -f package.json ]] || { print -u2 'プロジェクトルートを確認してください'; exit 1; }
+git rev-parse --is-inside-work-tree >/dev/null
+if [[ -n "$(git status --porcelain --untracked-files=all -- . ':!gemini-scripts')" ]]; then
+  print -u2 'gemini-scripts以外の未コミット変更を先に整理してください。'
+  exit 1
+fi
+node <<'NODE'
+const fs = require('node:fs');
+const path = 'src/renderer/src/routes/CompactScreen.tsx';
+const edits = [["import { Alert, Box, Button, CircularProgress, Tab, Tabs, Tooltip, Typography } from '@mui/material'", "import { Alert, Box, CircularProgress, Tab, Tabs, ToggleButton, ToggleButtonGroup, Typography } from '@mui/material'"], ["import { ListChevronsDownUp, ListChevronsUpDown, ListTree, Flag } from 'lucide-react'", "import { Flag } from 'lucide-react'"], ["import { ShellSlot } from '../components/ShellSlots'", "import { ShellSlot } from '../components/ShellSlots'\nimport { projectTreeDisplayMode, type ProjectTreeDisplayMode } from '../features/projects/project-tree-display'"], ["  const [expandedNodes, setExpandedNodes] = useState<ReadonlySet<string>>(new Set())", "  const [expandedNodes, setExpandedNodes] = useState<ReadonlySet<string>>(new Set())\n  const [preferredDisplay, setPreferredDisplay] = useState<ProjectTreeDisplayMode>('MILESTONE')"], ["  const milestoneRows = milestonesQuery.data ?? []", "  const milestoneRows = milestonesQuery.data ?? []\n  const displayMode = projectTreeDisplayMode(projects.map((project) => project.id), milestoneRows, expandedNodes, preferredDisplay)"], ["      setExpandedNodes(mode === 'none' ? new Set() : new Set([", "      setPreferredDisplay(mode === 'none' ? 'PROJECT' : mode === 'milestones' ? 'MILESTONE' : 'ALL')\n      setExpandedNodes(mode === 'none' ? new Set() : new Set(["]];
+const additions = {"src/renderer/src/features/projects/project-tree-display.ts": "export type ProjectTreeDisplayMode = 'PROJECT' | 'MILESTONE' | 'ALL' | 'CUSTOM'\n\n/** 隠れた子ノードの展開フラグではなく、現在の表示階層を判定する。 */\nexport function projectTreeDisplayMode(\n  projectIds: readonly string[],\n  milestones: readonly { id: string; projectId: string | null }[],\n  expandedNodes: ReadonlySet<string>,\n  preferred: ProjectTreeDisplayMode = 'MILESTONE'\n): ProjectTreeDisplayMode {\n  if (projectIds.length === 0) return preferred === 'CUSTOM' ? 'MILESTONE' : preferred\n  const openedProjects = projectIds.filter((id) => expandedNodes.has(`project:${id}`)).length\n  if (openedProjects === 0) return 'PROJECT'\n  if (openedProjects !== projectIds.length) return 'CUSTOM'\n  const ids = new Set(projectIds)\n  const children = milestones.filter((item) => item.projectId !== null && ids.has(item.projectId))\n  // マイルストン0件ではMILESTONEとALLが同じ表示になるため、明示操作を優先する。\n  if (children.length === 0) return preferred === 'ALL' ? 'ALL' : 'MILESTONE'\n  const openedMilestones = children.filter((item) => expandedNodes.has(`milestone:${item.id}`)).length\n  if (openedMilestones === 0) return 'MILESTONE'\n  if (openedMilestones === children.length) return 'ALL'\n  return 'CUSTOM'\n}\n", "tests/project-tree-display.test.ts": "import { describe, expect, it } from 'vitest'\nimport { projectTreeDisplayMode } from '../src/renderer/src/features/projects/project-tree-display'\nconst projects = ['p1', 'p2']\nconst milestones = [{ id: 'm1', projectId: 'p1' }, { id: 'm2', projectId: 'p2' }]\nconst state = (...keys: string[]) => new Set(keys)\ndescribe('project tree display mode', () => {\n  it('PROJECT: all projects closed, even if hidden children are open', () => {\n    expect(projectTreeDisplayMode(projects, milestones, state())).toBe('PROJECT')\n    expect(projectTreeDisplayMode(projects, milestones, state('milestone:m1'))).toBe('PROJECT')\n  })\n  it('MILESTONE: projects open and milestones closed', () => {\n    expect(projectTreeDisplayMode(projects, milestones, state('project:p1', 'project:p2'))).toBe('MILESTONE')\n  })\n  it('ALL: all levels open', () => {\n    expect(projectTreeDisplayMode(projects, milestones, state('project:p1', 'project:p2', 'milestone:m1', 'milestone:m2'))).toBe('ALL')\n  })\n  it('CUSTOM: mixed project or milestone expansion', () => {\n    expect(projectTreeDisplayMode(projects, milestones, state('project:p1'))).toBe('CUSTOM')\n    expect(projectTreeDisplayMode(projects, milestones, state('project:p1', 'project:p2', 'milestone:m1'))).toBe('CUSTOM')\n  })\n  it('ignores milestones of projects outside the visible list', () => {\n    expect(projectTreeDisplayMode(projects, [...milestones, { id: 'hidden', projectId: 'p3' }],\n      state('project:p1', 'project:p2', 'milestone:m1', 'milestone:m2'))).toBe('ALL')\n  })\n  it('uses the explicit preset when no child milestones exist', () => {\n    expect(projectTreeDisplayMode(['p1'], [], state('project:p1'), 'ALL')).toBe('ALL')\n    expect(projectTreeDisplayMode(['p1'], [], state('project:p1'), 'MILESTONE')).toBe('MILESTONE')\n  })\n})\n"};
+let source = fs.readFileSync(path, 'utf8');
+for (const [before, after] of edits) {
+  if (source.split(before).length !== 2) throw new Error(`対象コードが一致しません。031までの状態を確認してください。変更せず停止します: ${path}\n${before}`);
+  source = source.replace(before, after);
+}
+const startToken = '<ShellSlot name="top-bar-controls">';
+if (source.split(startToken).length !== 2) throw new Error('トップバーの操作領域が一意ではありません');
+const start = source.indexOf(startToken);
+const close = source.indexOf('</ShellSlot>', start);
+if (close < 0) throw new Error('トップバーの閉じタグがありません');
+const existing = source.slice(start, close);
+if (!existing.includes('compact-project-expand-milestones') || !existing.includes('compact-project-collapse-all') || !existing.includes('compact-project-expand-all')) throw new Error('想定した3つの操作ボタンがありません');
+source = source.slice(0, start) + "        <ShellSlot name=\"top-bar-controls\">\n          <Box role=\"group\" aria-label=\"プロジェクト階層の表示\"\n            sx={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-start', gap: 1,\n              minWidth: 0, maxWidth: '100%', overflowX: 'auto', overflowY: 'hidden', color: '#ffffff' }}>\n            <Typography component=\"span\" sx={{ fontSize: 12, flexShrink: 0 }}>表示</Typography>\n            <ToggleButtonGroup value={displayMode} exclusive size=\"small\" aria-label=\"表示するプロジェクト階層\"\n              data-testid=\"compact-project-display\" sx={{ flexShrink: 0, height: 28 }}\n              onChange={(_event, value: ProjectTreeDisplayMode | null) => {\n                if (!value || value === 'CUSTOM') return\n                void setAllExpanded(value === 'PROJECT' ? 'none' : value === 'MILESTONE' ? 'milestones' : 'all')\n              }}>\n              {(['PROJECT', 'MILESTONE', 'ALL', 'CUSTOM'] as const).map((mode) => (\n                <ToggleButton key={mode} value={mode}\n                  disabled={mode === 'CUSTOM' || loading || error !== null || projects.length === 0}\n                  title={mode === 'CUSTOM' ? 'ノードを個別に開閉した状態（自動選択）' : undefined}\n                  data-testid={`compact-project-display-${mode.toLowerCase()}`}\n                  sx={{ px: 2.5, py: 0, fontSize: 12, color: '#ffffff', whiteSpace: 'nowrap',\n                    '&.Mui-selected': { color: '#ffffff', bgcolor: 'rgba(255,255,255,0.16)' },\n                    '&.Mui-disabled': { color: 'rgba(255,255,255,0.4)' },\n                    '&.Mui-selected.Mui-disabled': { color: '#ffffff', bgcolor: 'rgba(255,255,255,0.16)' } }}>\n                  {mode}\n                </ToggleButton>\n              ))}\n            </ToggleButtonGroup>\n          </Box>\n        </ShellSlot>".trimStart() + source.slice(close + '</ShellSlot>'.length);
+const output = new Map([[path, source]]);
+for (const [file, content] of Object.entries(additions)) {
+  if (fs.existsSync(file)) throw new Error(`既存ファイルは上書きしません: ${file}`);
+  output.set(file, content);
+}
+for (const [file, content] of output) {
+  fs.writeFileSync(file, content);
+  console.log(`更新: ${file}`);
+}
+NODE
+npm run typecheck
+npm test
+npm run build
+git diff --check
+
+git add .
+git commit -m 'プロジェクト階層の表示切り替えをボタン群に統一'
+
+````
+
+````gemini-scripts/033-fix.sh
+#!/bin/zsh
+set -euo pipefail
+cd -- "${0:A:h:h}"
+[[ -f package.json && -f tsconfig.node.json ]] || { print -u2 'プロジェクトルートを確認してください'; exit 1; }
+git rev-parse --is-inside-work-tree >/dev/null
+node <<'NODE'
+const fs = require('node:fs');
+const ts = require('typescript');
+const path = 'tsconfig.node.json';
+const target = 'src/renderer/src/features/projects/project-tree-display.ts';
+if (!fs.existsSync(target)) throw new Error(`032の追加ファイルがありません: ${target}`);
+const source = fs.readFileSync(path, 'utf8');
+const parsed = ts.parseConfigFileTextToJson(path, source);
+if (parsed.error) throw new Error(ts.flattenDiagnosticMessageText(parsed.error.messageText, '\n'));
+if (!Array.isArray(parsed.config.include)) throw new Error('include配列がありません。設定を確認してください。');
+if (parsed.config.include.includes(target)) {
+  console.log(`追加済み: ${path}`);
+} else {
+  // 設定全体を書き直さず、コメントや既存の整形を維持してincludeへ1項目だけ追加する。
+  const ast = ts.parseJsonText(path, source);
+  const root = ast.statements[0]?.expression;
+  if (!root || !ts.isObjectLiteralExpression(root)) throw new Error('設定の構文を確認してください。');
+  const property = root.properties.find(item => ts.isPropertyAssignment(item) && item.name.getText(ast).replace(/['"]/g, '') === 'include');
+  if (!property || !ts.isPropertyAssignment(property) || !ts.isArrayLiteralExpression(property.initializer)) throw new Error('include配列を特定できません。');
+  const array = property.initializer;
+  const newline = source.includes('\r\n') ? '\r\n' : '\n';
+  let position;
+  let insertion;
+  if (array.elements.length === 0) {
+    position = array.getStart(ast) + 1;
+    insertion = JSON.stringify(target);
+  } else {
+    const last = array.elements[array.elements.length - 1];
+    const lineStart = source.lastIndexOf('\n', last.getStart(ast) - 1) + 1;
+    const indent = source.slice(lineStart, last.getStart(ast)).match(/^\s*/)[0];
+    position = last.end;
+    // 最終要素の後の既存カンマは、新しく追加する要素の末尾カンマとして残す。
+    insertion = ',' + newline + indent + JSON.stringify(target);
+  }
+  const updated = source.slice(0, position) + insertion + source.slice(position);
+  const check = ts.parseConfigFileTextToJson(path, updated);
+  if (check.error || !check.config.include.includes(target)) throw new Error('修正後の設定検証に失敗しました。書き込みません。');
+  fs.writeFileSync(path, updated);
+  console.log(`更新: ${path}`);
+}
+NODE
+npm run typecheck
+npm test
+npm run build
+git diff --check
+
+git add .
+git commit -m 'プロジェクト表示切り替えとテスト用型チェック設定を整備'
+
+````
+
+````gemini-scripts/034-milestone-favorite.sh
+#!/bin/zsh
+set -euo pipefail
+cd -- "${0:A:h:h}"
+[[ -f package.json ]] || { print -u2 'プロジェクトルートを確認してください'; exit 1; }
+git rev-parse --is-inside-work-tree >/dev/null
+if [[ -n "$(git status --porcelain --untracked-files=all -- . ':!gemini-scripts')" ]]; then
+  print -u2 'gemini-scripts以外の未コミット変更を先に整理してください。'
+  exit 1
+fi
+node <<'NODE'
+const fs = require('node:fs');
+const path = require('node:path');
+const edits = {"src/main/db/schema/milestones.ts": [["    done: integer('done', { mode: 'boolean' }).notNull().default(false),", "    done: integer('done', { mode: 'boolean' }).notNull().default(false),\n    favorite: integer('favorite', { mode: 'boolean' }).notNull().default(false),"]], "src/shared/contracts/milestones.ts": [["export type MilestoneDto = {", "export type SetMilestoneFavoriteInput = { id: string; favorite: boolean }\n\nexport type MilestoneDto = {\n  favorite: boolean"]], "src/main/services/milestone-service.ts": [["  ReorderMilestonesInput\n", "  ReorderMilestonesInput,\n  SetMilestoneFavoriteInput\n"], ["  rename(input: RenameMilestoneInput): MilestoneDto", "  rename(input: RenameMilestoneInput): MilestoneDto\n  setFavorite(input: SetMilestoneFavoriteInput): MilestoneDto"], ["    done: row.done,", "    done: row.done,\n    favorite: row.favorite,"], ["          name: input.name,", "          name: input.name,\n          favorite: false,"], ["    rename(input) {", "    setFavorite(input) {\n      return deps.transaction(() => {\n        const current = findVisible(input.id)\n        if (current.favorite === input.favorite) return toDto(current)\n        const updated = repository.updateFavorite(input.id, input.favorite, now().toISOString())\n        if (!isVisible(updated)) throw milestoneNotFound()\n        return toDto(updated)\n      })\n    },\n    rename(input) {"]], "src/shared/contracts/ipc.ts": [["  ReorderMilestonesInput\n", "  ReorderMilestonesInput,\n  SetMilestoneFavoriteInput\n"], ["  milestonesRename: 'milestones:rename',", "  milestonesRename: 'milestones:rename',\n  milestonesSetFavorite: 'milestones:set-favorite',"], ["    rename: (input: RenameMilestoneInput) => Promise<IpcResult<MilestoneDto>>", "    rename: (input: RenameMilestoneInput) => Promise<IpcResult<MilestoneDto>>\n    setFavorite: (input: SetMilestoneFavoriteInput) => Promise<IpcResult<MilestoneDto>>"]], "src/renderer/src/features/milestones/milestone-queries.ts": [["  ReorderMilestonesInput\n", "  ReorderMilestonesInput,\n  SetMilestoneFavoriteInput\n"], ["import { queryOptions, useMutation, useQueryClient } from '@tanstack/react-query'", "import { queryOptions, useMutation, useMutationState, useQueryClient } from '@tanstack/react-query'"], ["  rename: [...milestoneKeys.all, 'rename'] as const,", "  rename: [...milestoneKeys.all, 'rename'] as const,\n  setFavorite: [...milestoneKeys.all, 'set-favorite'] as const,"], ["export function useCreateMilestoneMutation() {", "export function usePendingMilestoneIds(): ReadonlySet<string> {\n  const ids = useMutationState({\n    filters: { status: 'pending', predicate: (mutation) => mutation.options.mutationKey?.[0] === milestoneKeys.all[0] },\n    select: (mutation) => {\n      const value = mutation.state.variables\n      return typeof value === 'object' && value !== null && 'id' in value && typeof value.id === 'string' ? value.id : null\n    }\n  })\n  return new Set(ids.filter((id): id is string => id !== null))\n}\n\nexport function useSetMilestoneFavoriteMutation() {\n  const queryClient = useQueryClient()\n  return useMutation({\n    mutationKey: milestoneMutationKeys.setFavorite,\n    mutationFn: (input: SetMilestoneFavoriteInput) =>\n      taskSaveQueue.run(`milestone:${input.id}`, () => unwrapIpc(window.gtd.milestones.setFavorite(input))),\n    onSuccess: (saved: MilestoneDto) => {\n      queryClient.setQueryData<MilestoneDto[]>(milestoneKeys.list(), (items) => items?.map((item) => item.id === saved.id ? saved : item))\n      void queryClient.invalidateQueries({ queryKey: milestoneKeys.list() })\n    }\n  })\n}\n\nexport function useCreateMilestoneMutation() {"]], "src/preload/index.ts": [["    rename: (input) => ipcRenderer.invoke(IPC_CHANNELS.milestonesRename, input),", "    rename: (input) => ipcRenderer.invoke(IPC_CHANNELS.milestonesRename, input),\n    setFavorite: (input) => ipcRenderer.invoke(IPC_CHANNELS.milestonesSetFavorite, input),"]], "src/shared/validation/milestones.ts": [["const milestoneIdSchema = z.uuid({ error: 'マイルストンIDが正しくありません。' })", "const milestoneIdSchema = z.uuid({ error: 'マイルストンIDが正しくありません。' })\nexport const milestonesSetFavoriteArgsSchema = z.tuple([z.strictObject({ id: milestoneIdSchema, favorite: z.boolean() })])"]], "src/main/repositories/milestone-repository.ts": [["  updateName(id: string, name: string, updatedAt: string): MilestoneRow | undefined", "  updateName(id: string, name: string, updatedAt: string): MilestoneRow | undefined\n  updateFavorite(id: string, favorite: boolean, updatedAt: string): MilestoneRow | undefined"], ["    updateName(id, name, updatedAt) {", "    updateFavorite(id, favorite, updatedAt) {\n      return db.update(milestones).set({ favorite, updatedAt }).where(visible(id)).returning().get()\n    },\n    updateName(id, name, updatedAt) {"]], "src/main/services/project-service.ts": [["          name: INITIAL_MILESTONE_NAME,", "          name: INITIAL_MILESTONE_NAME,\n          favorite: false,"]], "src/main/ipc/index.ts": [["  milestonesReorderArgsSchema\n", "  milestonesReorderArgsSchema,\n  milestonesSetFavoriteArgsSchema\n"], ["  const { policy, taskService, projectService, milestoneService, workspaceSettingsService } = deps", "  const { policy, taskService, projectService, milestoneService, workspaceSettingsService } = deps\n  ipcMain.handle(IPC_CHANNELS.milestonesSetFavorite,\n    createIpcHandler({ channel: IPC_CHANNELS.milestonesSetFavorite, argsSchema: milestonesSetFavoriteArgsSchema, policy,\n      run: ([input]) => milestoneService.setFavorite(input) }))"]], "src/renderer/src/features/milestones/MilestoneBoard.tsx": [["import { MilestoneNameEditor } from './MilestoneForms'", "import { MilestoneNameEditor } from './MilestoneForms'\nimport { MilestoneFavoriteButton } from './MilestoneFavoriteButton'"], ["                    <Typography\n                      component=\"h2\"", "                    <MilestoneFavoriteButton milestoneId={group.milestoneId} />\n                    <Typography\n                      component=\"h2\""]], "src/renderer/src/routes/CompactScreen.tsx": [["import { Flag } from 'lucide-react'\n", ""], ["import { ProjectFavoriteButton } from '../features/projects/ProjectFavoriteButton'", "import { ProjectFavoriteButton } from '../features/projects/ProjectFavoriteButton'\nimport { MilestoneFavoriteButton } from '../features/milestones/MilestoneFavoriteButton'"], ["<SectionRow level={1} toggleOnRowClick title={group.label} titleId={titleId} icon={Flag}", "<SectionRow level={1} toggleOnRowClick title={group.label} titleId={titleId} iconElement={<MilestoneFavoriteButton milestoneId={group.milestoneId} />}"]]};
+const additions = {"src/renderer/src/features/milestones/MilestoneFavoriteButton.tsx": "import { useRef } from 'react'\nimport { Alert, Box, IconButton, Snackbar, Tooltip } from '@mui/material'\nimport { useQuery } from '@tanstack/react-query'\nimport { Star } from 'lucide-react'\nimport { milestoneListQueryOptions, usePendingMilestoneIds, useSetMilestoneFavoriteMutation } from './milestone-queries'\n\nexport function MilestoneFavoriteButton({ milestoneId }: { milestoneId: string }) {\n  const query = useQuery(milestoneListQueryOptions)\n  const milestone = query.data?.find((item) => item.id === milestoneId)\n  const pendingIds = usePendingMilestoneIds()\n  const mutation = useSetMilestoneFavoriteMutation()\n  const busy = useRef(false)\n  const favorite = milestone?.favorite ?? false\n  const label = `「${milestone?.name ?? 'マイルストン'}」を${favorite ? 'お気に入りから解除' : 'お気に入りに追加'}`\n  const toggle = async () => {\n    if (!milestone || busy.current || pendingIds.has(milestoneId)) return\n    busy.current = true\n    try { await mutation.mutateAsync({ id: milestoneId, favorite: !favorite }) }\n    catch { /* mutation.errorで画面に表示する */ }\n    finally { busy.current = false }\n  }\n  return (\n    <Box component=\"span\" onClick={(event) => event.stopPropagation()} onPointerDown={(event) => event.stopPropagation()}\n      onDoubleClick={(event) => event.stopPropagation()} sx={{ display: 'inline-flex', flexShrink: 0 }}>\n      <Tooltip title={label}>\n        <span style={{ display: 'inline-flex' }}>\n          <IconButton aria-label={label} aria-pressed={favorite} disabled={!milestone || pendingIds.has(milestoneId)}\n            data-testid=\"milestone-favorite\" data-milestone-favorite-id={milestoneId} data-favorite={favorite ? 'true' : 'false'}\n            onClick={() => void toggle()} sx={{ width: 24, height: 24, p: 0, color: favorite ? '#ffa500' : '#9a9a9a' }}>\n            <Star size={18} aria-hidden fill={favorite ? '#ffa500' : 'none'} strokeWidth={1.75} />\n          </IconButton>\n        </span>\n      </Tooltip>\n      <Snackbar open={mutation.isError} onClose={() => mutation.reset()}>\n        <Alert severity=\"error\" onClose={() => mutation.reset()}>お気に入りを保存できませんでした: {mutation.error?.message}</Alert>\n      </Snackbar>\n    </Box>\n  )\n}\n", "tests/milestone-favorite.test.ts": "import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'\nimport { mkdtempSync, rmSync } from 'node:fs'\nimport { tmpdir } from 'node:os'\nimport { join } from 'node:path'\nimport { openDatabase, closeDatabase, type AppDatabase } from '../src/main/db/client'\nimport { runMigrations } from '../src/main/db/migrate'\nimport { createTransactionRunner } from '../src/main/db/transaction'\nimport { createMilestoneRepository, type MilestoneRepository } from '../src/main/repositories/milestone-repository'\nimport { createProjectRepository } from '../src/main/repositories/project-repository'\nimport { createMilestoneService, type MilestoneService } from '../src/main/services/milestone-service'\nimport { milestonesSetFavoriteArgsSchema } from '../src/shared/validation/milestones'\n\nconst PROJECT_ID = '12345678-1234-4234-8234-123456789abc'\nlet dir: string\nlet db: AppDatabase\nlet repository: MilestoneRepository\nlet service: MilestoneService\nlet clock: string\nbeforeEach(() => {\n  dir = mkdtempSync(join(tmpdir(), 'gtd-milestone-favorite-'))\n  db = openDatabase(join(dir, 'test.sqlite'))\n  runMigrations(db, join(process.cwd(), 'migrations'))\n  const projects = createProjectRepository(db)\n  projects.insert({ id: PROJECT_ID, name: 'P', favorite: false, done: false, doneOn: null,\n    createdAt: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-01T00:00:00.000Z' })\n  repository = createMilestoneRepository(db)\n  clock = '2026-01-01T00:00:00.000Z'\n  service = createMilestoneService({ repository, findProject: projects.findById, countTasks: () => 0,\n    hideTasks: () => 0, transaction: createTransactionRunner(db), now: () => new Date(clock) })\n})\nafterEach(() => {\n  vi.restoreAllMocks()\n  if (db) closeDatabase(db)\n  if (dir) rmSync(dir, { recursive: true, force: true })\n})\ndescribe('milestone favorite', () => {\n  it('creates with false and changes favorite without changing other fields', () => {\n    const created = service.create({ projectId: PROJECT_ID, name: 'M' })\n    expect(created.favorite).toBe(false)\n    clock = '2026-01-02T00:00:00.000Z'\n    expect(service.setFavorite({ id: created.id, favorite: true })).toEqual({ ...created, favorite: true, updatedAt: clock })\n    expect(service.setFavorite({ id: created.id, favorite: false }).favorite).toBe(false)\n  })\n  it('does not update timestamps for identical state', () => {\n    const created = service.create({ projectId: PROJECT_ID, name: 'M' })\n    clock = '2026-01-02T00:00:00.000Z'\n    expect(service.setFavorite({ id: created.id, favorite: false })).toEqual(created)\n  })\n  it('rejects hidden and deleted milestones', () => {\n    const created = service.create({ projectId: PROJECT_ID, name: 'M' })\n    repository.detachByProject(PROJECT_ID, clock)\n    expect(() => service.setFavorite({ id: created.id, favorite: true })).toThrow()\n    db.$client.prepare('DELETE FROM milestones WHERE id = ?').run(created.id)\n    expect(() => service.setFavorite({ id: created.id, favorite: true })).toThrow()\n    expect(service.list()).toEqual([])\n  })\n  it('does not modify the row on write failure', () => {\n    const created = service.create({ projectId: PROJECT_ID, name: 'M' })\n    vi.spyOn(repository, 'updateFavorite').mockImplementation(() => { throw new Error('write failure') })\n    expect(() => service.setFavorite({ id: created.id, favorite: true })).toThrow('write failure')\n    expect(service.list()).toEqual([created])\n  })\n  it('validates UUID and boolean at IPC boundary', () => {\n    expect(milestonesSetFavoriteArgsSchema.safeParse([{ id: PROJECT_ID, favorite: true }]).success).toBe(true)\n    expect(milestonesSetFavoriteArgsSchema.safeParse([{ id: PROJECT_ID, favorite: 1 }]).success).toBe(false)\n    expect(milestonesSetFavoriteArgsSchema.safeParse([{ id: 'invalid', favorite: false }]).success).toBe(false)\n  })\n  it('has SQL default 0 when the column is omitted', () => {\n    db.$client.prepare('INSERT INTO milestones (id, project_id, name, created_at, updated_at) VALUES (?, ?, ?, ?, ?)')\n      .run('raw-milestone', PROJECT_ID, 'Raw', clock, clock)\n    expect(repository.findById('raw-milestone')?.favorite).toBe(false)\n  })\n})\n"};
+const journal = JSON.parse(fs.readFileSync('migrations/meta/_journal.json', 'utf8'));
+if (journal.entries.length !== 12 || journal.entries.at(-1)?.idx !== 11) throw new Error('想定外のマイグレーション履歴です。変更せず停止します。');
+const output = new Map();
+for (const [file, items] of Object.entries(edits)) {
+  let source = fs.readFileSync(file, 'utf8');
+  for (const [before, after] of items) {
+    if (source.split(before).length !== 2) throw new Error(`対象コードが一致しません。033までの状態を確認してください。変更せず停止します: ${file}\n${before}`);
+    source = source.replace(before, after);
+  }
+  output.set(file, source);
+}
+const ts = require('typescript');
+function listTests(dir) {
+  if (!fs.existsSync(dir)) return [];
+  return fs.readdirSync(dir, { withFileTypes: true }).flatMap(entry => {
+    const name = `${dir}/${entry.name}`;
+    return entry.isDirectory() ? listTests(name) : name.endsWith('.test.ts') ? [name] : [];
+  });
+}
+function updateFixtures(file) {
+  const original = fs.readFileSync(file, 'utf8');
+  const ast = ts.createSourceFile(file, original, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
+  if (ast.parseDiagnostics.length) throw new Error(`テストの構文解析に失敗しました: ${file}`);
+  const edits = [];
+  const seen = new Set();
+  const newline = original.includes('\r\n') ? '\r\n' : '\n';
+  const properties = object => new Set(object.properties.map(item => item.name?.getText(ast).replace(/['"]/g, '')));
+  function addFavorite(object, raw = false) {
+    if (seen.has(object.pos) || !object.properties.length || properties(object).has('favorite')) return;
+    seen.add(object.pos);
+    const position = object.properties[0].getStart(ast);
+    const lineStart = original.lastIndexOf('\n', position - 1) + 1;
+    const indent = original.slice(lineStart, position).match(/^\s*/)[0];
+    edits.push({ start: position, end: position, text: `favorite: ${raw ? '0' : 'false'},${newline}${indent}` });
+  }
+  const typeIsMilestone = type => type && ts.isTypeReferenceNode(type) && ['MilestoneDto', 'MilestoneRow', 'VisibleMilestoneRow'].includes(type.typeName.getText(ast));
+  const unwrap = node => { while (node && ts.isParenthesizedExpression(node)) node = node.expression; return node; };
+  const readsMilestones = node => {
+    let found = false;
+    function check(current) {
+      if (ts.isCallExpression(current) && current.expression.getText(ast) === 'after' && current.arguments.length === 1 &&
+          ts.isStringLiteral(current.arguments[0]) && current.arguments[0].text === 'milestones') found = true;
+      if (ts.isStringLiteralLike(current) && /SELECT\s+\*\s+FROM\s+[`"]?milestones\b/i.test(current.text)) found = true;
+      ts.forEachChild(current, check);
+    }
+    check(node);
+    return found;
+  };
+  function visit(node) {
+    if (ts.isCallExpression(node) && ts.isPropertyAccessExpression(node.expression) && node.expression.name.text === 'toEqual' && node.arguments.length === 1) {
+      const call = node.expression.expression;
+      if (ts.isCallExpression(call) && call.expression.getText(ast) === 'expect' && call.arguments.length === 1 && readsMilestones(call.arguments[0])) {
+        const expected = node.arguments[0];
+        const value = expected.getText(ast);
+        if (!value.includes('favorite')) edits.push({ start: expected.getStart(ast), end: expected.end, text: `(${value}).map((row) => ({ ...row, favorite: 0 }))` });
+        return;
+      }
+    }
+    let object;
+    if (ts.isArrowFunction(node) && typeIsMilestone(node.type)) object = unwrap(node.body);
+    if (ts.isVariableDeclaration(node) && typeIsMilestone(node.type)) object = unwrap(node.initializer);
+    if (ts.isAsExpression(node) && typeIsMilestone(node.type)) object = unwrap(node.expression);
+    if (object && ts.isObjectLiteralExpression(object)) addFavorite(object);
+    if (ts.isObjectLiteralExpression(node)) {
+      const names = properties(node);
+      const camel = ['id', 'projectId', 'name', 'createdAt', 'updatedAt'].every(name => names.has(name));
+      const raw = ['id', 'project_id', 'name', 'created_at', 'updated_at'].every(name => names.has(name));
+      if (camel || raw) addFavorite(node, raw);
+    }
+    ts.forEachChild(node, visit);
+  }
+  visit(ast);
+  if (!edits.length) return;
+  edits.sort((a, b) => b.start - a.start);
+  let updated = original;
+  let boundary = original.length;
+  for (const edit of edits) {
+    if (edit.end > boundary) throw new Error(`テストの変更範囲が重なっています: ${file}`);
+    updated = updated.slice(0, edit.start) + edit.text + updated.slice(edit.end);
+    boundary = edit.start;
+  }
+  const result = ts.createSourceFile(file, updated, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
+  if (result.parseDiagnostics.length) throw new Error(`修正後のテスト構文を確認してください: ${file}`);
+  output.set(file, updated);
+}
+for (const file of listTests('tests')) updateFixtures(file);
+
+for (const [file, source] of Object.entries(additions)) {
+  if (fs.existsSync(file)) throw new Error(`既存ファイルは上書きしません: ${file}`);
+  output.set(file, source);
+}
+for (const [file, source] of output) {
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  fs.writeFileSync(file, source);
+  console.log(`更新: ${file}`);
+}
+NODE
+npm run db:generate
+node <<'NODE'
+const fs = require('node:fs');
+const journal = JSON.parse(fs.readFileSync('migrations/meta/_journal.json', 'utf8'));
+const last = journal.entries.at(-1);
+if (journal.entries.length !== 13 || last.idx !== 12) throw new Error('生成されたマイグレーション履歴を確認してください。');
+const sql = fs.readFileSync(`migrations/${last.tag}.sql`, 'utf8');
+if (!/ALTER TABLE\s+[`"]?milestones[`"]?\s+ADD(?: COLUMN)?\s+[`"]?favorite[`"]?/i.test(sql) || /DROP\s+(TABLE|COLUMN)/i.test(sql)) throw new Error('想定外のSQLです。DBへ適用せず内容を確認してください。');
+console.log(`追加マイグレーションを確認: ${last.tag}`);
+NODE
+npm run typecheck
+npm test
+npm run build
+git diff --check
+
+git add .
+git commit -m 'マイルストンのお気に入りとオレンジの星表示を追加'
+
+````
+
+````gemini-scripts/036-badge.sh
+#!/bin/zsh
+set -euo pipefail
+cd -- "${0:A:h:h}"
+[[ -f package.json ]] || { print -u2 'プロジェクトルートを確認してください'; exit 1; }
+git rev-parse --is-inside-work-tree >/dev/null
+if [[ -n "$(git status --porcelain --untracked-files=all -- . ':!gemini-scripts')" ]]; then
+  print -u2 'gemini-scripts以外の未コミット変更を先に整理してください。'
+  exit 1
+fi
+node <<'NODE'
+const fs = require('node:fs');
+const path = 'src/renderer/src/routes/CompactScreen.tsx';
+const edits = [["import { SummaryPage } from './SummaryPage'", "import { SummaryPage } from './SummaryPage'\nimport { mergeSummary } from '../features/summary/summary-merge'\nimport { summaryQueryOptions } from '../features/summary/summary-queries'\nimport { useLocalDay } from '../lib/local-day'"], ["  const [tab, setTab] = useState<CompactTab>('day')", "  const [tab, setTab] = useState<CompactTab>('day')\n  const badgeDay = useLocalDay()\n  const badgeSummaryQuery = useQuery(summaryQueryOptions(badgeDay))\n  const badgeTasksQuery = useQuery(taskListQueryOptions)\n  const badgeSummary = badgeSummaryQuery.isSuccess\n    ? mergeSummary(badgeSummaryQuery.data, badgeTasksQuery.data)\n    : undefined\n  const inboxBadgeCount = badgeTasksQuery.isSuccess\n    ? badgeTasksQuery.data.filter((task) => task.projectId === null && task.doneOn === null).length\n    : undefined"], ["aria-label=\"コンパクト表示\" variant=\"fullWidth\"", "aria-label=\"コンパクト表示\" variant=\"scrollable\" scrollButtons=\"auto\" allowScrollButtonsMobile"], ["sx={{ minHeight: 32, flexShrink: 0, borderBottom: `1px solid ${vscodeColors.border}`, '& .MuiTab-root': { minWidth: 0, minHeight: 32, p: 1, fontSize: 11 } }}>", "sx={{ minHeight: 32, flexShrink: 0, borderBottom: `1px solid ${vscodeColors.border}`, '& .MuiTab-root': { minWidth: 0, minHeight: 32, px: 2, py: 1, fontSize: 16 } }}>"], ["        {(Object.keys(labels) as CompactTab[]).map((key) => <Tab key={key} value={key} label={labels[key]} id={`compact-tab-${key}`} aria-controls={`compact-panel-${key}`} />)}", "        {(Object.keys(labels) as CompactTab[]).map((key) => (\n          <Tab key={key} value={key} id={`compact-tab-${key}`} aria-controls={`compact-panel-${key}`}\n            label={\n              <Box component=\"span\" sx={{ display: 'inline-flex', flexDirection: 'row', alignItems: 'center', gap: '6px', whiteSpace: 'nowrap' }}>\n                <Box component=\"span\" sx={{ fontSize: '16px', lineHeight: '20px' }}>{labels[key]}</Box>\n                {key === 'day' && badgeSummary && (\n                  <Box component=\"span\" sx={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>\n                    <TabTaskCountBadge count={badgeSummary.overdueItems.length} background=\"#ff0000\" label=\"期限超過\" />\n                    <TabTaskCountBadge count={badgeSummary.todayItems.length} background=\"#1e90ff\" label=\"今日\" />\n                  </Box>\n                )}\n                {key === 'inbox' && inboxBadgeCount !== undefined &&\n                  <TabTaskCountBadge count={inboxBadgeCount} background=\"#008080\" label=\"Inboxの未完了タスク\" />}\n              </Box>\n            }\n          />\n        ))}"], ["export function CompactScreen() {", "function TabTaskCountBadge({ count, background, label }: { count: number; background: string; label: string }) {\n  return (\n    <Box component=\"span\" aria-label={`${label}: ${count}件`} title={`${label}: ${count}件`}\n      data-testid=\"compact-tab-count\" data-count-kind={label}\n      sx={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', minWidth: '18px', height: '18px',\n        px: '4px', boxSizing: 'border-box', borderRadius: '9px', bgcolor: background,\n        color: '#ffffff', fontSize: '11px', lineHeight: 1, fontWeight: 800, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>\n      {count}\n    </Box>\n  )\n}\n\nexport function CompactScreen() {"]];
+let source = fs.readFileSync(path, 'utf8');
+if (source.includes('function TabTaskCountBadge(')) throw new Error('バッジ実装が既に存在します。035未適用の状態で実行してください。');
+for (const [before, after] of edits) {
+  if (source.split(before).length !== 2) throw new Error(`対象コードが一致しません。034適用済み・035未適用の状態を確認してください。変更せず停止します: ${path}\n${before}`);
+  source = source.replace(before, after);
+}
+fs.writeFileSync(path, source);
+console.log(`更新: ${path}`);
+NODE
+npm run typecheck
+npm test
+npm run build
+git diff --check
+
+git add .
+git commit -m 'コンパクトのタブ名右側に件数バッジを追加'
+
+````
+
+````gemini-scripts/037-update.sh
+#!/bin/zsh
+set -euo pipefail
+cd -- "${0:A:h:h}"
+[[ -f package.json ]] || { print -u2 'プロジェクトルートを確認してください'; exit 1; }
+git rev-parse --is-inside-work-tree >/dev/null
+if [[ -n "$(git status --porcelain --untracked-files=all -- . ':!gemini-scripts')" ]]; then
+  print -u2 'gemini-scripts以外の未コミット変更を先に整理してください。'
+  exit 1
+fi
+node <<'NODE'
+const fs = require('node:fs');
+const path = 'src/renderer/src/routes/CompactScreen.tsx';
+const edits = [["function TabTaskCountBadge({ count, background, label }: { count: number; background: string; label: string }) {\n  return (", "function TabTaskCountBadge({ count, background, label }: { count: number; background: string; label: string }) {\n  if (count === 0) return null\n  return ("], ["minWidth: '18px', height: '18px',", "minWidth: '20px', height: '20px',"], ["borderRadius: '9px', bgcolor: background,", "borderRadius: '10px', bgcolor: background,"], ["color: '#ffffff', fontSize: '11px', lineHeight: 1, fontWeight: 800,", "color: '#ffffff', fontSize: '13px', lineHeight: 1, fontWeight: 800,"], ["background=\"#ff0000\" label=\"期限超過\"", "background=\"#b91c1c\" label=\"期限超過\""], ["{key === 'day' && badgeSummary && (", "{key === 'day' && badgeSummary && (badgeSummary.overdueItems.length > 0 || badgeSummary.todayItems.length > 0) && ("], ["{key === 'inbox' && inboxBadgeCount !== undefined &&", "{key === 'inbox' && inboxBadgeCount !== undefined && inboxBadgeCount > 0 &&"]];
+let source = fs.readFileSync(path, 'utf8');
+for (const [before, after] of edits) {
+  if (source.split(before).length !== 2) throw new Error(`対象コードが一致しません。036適用後のコードを確認してください。変更せず停止します: ${path}\n${before}`);
+  source = source.replace(before, after);
+}
+fs.writeFileSync(path, source);
+console.log(`更新: ${path}`);
+NODE
+npm run typecheck
+npm test
+npm run build
+git diff --check
+
+git add .
+git commit -m '件数ゼロのバッジを非表示にして文字と背景色を調整'
+
+````
+
+````gemini-scripts/patch.sh
+#!/bin/zsh
+set -euo pipefail
+cd -- "${0:A:h:h}"
+[[ -f package.json && -f src/renderer/src/routes/CompactScreen.tsx ]] || { print -u2 '006〜007適用後のプロジェクトで実行してください。'; exit 1; }
+git rev-parse --is-inside-work-tree >/dev/null
+if [[ -n "$(git status --porcelain --untracked-files=all -- . ':!gemini-scripts')" ]]; then
+  print -u2 'gemini-scripts以外の未コミット変更を先に整理してください。'
+  exit 1
+fi
+node <<'NODE'
+const fs = require('node:fs');
+const crypto = require('node:crypto');
+const replacements = {"src/renderer/src/features/tasks/TaskRow.tsx": {"sha256": "536539246c5c16a5e1c01e174a029927bf7d0b14f6cc1148465427a7fdb4af0b", "after": "import type { MouseEvent as ReactMouseEvent, PointerEvent as ReactPointerEvent, ReactNode, SyntheticEvent } from 'react'\nimport { createPortal } from 'react-dom'\nimport { Box, ButtonBase, Checkbox, Typography } from '@mui/material'\nimport { AlertTriangle, CalendarPlus, Link2, MoreHorizontal, Star } from 'lucide-react'\nimport { isTaskCompleted, type TaskDto } from '../../../../shared/contracts/tasks'\nimport { vscodeColors } from '../../theme'\nimport { dueLabelOf } from './due-format'\nimport { InlineTitleInput, type InlineTitleEditController } from './inline-title-edit'\nimport { CompactTaskRow } from './CompactTaskRow'\n\n// タスクの行（Inbox の一覧・プロジェクトのマイルストンカード・Summary Review のセクションで共通）。\n// 2行構成:\n// - 1行目（左寄せ）: 完了チェックボックス・タスク名\n// - 2行目（左寄せ）: お気に入りの星・期限（未設定なら期限設定アイコン）・紐付けアイコン・「…」メニュー・所属（{プロジェクト名} / {マイルストン名}）\n//   星のアイコンの左端は、1行目のタスク名の文字の左端と同じ位置（TEXT_INSET。ハンドルの有無によらず、タスク名の列の左端から同じ距離）。\n//   所属は残りの幅を使い、1行で右端を「…」で省略する（全文はツールチップ）。所属がなければ（Inbox）何も出さない。\n// 作成日時は表示しない（データ・並べ替えの条件は変えない）。\n//\n// アクセシビリティの構造:\n// - 行の本体は一覧（role=\"listbox\"）の option。option の中に操作要素を置かない（チェックボックスはマウス用の見た目で、読み上げ・Tab 移動の対象外。\n//   キーボードは一覧の Space）。\n// - 星・期限・紐付け・「…」・並べ替えのハンドル・インライン編集の入力欄は、同じ部品から一覧の外側の重ね合わせ層（controlsLayer）へ\n//   ポータルで描画する（読み上げでは option と別のボタン。Tab 移動の対象は増やさない。キーボードは一覧のショートカット）。\n// - 重ね合わせ層の操作（クリック・押下・フォーカス）は行の選択・ドラッグ・一覧のフォーカス処理へ伝えない。\n//\n// 画面ごとの違い（取得条件・選択集合・セクション・カード構成）は持たない。操作は TaskRowActions（呼び出し側の共通フック）を呼ぶだけ。\nexport const TASK_ROW_HEIGHT = 52\nexport const COMPACT_TASK_ROW_HEIGHT = 28\nexport const taskRowHeight = (mode: TaskRowMode = 'Standard') => mode === 'Compact' ? COMPACT_TASK_ROW_HEIGHT : TASK_ROW_HEIGHT\n// 1行目（チェックボックス・タスク名）と2行目（操作）の位置\nconst LINE1_HEIGHT = 28\nconst LINE2_TOP = 26\nconst LINE2_HEIGHT = 24\n// 並べ替えのハンドルの列（プロジェクトのカードだけ）とチェックボックスの列\nexport const HANDLE_COLUMN_WIDTH = 18\nconst CHECK_COLUMN_WIDTH = 32\n// タスク名の列の左端から、タスク名の文字・2行目の星のアイコンの左端までの距離（1行目と2行目で共通）\nconst TEXT_INSET = 4\n// 2行目の操作ボタンの大きさ。最小のカード幅（144px・並べ替えのハンドルあり）でも4つの操作が収まる大きさにする\nconst ICON_BUTTON = 20\nconst LINE2_RIGHT = 2\nconst STAR_ON = '#e2c541'\n// 白抜きの星（未設定）。背景（#1e1e1e・#252526）に対して操作できると分かるコントラスト（3:1以上）を保つ淡い灰色\nconst STAR_OFF = '#9a9a9a'\nconst OVERDUE = '#f48771'\n\nexport const taskOptionId = (taskId: string) => `task-option-${taskId}`\n\n// 行の操作（3画面で共通。useTaskRowActions が作る）\nexport type TaskRowActions = {\n  // お気に入りの表示（保存待ち・保存中なら押した後の状態）\n  isFavorite: (task: TaskDto) => boolean\n  toggleCompleted: (task: TaskDto) => void\n  toggleFavorite: (task: TaskDto) => void\n  openDue: (task: TaskDto, anchor: HTMLElement) => void\n  openAssign: (task: TaskDto, anchor: HTMLElement) => void\n  openMenu: (task: TaskDto, anchor: HTMLElement, mode?: TaskRowMode) => void\n  openEditor: (task: TaskDto, anchor: HTMLElement) => void\n  // 現在の所属（「{プロジェクト名} / {マイルストン名}」）。所属がない（Inbox）・名前を取得できない時は null\n  assignmentLabel: (task: TaskDto) => string | null\n  inlineEdit: InlineTitleEditController\n}\n\n// 重ね合わせ層の操作を、行（option）・一覧へ伝えない\nconst stop = (event: SyntheticEvent) => event.stopPropagation()\n\nexport type TaskRowMode = 'Standard' | 'Compact'\nexport type TaskRowProps = {\n  mode?: TaskRowMode\n  task: TaskDto\n  // 行の上端（仮想リスト内の位置）\n  top: number\n  // 一覧（listbox）の DOM の id（操作の後に一覧へフォーカスを戻すため）\n  listId: string\n  controlsLayer: HTMLElement | null\n  // ローカルの今日（\"YYYY-MM-DD\"。期限の表示）\n  today: string\n  actions: TaskRowActions\n  selected: boolean\n  // キーボードの現在行（枠線で示す）\n  active: boolean\n  // 保存中（薄く表示する）\n  pending: boolean\n  // 並べ替えのドラッグ中（薄く表示する）\n  dimmed: boolean\n  // 並べ替えのハンドル（プロジェクトのカード。省略時はハンドルの列なし）\n  handle?: ReactNode\n  onRowPointerDown?: (event: ReactPointerEvent<HTMLElement>) => void\n  onRowClick: (event: ReactMouseEvent<HTMLElement>) => void\n  onRowContextMenu?: (event: ReactMouseEvent<HTMLElement>) => void\n  // タスク名のクリック（シングル: 編集モーダル、ダブル: インライン編集。判定は一覧が行う）\n  onTitleClick: (event: ReactMouseEvent<HTMLElement>) => void\n  onTitleDoubleClick: (event: ReactMouseEvent<HTMLElement>) => void\n  // インライン編集を Enter・Esc で閉じた時（一覧へフォーカスを戻す）\n  onInlineDone: () => void\n}\n\nexport function TaskRow(props: TaskRowProps) {\n  const {\n  task,\n  top,\n  listId,\n  controlsLayer,\n  today,\n  actions,\n  selected,\n  active,\n  pending,\n  dimmed,\n  handle,\n  onRowPointerDown,\n  onRowClick,\n  onRowContextMenu,\n  onTitleClick,\n  onTitleDoubleClick,\n  onInlineDone\n  } = props\n  if (props.mode === 'Compact') return <CompactTaskRow {...props} />\n  const completed = isTaskCompleted(task)\n  const favorite = actions.isFavorite(task)\n  const due = dueLabelOf(task.dueto, today)\n  const withHandle = handle !== undefined\n  const leftEdge = (withHandle ? HANDLE_COLUMN_WIDTH : 0) + CHECK_COLUMN_WIDTH\n  const editing = actions.inlineEdit.state?.taskId === task.id\n  const editError = editing ? actions.inlineEdit.state?.error ?? null : null\n  const assignment = actions.assignmentLabel(task)\n  const assignmentText = assignment ?? 'Inbox'\n  const opacity = pending || dimmed ? 0.5 : 1\n  const titleQuoted = `「${task.title}」`\n\n  const iconButton = {\n    width: ICON_BUTTON,\n    height: ICON_BUTTON,\n    flexShrink: 0,\n    borderRadius: 1,\n    color: 'text.secondary',\n    pointerEvents: 'auto',\n    '&:hover': { bgcolor: vscodeColors.listHover, color: 'text.primary' },\n    '&.Mui-disabled': { opacity: 0.4 }\n  } as const\n\n  const controls = (\n    <Box\n      data-list-id={listId}\n      data-task-row-controls={task.id}\n      onClick={stop}\n      onDoubleClick={stop}\n      onPointerDown={stop}\n      onMouseDown={(event) => {\n        event.stopPropagation()\n        // ボタンを押してもフォーカスを一覧から移さない（キーボード操作を続けられる。閉じた後の戻り先も一覧になる）。入力欄は除く\n        if (!(event.target instanceof HTMLElement && event.target.closest('input, textarea'))) event.preventDefault()\n      }}\n      onContextMenu={stop}\n      onFocus={stop}\n      onBlur={stop}\n      onKeyDown={stop}\n      sx={{ position: 'absolute', left: 0, width: '100%', top, height: TASK_ROW_HEIGHT, pointerEvents: 'none', opacity }}\n    >\n      {withHandle && (\n        <Box sx={{ position: 'absolute', left: 0, top: 0, width: HANDLE_COLUMN_WIDTH, height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'auto' }}>\n          {handle}\n        </Box>\n      )}\n      {/* 2行目（左寄せ）: 星・期限・紐付け・…・所属。左端はタスク名の列の左端 */}\n      <Box\n        sx={{\n          position: 'absolute',\n          top: LINE2_TOP,\n          height: LINE2_HEIGHT,\n          left: leftEdge,\n          right: LINE2_RIGHT,\n          display: 'flex',\n          alignItems: 'center',\n          justifyContent: 'flex-start',\n          gap: '2px',\n          minWidth: 0\n        }}\n      >\n        <ButtonBase\n          tabIndex={-1}\n          aria-pressed={favorite}\n          aria-label={`${titleQuoted}をお気に入り`}\n          title={favorite ? 'お気に入り（押すと解除）' : 'お気に入りに追加'}\n          data-testid=\"task-favorite\"\n          data-favorite={favorite ? 'true' : 'false'}\n          onClick={() => actions.toggleFavorite(task)}\n          // アイコンの左端をタスク名の文字の左端に揃える（ボタンの左の余白 = TEXT_INSET）\n          sx={{ ...iconButton, justifyContent: 'flex-start', pl: `${TEXT_INSET}px`, color: favorite ? STAR_ON : STAR_OFF, '&:hover': { bgcolor: vscodeColors.listHover, color: favorite ? STAR_ON : 'text.primary' } }}\n        >\n          <Star size={14} aria-hidden fill={favorite ? STAR_ON : 'none'} strokeWidth={favorite ? 1.5 : 1.75} />\n        </ButtonBase>\n        {due ? (\n          <ButtonBase\n            tabIndex={-1}\n            aria-haspopup=\"menu\"\n            aria-label={`${titleQuoted}の${due.description}。期限を変更`}\n            title={`${due.description}（押すと変更）`}\n            data-testid=\"task-due\"\n            data-due={task.dueto ?? undefined}\n            data-due-kind={due.kind}\n            disabled={pending}\n            onClick={(event) => actions.openDue(task, event.currentTarget)}\n            sx={{\n              ...iconButton,\n              width: 'auto',\n              flexShrink: 1,\n              minWidth: 0,\n              height: 20,\n              px: 0.75,\n              gap: 0.5,\n              fontSize: 11,\n              lineHeight: '16px',\n              fontVariantNumeric: 'tabular-nums',\n              border: `1px solid ${due.kind === 'overdue' ? OVERDUE : vscodeColors.border}`,\n              color: due.kind === 'overdue' ? OVERDUE : due.kind === 'today' ? 'text.primary' : 'text.secondary'\n            }}\n          >\n            {due.kind === 'overdue' && <AlertTriangle size={11} aria-hidden style={{ flexShrink: 0 }} />}\n            <Box component=\"span\" sx={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>\n              {due.text}\n            </Box>\n          </ButtonBase>\n        ) : (\n          <ButtonBase\n            tabIndex={-1}\n            aria-haspopup=\"menu\"\n            aria-label={`${titleQuoted}の期限を設定`}\n            title=\"期限を設定\"\n            data-testid=\"task-due-set\"\n            disabled={pending}\n            onClick={(event) => actions.openDue(task, event.currentTarget)}\n            sx={iconButton}\n          >\n            <CalendarPlus size={14} aria-hidden />\n          </ButtonBase>\n        )}\n        <ButtonBase\n          tabIndex={-1}\n          aria-haspopup=\"menu\"\n          aria-label={`${titleQuoted}の紐付け（現在: ${assignmentText}）`}\n          title={`紐付け（現在: ${assignmentText}）`}\n          data-testid=\"task-assign\"\n          data-assign-task-id={task.id}\n          disabled={pending}\n          onClick={(event) => actions.openAssign(task, event.currentTarget)}\n          sx={iconButton}\n        >\n          <Link2 size={14} aria-hidden />\n        </ButtonBase>\n        <ButtonBase\n          tabIndex={-1}\n          aria-haspopup=\"menu\"\n          aria-label={`${titleQuoted}のメニュー`}\n          title=\"メニュー\"\n          data-testid=\"task-row-menu-button\"\n          data-row-menu-task-id={task.id}\n          onClick={(event) => actions.openMenu(task, event.currentTarget)}\n          sx={iconButton}\n        >\n          <MoreHorizontal size={14} aria-hidden />\n        </ButtonBase>\n        {assignment && (\n          // 所属（読み上げは行の名前に含めるため、ここは読み上げない）。操作の領域を先に確保し、残りの幅で省略表示する\n          <Box\n            component=\"span\"\n            aria-hidden\n            title={assignment}\n            data-testid=\"task-assignment\"\n            sx={{\n              flex: '0 1000 auto',\n              minWidth: 0,\n              ml: 0.5,\n              overflow: 'hidden',\n              textOverflow: 'ellipsis',\n              whiteSpace: 'nowrap',\n              fontSize: 11,\n              color: 'text.secondary',\n              pointerEvents: 'auto'\n            }}\n          >\n            {assignment}\n          </Box>\n        )}\n      </Box>\n      {/* インライン編集（タスク名の位置に重ねる。状態は画面単位で持ち、一覧は編集中の行を常に描画する） */}\n      {editing && (\n        <Box\n          data-testid=\"inline-title-editor-row\"\n          sx={{ position: 'absolute', top: 1, left: leftEdge, right: 4, height: LINE1_HEIGHT - 2, display: 'flex', alignItems: 'center', pointerEvents: 'auto', zIndex: 1 }}\n        >\n          <InlineTitleInput controller={actions.inlineEdit} taskTitle={task.title} onDone={onInlineDone} />\n        </Box>\n      )}\n      {editError && (\n        <Typography\n          id=\"inline-title-error\"\n          role=\"alert\"\n          data-testid=\"inline-title-error\"\n          sx={{\n            position: 'absolute',\n            top: LINE1_HEIGHT - 2,\n            left: leftEdge + 4,\n            zIndex: 2,\n            px: 1,\n            py: 0.25,\n            fontSize: 11,\n            color: OVERDUE,\n            bgcolor: vscodeColors.sideBarBackground,\n            border: `1px solid ${OVERDUE}`,\n            borderRadius: 0.5,\n            pointerEvents: 'auto'\n          }}\n        >\n          {editError}\n        </Typography>\n      )}\n    </Box>\n  )\n\n  return (\n    <>\n      <Box\n        id={taskOptionId(task.id)}\n        role=\"option\"\n        aria-selected={selected}\n        aria-busy={pending || undefined}\n        // 読み上げ名: タスク名・完了状態・お気に入り・期限（チェックボックス・操作ボタンは option の外）\n        aria-label={`${task.title}、${completed ? '完了' : '未完了'}${favorite ? '、お気に入り' : ''}${due ? `、${due.description}` : ''}${assignment ? `、${assignment}` : ''}${pending ? '、保存中' : ''}`}\n        data-task-id={task.id}\n        data-task-row=\"\"\n        data-pending={pending || undefined}\n        onPointerDown={onRowPointerDown}\n        onClick={onRowClick}\n        onContextMenu={onRowContextMenu}\n        sx={{\n          position: 'absolute',\n          top: 0,\n          left: 0,\n          width: '100%',\n          height: TASK_ROW_HEIGHT,\n          transform: `translateY(${top}px)`,\n          display: 'grid',\n          gridTemplateColumns: `${withHandle ? `${HANDLE_COLUMN_WIDTH}px ` : ''}${CHECK_COLUMN_WIDTH}px minmax(0, 1fr)`,\n          gridTemplateRows: `${LINE1_HEIGHT}px 1fr`,\n          cursor: 'default',\n          // 保存中・ドラッグ中の行は薄く表示する\n          opacity,\n          bgcolor: selected ? vscodeColors.listActiveSelection : 'transparent',\n          borderBottom: `1px solid ${vscodeColors.border}40`,\n          // キーボードの現在行（フォーカス）は枠線、選択は背景色で区別する\n          outline: active ? `1px solid ${vscodeColors.focusBorder}` : 'none',\n          outlineOffset: -1,\n          '&:hover': { bgcolor: selected ? vscodeColors.listActiveSelection : vscodeColors.listHover }\n        }}\n      >\n        {withHandle && <span aria-hidden />}\n        <Box\n          sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center' }}\n          // チェック操作で行の選択・編集モーダル・ドラッグを起こさない\n          onClick={stop}\n          onPointerDown={stop}\n          onDoubleClick={stop}\n          aria-hidden\n        >\n          <Checkbox\n            size=\"small\"\n            checked={completed}\n            disabled={pending}\n            onChange={() => actions.toggleCompleted(task)}\n            tabIndex={-1}\n            slotProps={{ input: { 'aria-hidden': true, tabIndex: -1, 'data-testid': 'task-complete-checkbox' } as Record<string, unknown> }}\n            sx={{ p: 0.5 }}\n          />\n        </Box>\n        <Box sx={{ display: 'flex', alignItems: 'center', minWidth: 0, pr: 1 }}>\n          <Typography\n            component=\"span\"\n            noWrap\n            data-testid=\"task-title\"\n            onClick={onTitleClick}\n            onDoubleClick={onTitleDoubleClick}\n            title={task.title}\n            sx={{\n              display: 'inline-block',\n              maxWidth: '100%',\n              fontSize: 13,\n              pl: `${TEXT_INSET}px`,\n              pr: 0.5,\n              borderRadius: 0.5,\n              cursor: 'pointer',\n              // 完了は色だけでなく取り消し線でも示す\n              textDecoration: completed ? 'line-through' : 'none',\n              color: completed ? 'text.secondary' : 'text.primary',\n              '&:hover': { textDecoration: completed ? 'line-through underline' : 'underline' }\n            }}\n          >\n            {task.title}\n          </Typography>\n        </Box>\n      </Box>\n      {controlsLayer && createPortal(controls, controlsLayer)}\n    </>\n  )\n}\n\n"}, "src/renderer/src/features/tasks/TaskList.tsx": {"sha256": "8612f85abccbf0809dc8cde2f6a19d11efcf1affe8304ff42585914cfee268f1", "after": "import {\n  useCallback,\n  useEffect,\n  useId,\n  useLayoutEffect,\n  useRef,\n  useState,\n  type KeyboardEvent,\n  type MouseEvent as ReactMouseEvent,\n  type PointerEvent as ReactPointerEvent\n} from 'react'\nimport { Box, ButtonBase, Typography } from '@mui/material'\nimport { defaultRangeExtractor, useVirtualizer, type Range } from '@tanstack/react-virtual'\nimport { ArrowDown, ArrowUp, GripVertical } from 'lucide-react'\nimport type { SortingState } from '@tanstack/react-table'\nimport type { TaskDto } from '../../../../shared/contracts/tasks'\nimport { useLocalDay } from '../../lib/local-day'\nimport { vscodeColors } from '../../theme'\nimport { usePendingClick } from './pending-click'\nimport { nearestRemaining, selectAll, selectOnly, selectRange, toggleSelection, EMPTY_SELECTION, type TaskSelection } from './selection'\nimport type { TaskSortColumn } from './task-table'\nimport { TaskRow, TASK_ROW_HEIGHT, taskRowHeight, taskOptionId, type TaskRowActions, type TaskRowMode } from './TaskRow'\n\nexport { TASK_ROW_HEIGHT, taskOptionId }\nconst PAGE_STEP = 10\n// 行のドラッグ（Inbox → 紐付け先）を始める移動量（px）。これより小さい移動はクリック・ダブルクリックとして扱う\nconst DRAG_THRESHOLD = 5\nconst AUTOSCROLL_EDGE = 28\nconst AUTOSCROLL_STEP = 12\n\nconst dateTimeFormat = new Intl.DateTimeFormat('ja-JP', {\n  year: 'numeric',\n  month: '2-digit',\n  day: '2-digit',\n  hour: '2-digit',\n  minute: '2-digit'\n})\n// 日時として読めない値（古いデータ・取得のずれなど）でも画面全体を止めないよう、そのままの文字列を表示する\nexport const formatTaskDateTime = (iso: string) => {\n  const date = new Date(iso)\n  return Number.isNaN(date.getTime()) ? iso : dateTimeFormat.format(date)\n}\n\nexport function SortHeader({\n  column,\n  label,\n  sorting,\n  onSort,\n  align = 'left'\n}: {\n  column: TaskSortColumn\n  label: string\n  sorting: SortingState\n  onSort: (column: TaskSortColumn) => void\n  align?: 'left' | 'right'\n}) {\n  const active = sorting[0]?.id === column ? sorting[0] : undefined\n  const direction = active ? (active.desc ? '降順' : '昇順') : null\n  const Icon = active?.desc ? ArrowDown : ArrowUp\n  return (\n    <ButtonBase\n      onClick={() => onSort(column)}\n      aria-label={`${label}で並べ替え${direction ? `（現在: ${direction}）` : ''}`}\n      aria-pressed={active !== undefined}\n      sx={{\n        justifyContent: align === 'right' ? 'flex-end' : 'flex-start',\n        gap: 1,\n        px: 2,\n        height: '100%',\n        fontSize: 12,\n        fontWeight: 600,\n        color: active ? 'text.primary' : 'text.secondary'\n      }}\n    >\n      {label}\n      {active && <Icon size={12} aria-hidden />}\n    </ButtonBase>\n  )\n}\n\n// Inboxの複数選択（フェーズ5.9）。選択集合は呼び出し側が持つ（仮想化で行がアンマウントされても失わない）\nexport type MultiSelectOptions = {\n  selection: TaskSelection\n  onChange: (next: TaskSelection) => void\n  // Enter・メニューの「詳細を表示」: 右サイドバーをタスクの詳細に切り替える（明示的な操作）\n  onShowDetail: (taskId: string) => void\n}\n\n// カード内のタスクの並べ替え（フェーズ5.9）。同じマイルストン内だけ。カード間の移動はしない\nexport type ReorderOptions = {\n  // 絞り込み中（検索あり・状態が「すべて」以外）は無効。その理由\n  disabledReason: string | null\n  // 並べ替えが「手動順」か（違えば、並べ替えると手動順へ切り替わることを示す）\n  manual: boolean\n  // 新しい順序（このカードのタスク全件のID）。保存は呼び出し側（Mainで検証）\n  onMove: (orderedIds: string[], movedTaskId: string) => void\n  onBlocked: (reason: string) => void\n}\n\n// タスクの一覧（role=\"listbox\"）。各行は共通の TaskRow（Inbox・プロジェクトのカード・Summary Review）。\n// DOMフォーカスはリスト本体に置き、現在行は aria-activedescendant で示す（仮想化で行要素が入れ替わってもフォーカスを失わない）。\n// - 上下キー・Home/End・PageUp/PageDown: 現在行の移動（選択は変えない）\n// - Enter: 現在行を選択して詳細を表示（Inboxは右サイドバーを「タスク詳細」に切り替える）\n// - Space: 現在行の完了／未完了を切り替える（行の選択は変えない）\n// - E: 現在行のタスク編集モーダル（マウスはタスク名のクリック）\n// - F2: タスク名のインライン編集（マウスはタスク名のダブルクリック）\n// - F: お気に入りの切り替え / D: 期限のメニュー\n// - M: 紐付けメニュー（Inbox は現在行が選択に含まれていれば選択中のタスクすべて＝onRequestAssignKey。それ以外は現在行の1件）\n// - Delete / Backspace: 削除（確認なし。Inboxは現在行が選択に含まれていれば選択中のタスクすべて）\n// - Shift+F10 / ContextMenu キー: 行の「…」メニュー（削除だけ）\n// - Inboxの複数選択（フェーズ5.9）: Shift+↑↓ で範囲選択、X で現在行の選択の追加・解除、⌘A ですべて選択、Esc で選択解除。\n//   マウスは ⌘+クリックで追加・解除、Shift+クリックで範囲選択（現在の表示順）。修飾キー付きのタスク名のクリックも複数選択（モーダルは開かない）。\n// - カードの並べ替え（フェーズ5.9）: Alt+↑↓ で現在行を上下へ移動。マウスは行の先頭のハンドルをドラッグ（Esc で取り消し）。\n// マウス:\n// - 行の背景のクリック: 選択（既存どおり）。タスク名のクリック: 少し待ってから編集モーダル（ダブルクリックならモーダルを開かずインライン編集）。\n//   保留中のクリックは、ドラッグの開始・他の操作・アンマウントで取り消す（pending-click.ts）。ドラッグはクリックとして扱わない。\n// variant: table（Inbox。並べ替えの見出しあり）/ card（マイルストンのカード。← → で隣のカードへ）/ section（Summary Review の区画。区画ごとに独立してスクロール）\nexport function TaskList({\n  tasks,\n  actions,\n  variant = 'table',\n  rowMode = 'Standard',\n  listLabel,\n  cardKey,\n  emptyLabel,\n  maxVisibleRows,\n  onNavigateCard,\n  onRequestAssignKey,\n  onRequestDelete,\n  totalCount,\n  selectedTaskId,\n  pendingTaskIds,\n  sorting,\n  resetScrollKey,\n  onSort,\n  onSelect,\n  multiSelect,\n  onRowDragStart,\n  reorder\n}: {\n  tasks: readonly TaskDto[]\n  actions: TaskRowActions\n  variant?: 'table' | 'card' | 'section'\n  rowMode?: TaskRowMode\n  // 一覧の読み上げ名（省略時は「タスク一覧（N件表示 / 全N件）」）\n  listLabel?: string\n  // カードの識別（隣のカードへの移動で使う）\n  cardKey?: string\n  // タスクが0件の時の表示（カード）\n  emptyLabel?: string\n  // 行数に合わせて高さを決める場合の最大行数（row レイアウトのカード。フェーズ5.9）。省略時は親の高さいっぱい\n  maxVisibleRows?: number\n  onNavigateCard?: (direction: -1 | 1) => void\n  // M キー（Inbox: 選択中のタスクの一括紐付け）。省略時は現在行の1件の紐付けメニュー\n  onRequestAssignKey?: (task: TaskDto, anchor: HTMLElement) => void\n  // Delete キー（確認なし。Inbox: 選択中のタスクの一括削除）\n  onRequestDelete: (task: TaskDto) => void\n  totalCount: number\n  selectedTaskId: string | null\n  pendingTaskIds: ReadonlySet<string>\n  sorting?: SortingState\n  // 検索・表示切り替え・ソートが変わったら先頭へスクロールする（データ更新だけでは戻さない）\n  resetScrollKey: string\n  onSort?: (column: TaskSortColumn) => void\n  onSelect: (taskId: string) => void\n  multiSelect?: MultiSelectOptions\n  // 行のドラッグの開始（Inbox → 紐付け先。フェーズ5.9）。しきい値を超えて動かした時に呼ぶ\n  onRowDragStart?: (task: TaskDto, point: { x: number; y: number }) => void\n  reorder?: ReorderOptions\n}) {\n  const scrollRef = useRef<HTMLDivElement>(null)\n  const listRef = useRef<HTMLDivElement>(null)\n  const [activeTaskId, setActiveTaskId] = useState<string | null>(null)\n  const [listFocused, setListFocused] = useState(false)\n  const rowHeight = taskRowHeight(rowMode)\n  const card = variant === 'card'\n  const withHandle = card && reorder !== undefined\n  const inlineEdit = actions.inlineEdit\n  const today = useLocalDay()\n  const listId = `task-list-${useId().replace(/:/g, '')}`\n  // 行の操作ボタン（TaskRow がポータルで描画する重ね合わせ層）\n  const [controlsLayer, setControlsLayer] = useState<HTMLElement | null>(null)\n  const pendingClick = usePendingClick()\n  // キーボード移動の対象となるタスクの並び（行の並びと同じ）\n  const orderedTasks = tasks\n  const order = tasks.map((task) => task.id)\n  const editingTaskId = inlineEdit.state?.taskId ?? null\n  const editingIndex = editingTaskId === null ? -1 : tasks.findIndex((task) => task.id === editingTaskId)\n\n  // 並べ替えのドラッグ中の状態（挿入位置 0..n）\n  const [reorderDrag, setReorderDrag] = useState<{ taskId: string; fromIndex: number; insertIndex: number } | null>(null)\n\n  const virtualizer = useVirtualizer({\n    count: tasks.length,\n    // スクロール領域の寸法の変化（区画・カードの大きさの変更）は virtualizer が監視して測り直す\n    getScrollElement: () => scrollRef.current,\n    estimateSize: () => rowHeight,\n    // 安定したキー（タスクID）。1つのタスクは1つのカードにだけ表示されるため、カード間でも衝突しない\n    getItemKey: (index) => tasks[index]?.id ?? index,\n    overscan: 8,\n    // 編集中の行は表示範囲の外でも描画し続ける（スクロールで入力欄がアンマウントされないようにする。フェーズ5.9）\n    rangeExtractor: useCallback(\n      (range: Range) => {\n        const indexes = defaultRangeExtractor(range)\n        if (editingIndex >= 0 && !indexes.includes(editingIndex)) return [...indexes, editingIndex].sort((a, b) => a - b)\n        return indexes\n      },\n      [editingIndex]\n    )\n  })\n\n  useLayoutEffect(() => { virtualizer.measure() }, [rowHeight, virtualizer])\n\n  // 条件（resetScrollKey）が変わった時だけ先頭へ戻す。virtualizerは毎回同じインスタンス。\n  useEffect(() => {\n    virtualizer.scrollToOffset(0)\n  }, [resetScrollKey, virtualizer])\n\n  const scrollToTask = (taskIndex: number) => {\n    virtualizer.scrollToIndex(taskIndex, { align: 'auto' })\n  }\n\n  const activeIndex = activeTaskId === null ? -1 : orderedTasks.findIndex((task) => task.id === activeTaskId)\n\n  // 現在行が一覧から消えた時（完了して未完了の表示から外れた・紐付け・削除など）、消える前の位置から最も近い残りの行\n  // （後ろを優先）へ移す（フェーズ5.9: 複数行が一度に消えても、元の位置の次に残った行。フォーカスがない時も移す。残りがなければ現在行なし）。\n  const lastActiveIndexRef = useRef(-1)\n  if (activeIndex >= 0) lastActiveIndexRef.current = activeIndex\n  // 直前の描画の表示順（現在行の移り先を、消える前の並びから決めるため）\n  const previousOrderRef = useRef<readonly string[]>([])\n  useLayoutEffect(() => {\n    if (activeTaskId === null || activeIndex >= 0) return\n    if (orderedTasks.length === 0) {\n      setActiveTaskId(null)\n      return\n    }\n    const previous = previousOrderRef.current\n    const current = new Set(orderedTasks.map((task) => task.id))\n    const removed = new Set(previous.filter((id) => !current.has(id)))\n    const previousIndex = previous.indexOf(activeTaskId)\n    const nextId = previousIndex >= 0 ? nearestRemaining(previous, removed, previousIndex) : null\n    const fallbackIndex = Math.max(0, Math.min(lastActiveIndexRef.current, orderedTasks.length - 1))\n    const nextIndex = nextId !== null ? orderedTasks.findIndex((task) => task.id === nextId) : fallbackIndex\n    const next = orderedTasks[nextIndex >= 0 ? nextIndex : fallbackIndex]\n    setActiveTaskId(next ? next.id : null)\n    if (next && listFocused) virtualizer.scrollToIndex(nextIndex >= 0 ? nextIndex : fallbackIndex, { align: 'auto' })\n  }, [activeTaskId, activeIndex, listFocused, orderedTasks, virtualizer])\n  useLayoutEffect(() => {\n    previousOrderRef.current = orderedTasks.map((task) => task.id)\n  }, [orderedTasks])\n\n  const moveTo = (index: number) => {\n    if (orderedTasks.length === 0) return null\n    const clamped = Math.max(0, Math.min(orderedTasks.length - 1, index))\n    const target = orderedTasks[clamped]\n    if (!target) return null\n    setActiveTaskId(target.id)\n    scrollToTask(clamped)\n    return target\n  }\n\n  const startIndex = () => {\n    if (activeIndex >= 0) return activeIndex\n    const selectedIndex = selectedTaskId ? orderedTasks.findIndex((task) => task.id === selectedTaskId) : -1\n    return selectedIndex >= 0 ? selectedIndex : 0\n  }\n\n  const focusList = () => listRef.current?.focus({ preventScroll: true })\n\n  const startEdit = (task: TaskDto) => {\n    pendingClick.cancel()\n    if (pendingTaskIds.has(task.id)) return\n    setActiveTaskId(task.id)\n    void inlineEdit.start(task)\n  }\n\n  // 現在行の要素（キーボードから開くメニュー・モーダルの位置と、閉じた後のフォーカスの戻り先）\n  const anchorOf = (task: TaskDto) => document.getElementById(taskOptionId(task.id)) ?? listRef.current\n\n  // 並べ替え（キーボード Alt+↑↓・ハンドルのドラッグ）で、このカードのタスクの新しい順序を作る\n  const moveRow = (taskId: string, toIndex: number) => {\n    if (!reorder) return\n    const from = order.indexOf(taskId)\n    if (from < 0) return\n    const target = Math.max(0, Math.min(order.length - 1, toIndex))\n    if (target === from) return\n    const next = [...order]\n    next.splice(from, 1)\n    next.splice(target, 0, taskId)\n    reorder.onMove(next, taskId)\n  }\n\n  const handleKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {\n    if (event.target !== event.currentTarget) return\n    pendingClick.cancel()\n    const meta = event.metaKey || event.ctrlKey\n    // カードの並べ替え（Alt+↑↓）\n    if (reorder && event.altKey && !meta && (event.key === 'ArrowUp' || event.key === 'ArrowDown')) {\n      event.preventDefault()\n      const target = activeIndex >= 0 ? orderedTasks[activeIndex] : undefined\n      if (!target) return void moveTo(startIndex())\n      if (reorder.disabledReason) return reorder.onBlocked(reorder.disabledReason)\n      if (pendingTaskIds.has(target.id)) return\n      moveRow(target.id, activeIndex + (event.key === 'ArrowUp' ? -1 : 1))\n      return\n    }\n    // カード: 隣のカードの一覧へ（空のカードからも移れる）\n    if (onNavigateCard && (event.key === 'ArrowLeft' || event.key === 'ArrowRight') && !meta && !event.altKey) {\n      event.preventDefault()\n      onNavigateCard(event.key === 'ArrowLeft' ? -1 : 1)\n      return\n    }\n    // 複数選択: すべて選択（⌘A）・選択解除（Esc）\n    if (multiSelect && meta && !event.altKey && (event.key === 'a' || event.key === 'A')) {\n      event.preventDefault()\n      multiSelect.onChange(selectAll(order))\n      return\n    }\n    if (multiSelect && event.key === 'Escape' && multiSelect.selection.ids.size > 0) {\n      event.preventDefault()\n      multiSelect.onChange(EMPTY_SELECTION)\n      return\n    }\n    if (orderedTasks.length === 0) return\n    const current = startIndex()\n    const activeTask = activeIndex >= 0 ? orderedTasks[activeIndex] : undefined\n    // 範囲選択（Shift+↑↓）: 基準行がなければ移動前の現在行を基準にする\n    if (multiSelect && event.shiftKey && !meta && !event.altKey && (event.key === 'ArrowDown' || event.key === 'ArrowUp')) {\n      event.preventDefault()\n      const base = activeTask ?? orderedTasks[current]\n      if (!base) return\n      const anchored =\n        multiSelect.selection.anchorId !== null && order.includes(multiSelect.selection.anchorId)\n          ? multiSelect.selection\n          : { ids: multiSelect.selection.ids, anchorId: base.id }\n      const moved = activeTask ? moveTo(current + (event.key === 'ArrowDown' ? 1 : -1)) : moveTo(current)\n      if (moved) multiSelect.onChange(selectRange(anchored, moved.id, order))\n      return\n    }\n    let handled = true\n    switch (event.key) {\n      case 'ArrowDown':\n        moveTo(activeIndex < 0 ? current : current + 1)\n        break\n      case 'ArrowUp':\n        moveTo(activeIndex < 0 ? current : current - 1)\n        break\n      case 'Home':\n        moveTo(0)\n        break\n      case 'End':\n        moveTo(orderedTasks.length - 1)\n        break\n      case 'PageDown':\n        moveTo(current + PAGE_STEP)\n        break\n      case 'PageUp':\n        moveTo(current - PAGE_STEP)\n        break\n      case 'Enter': {\n        const target = orderedTasks[current]\n        if (target) {\n          setActiveTaskId(target.id)\n          if (multiSelect) {\n            multiSelect.onChange(selectOnly(target.id))\n            multiSelect.onShowDetail(target.id)\n          } else onSelect(target.id)\n        }\n        break\n      }\n      case ' ': {\n        // 現在行の完了切り替え。現在行がなければ表示範囲の行を現在行にするだけ（意図しない行を操作しない）\n        if (activeTask) actions.toggleCompleted(activeTask)\n        else moveTo(current)\n        break\n      }\n      case 'x':\n      case 'X': {\n        // 現在行の選択の追加・解除（Inbox）\n        if (!multiSelect || meta || event.altKey) {\n          handled = false\n          break\n        }\n        if (activeTask) multiSelect.onChange(toggleSelection(multiSelect.selection, activeTask.id))\n        else moveTo(current)\n        break\n      }\n      case 'F2': {\n        if (meta || event.altKey) {\n          handled = false\n          break\n        }\n        if (activeTask) startEdit(activeTask)\n        else moveTo(current)\n        break\n      }\n      case 'e':\n      case 'E':\n      case 'f':\n      case 'F':\n      case 'd':\n      case 'D':\n      case 'm':\n      case 'M': {\n        // E: 編集モーダル / F: お気に入り / D: 期限のメニュー / M: 紐付けメニュー（現在行がなければ現在行を決めるだけ）\n        if (meta || event.altKey) {\n          handled = false\n          break\n        }\n        if (!activeTask) {\n          moveTo(current)\n          break\n        }\n        const anchor = anchorOf(activeTask)\n        if (!anchor) break\n        const key = event.key.toLowerCase()\n        if (key === 'e') actions.openEditor(activeTask, anchor)\n        else if (key === 'f') actions.toggleFavorite(activeTask)\n        else if (key === 'd') {\n          if (!pendingTaskIds.has(activeTask.id)) actions.openDue(activeTask, anchor)\n        } else if (!pendingTaskIds.has(activeTask.id)) (onRequestAssignKey ?? actions.openAssign)(activeTask, anchor)\n        break\n      }\n      case 'Delete':\n      case 'Backspace': {\n        // 削除（確認なし。現在行がなければ現在行を決めるだけ）\n        if (meta || event.altKey) {\n          handled = false\n          break\n        }\n        if (activeTask) onRequestDelete(activeTask)\n        else moveTo(current)\n        break\n      }\n      case 'ContextMenu':\n      case 'F10': {\n        // 現在行の「…」メニュー（Shift+F10 か ContextMenu キー）\n        if (event.key === 'F10' && !event.shiftKey) {\n          handled = false\n          break\n        }\n        if (activeTask) {\n          const anchor = anchorOf(activeTask)\n          if (anchor) actions.openMenu(activeTask, anchor, rowMode)\n        } else moveTo(current)\n        break\n      }\n      default:\n        handled = false\n    }\n    if (handled) event.preventDefault()\n  }\n\n  // フォーカス時はスクロールしない（クリックでフォーカスした時に表示位置が動き、別の行を押してしまうため）。\n  // 現在行がなければ、表示中の選択行、なければ表示範囲の先頭のタスク行を現在行にする。\n  const handleFocus = () => {\n    setListFocused(true)\n    if (activeIndex >= 0 || orderedTasks.length === 0) return\n    const scrollTop = scrollRef.current?.scrollTop ?? 0\n    const items = virtualizer.getVirtualItems()\n    const taskOf = (index: number) => tasks[index]\n    const selectedItem = items.find((item) => taskOf(item.index)?.id === selectedTaskId)\n    const firstInView = items.find((item) => item.end > scrollTop)\n    const chosen = selectedItem ?? firstInView ?? items[0]\n    const target = chosen ? taskOf(chosen.index) : orderedTasks[0]\n    if (target) setActiveTaskId(target.id)\n  }\n\n  // --- 行のクリック・ドラッグ（Inbox） ---\n  const suppressClickRef = useRef(false)\n  const pressRef = useRef<{ task: TaskDto; x: number; y: number; cleanup: () => void } | null>(null)\n  useEffect(() => () => pressRef.current?.cleanup(), [])\n\n  const handleRowPointerDown = (event: ReactPointerEvent<HTMLElement>, task: TaskDto) => {\n    suppressClickRef.current = false\n    if (!onRowDragStart || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return\n    pressRef.current?.cleanup()\n    const start = { x: event.clientX, y: event.clientY }\n    const onMove = (move: PointerEvent) => {\n      if (Math.hypot(move.clientX - start.x, move.clientY - start.y) < DRAG_THRESHOLD) return\n      cleanup()\n      suppressClickRef.current = true\n      pendingClick.cancel()\n      onRowDragStart(task, { x: move.clientX, y: move.clientY })\n    }\n    const cleanup = () => {\n      window.removeEventListener('pointermove', onMove)\n      window.removeEventListener('pointerup', cleanup)\n      window.removeEventListener('pointercancel', cleanup)\n      pressRef.current = null\n    }\n    window.addEventListener('pointermove', onMove)\n    window.addEventListener('pointerup', cleanup)\n    window.addEventListener('pointercancel', cleanup)\n    pressRef.current = { task, ...start, cleanup }\n  }\n\n  const handleRowClick = (event: ReactMouseEvent<HTMLElement>, task: TaskDto) => {\n    if (suppressClickRef.current) {\n      suppressClickRef.current = false\n      return\n    }\n    setActiveTaskId(task.id)\n    if (multiSelect) {\n      if (event.metaKey || event.ctrlKey) {\n        multiSelect.onChange(toggleSelection(multiSelect.selection, task.id))\n        return\n      }\n      if (event.shiftKey) {\n        multiSelect.onChange(selectRange(multiSelect.selection, task.id, order))\n        return\n      }\n      multiSelect.onChange(selectOnly(task.id))\n    }\n    onSelect(task.id)\n  }\n\n  // タスク名のクリック: シングルは少し待って編集モーダル、ダブルはインライン編集（モーダルを開かない）。\n  // 修飾キー付き（Inboxの複数選択）・ドラッグの直後は、行のクリックとして扱う（モーダルを開かない）\n  const handleTitleClick = (event: ReactMouseEvent<HTMLElement>, task: TaskDto) => {\n    if (suppressClickRef.current) {\n      // ドラッグの直後のクリック: 選択もモーダルも行わない\n      event.stopPropagation()\n      suppressClickRef.current = false\n      return\n    }\n    if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) {\n      pendingClick.cancel()\n      return\n    }\n    event.stopPropagation()\n    setActiveTaskId(task.id)\n    if (event.detail >= 2) {\n      startEdit(task)\n      return\n    }\n    const anchor = event.currentTarget\n    pendingClick.schedule(anchor, () => {\n      if (document.contains(anchor)) actions.openEditor(task, anchor)\n      else {\n        const row = anchorOf(task)\n        if (row) actions.openEditor(task, row)\n      }\n    })\n  }\n\n  // --- 並べ替えのハンドル（カード） ---\n  const reorderCleanupRef = useRef<(() => void) | null>(null)\n  useEffect(() => () => reorderCleanupRef.current?.(), [])\n\n  const insertIndexAt = (clientY: number) => {\n    const scroller = scrollRef.current\n    if (!scroller) return 0\n    const rect = scroller.getBoundingClientRect()\n    const y = clientY - rect.top + scroller.scrollTop\n    return Math.max(0, Math.min(tasks.length, Math.round(y / rowHeight)))\n  }\n\n  const handleReorderPointerDown = (event: ReactPointerEvent<HTMLElement>, task: TaskDto, index: number) => {\n    event.stopPropagation()\n    pendingClick.cancel()\n    if (!reorder || event.button !== 0 || reorderDrag) return\n    event.preventDefault()\n    if (reorder.disabledReason) {\n      reorder.onBlocked(reorder.disabledReason)\n      return\n    }\n    if (pendingTaskIds.has(task.id) || editingTaskId !== null) return\n    setActiveTaskId(task.id)\n    let pointerY = event.clientY\n    let state = { taskId: task.id, fromIndex: index, insertIndex: index }\n    setReorderDrag(state)\n    const update = () => {\n      const insertIndex = insertIndexAt(pointerY)\n      if (insertIndex !== state.insertIndex) {\n        state = { ...state, insertIndex }\n        setReorderDrag(state)\n      }\n    }\n    let frame = 0\n    const tick = () => {\n      const scroller = scrollRef.current\n      if (scroller) {\n        const rect = scroller.getBoundingClientRect()\n        const delta = pointerY < rect.top + AUTOSCROLL_EDGE ? -AUTOSCROLL_STEP : pointerY > rect.bottom - AUTOSCROLL_EDGE ? AUTOSCROLL_STEP : 0\n        if (delta !== 0) {\n          scroller.scrollTop += delta\n          update()\n        }\n      }\n      frame = requestAnimationFrame(tick)\n    }\n    frame = requestAnimationFrame(tick)\n    const onMove = (move: PointerEvent) => {\n      pointerY = move.clientY\n      update()\n    }\n    const finish = (commit: boolean) => {\n      cancelAnimationFrame(frame)\n      window.removeEventListener('pointermove', onMove)\n      window.removeEventListener('pointerup', onUp)\n      window.removeEventListener('pointercancel', onCancel)\n      window.removeEventListener('keydown', onKey, true)\n      window.removeEventListener('blur', onCancel)\n      reorderCleanupRef.current = null\n      setReorderDrag(null)\n      if (!commit) return\n      // 挿入位置（元の位置より後ろなら、自分を抜いた分を詰める）\n      const target = state.insertIndex > state.fromIndex ? state.insertIndex - 1 : state.insertIndex\n      moveRow(state.taskId, target)\n    }\n    const onUp = () => finish(true)\n    const onCancel = () => finish(false)\n    const onKey = (key: globalThis.KeyboardEvent) => {\n      if (key.key !== 'Escape') return\n      key.preventDefault()\n      key.stopPropagation()\n      finish(false)\n    }\n    window.addEventListener('pointermove', onMove)\n    window.addEventListener('pointerup', onUp)\n    window.addEventListener('pointercancel', onCancel)\n    window.addEventListener('keydown', onKey, true)\n    window.addEventListener('blur', onCancel)\n    reorderCleanupRef.current = () => finish(false)\n  }\n\n  // aria-activedescendant は描画済みの行だけを参照する（未描画の行はスクロール後の再描画で参照する）\n  const virtualItems = virtualizer.getVirtualItems()\n  const activeRendered = activeIndex >= 0 && virtualItems.some((item) => item.index === activeIndex)\n  const activeTask = activeIndex >= 0 ? orderedTasks[activeIndex] : undefined\n  const activeId = activeRendered && activeTask ? taskOptionId(activeTask.id) : undefined\n\n  const selectedIds = multiSelect?.selection.ids\n  const fixedHeight = maxVisibleRows !== undefined ? Math.max(1, Math.min(maxVisibleRows, tasks.length)) * rowHeight : undefined\n\n  const reorderHandle = (task: TaskDto, index: number) => {\n    if (!withHandle || !reorder) return undefined\n    const blocked = reorder.disabledReason\n    return (\n      // マウス用の入口（Tab移動の対象は増やさない。キーボードは一覧で Alt+↑↓）\n      <Box\n        component=\"span\"\n        role=\"presentation\"\n        title={blocked ?? (reorder.manual ? 'ドラッグして並べ替え（Alt+↑↓）' : 'ドラッグして並べ替え（並べ替えが「手動順」に切り替わります）')}\n        data-reorder-task-id={task.id}\n        data-reorder-disabled={blocked ? '' : undefined}\n        onPointerDown={(event) => handleReorderPointerDown(event, task, index)}\n        sx={{\n          display: 'flex',\n          alignItems: 'center',\n          justifyContent: 'center',\n          width: 16,\n          height: 30,\n          borderRadius: 0.5,\n          touchAction: 'none',\n          cursor: blocked ? 'not-allowed' : 'grab',\n          color: 'text.secondary',\n          opacity: blocked ? 0.35 : 0.8,\n          '&:hover': { bgcolor: blocked ? 'transparent' : vscodeColors.listHover, opacity: 1 }\n        }}\n      >\n        <GripVertical size={12} aria-hidden />\n      </Box>\n    )\n  }\n\n  return (\n    <Box sx={{ containerType: 'inline-size', containerName: 'taskRows', display: 'flex', flexDirection: 'column', minHeight: 0, flex: fixedHeight === undefined ? 1 : '0 0 auto' }}>\n      {variant === 'table' && sorting && onSort && (\n        // 並べ替えの見出し（作成日時は表示しないが、作成日時での並べ替えは残す）\n        <Box sx={{ display: 'flex', justifyContent: 'space-between', height: 28, flexShrink: 0, borderBottom: `1px solid ${vscodeColors.border}` }}>\n          <SortHeader column=\"title\" label=\"タイトル\" sorting={sorting} onSort={onSort} />\n          <SortHeader column=\"createdAt\" label=\"作成日時\" sorting={sorting} onSort={onSort} align=\"right\" />\n        </Box>\n      )}\n      <Box\n        ref={scrollRef}\n        data-testid=\"task-list-scroll\"\n        // 行のドラッグ（Inbox → 紐付け先）中に、上下端で自動スクロールする領域\n        data-drag-autoscroll={onRowDragStart ? '' : undefined}\n        sx={{\n          flex: fixedHeight === undefined ? 1 : '0 0 auto',\n          height: fixedHeight,\n          minHeight: 0,\n          overflowY: 'auto',\n          overflowX: 'hidden'\n        }}\n      >\n        {/* カードでは、タスクが少なくても一覧（フォーカス先）がカードの高さいっぱいに広がるようにする */}\n        <Box sx={{ position: 'relative', height: virtualizer.getTotalSize(), minHeight: card ? '100%' : undefined }}>\n          <Box\n            ref={listRef}\n            id={listId}\n            role=\"listbox\"\n            aria-label={listLabel ?? `タスク一覧（${orderedTasks.length}件表示 / 全${totalCount}件）`}\n            aria-activedescendant={listFocused ? activeId : undefined}\n            aria-multiselectable={multiSelect ? true : undefined}\n            tabIndex={0}\n            onKeyDown={handleKeyDown}\n            onFocus={handleFocus}\n            onBlur={() => setListFocused(false)}\n            data-testid=\"task-list\"\n            data-card-list={cardKey}\n            data-variant={variant}\n            sx={{\n              position: 'absolute',\n              inset: 0,\n              userSelect: 'none',\n              // 現在行があればその行の枠線でフォーカスを示す。空のカードでは一覧全体の枠線で示す\n              outline: card && listFocused && activeId === undefined ? `1px solid ${vscodeColors.focusBorder}` : 'none',\n              outlineOffset: -1\n            }}\n          >\n            {virtualItems.map((item) => {\n              const task = tasks[item.index]\n              if (!task) return null\n              const selected = selectedIds ? selectedIds.has(task.id) : task.id === selectedTaskId\n              return (\n                <TaskRow\n                  key={task.id}\n                  task={task}\n                  mode={rowMode}\n                  top={item.start}\n                  listId={listId}\n                  controlsLayer={controlsLayer}\n                  today={today}\n                  actions={actions}\n                  selected={selected}\n                  active={listFocused && item.index === activeIndex}\n                  pending={pendingTaskIds.has(task.id)}\n                  dimmed={reorderDrag?.taskId === task.id}\n                  handle={reorderHandle(task, item.index)}\n                  onRowPointerDown={(event) => handleRowPointerDown(event, task)}\n                  onRowClick={(event) => handleRowClick(event, task)}\n                  onRowContextMenu={(event) => {\n                    // 右クリック: 行の「…」メニュー（選択・詳細パネルは変えない）\n                    event.preventDefault()\n                    pendingClick.cancel()\n                    setActiveTaskId(task.id)\n                    actions.openMenu(task, event.currentTarget, rowMode)\n                  }}\n                  onTitleClick={(event) => handleTitleClick(event, task)}\n                  onTitleDoubleClick={(event) => {\n                    if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return\n                    event.stopPropagation()\n                    startEdit(task)\n                  }}\n                  onInlineDone={focusList}\n                />\n              )\n            })}\n          </Box>\n          {/* listbox の外側の重ね合わせ層: 各 TaskRow の操作ボタン・並べ替えのハンドル・インライン編集（option の中に操作要素を置かない）と、空のカードの表示 */}\n          <Box ref={setControlsLayer} sx={{ position: 'absolute', inset: 0, pointerEvents: 'none' }} data-testid=\"task-list-overlay\">\n            {tasks.length === 0 && emptyLabel && (\n              <Typography variant=\"caption\" color=\"text.secondary\" component=\"p\" sx={{ px: 2, py: 1.5, m: 0 }} aria-hidden>\n                {emptyLabel}\n              </Typography>\n            )}\n            {reorderDrag && (\n              // 挿入位置の線\n              <Box\n                data-testid=\"reorder-indicator\"\n                data-insert-index={reorderDrag.insertIndex}\n                sx={{\n                  position: 'absolute',\n                  left: 0,\n                  right: 0,\n                  height: 2,\n                  top: reorderDrag.insertIndex * rowHeight - 1,\n                  bgcolor: vscodeColors.focusBorder\n                }}\n              />\n            )}\n          </Box>\n        </Box>\n      </Box>\n    </Box>\n  )\n}\n\n"}, "src/renderer/src/features/tasks/use-task-row-actions.tsx": {"sha256": "1769928a08662c0ff5bef45c896320ecc0e8e04deed7f6bdc4f6e015a83ef48a", "after": "import { useRef, useState } from 'react'\nimport { Alert, Box } from '@mui/material'\nimport { useQuery } from '@tanstack/react-query'\nimport type { TaskDto } from '../../../../shared/contracts/tasks'\nimport { useDraftGuard } from '../drafts/DraftGuard'\nimport { milestoneListQueryOptions } from '../milestones/milestone-queries'\nimport { projectListQueryOptions } from '../projects/project-queries'\nimport { useWorkspace } from '../workspace/WorkspaceContext'\nimport { AssignMenu } from './AssignMenu'\nimport type { Assignment } from './assignment'\nimport { formatDueLong } from './due-format'\nimport { useInlineTitleEdit } from './inline-title-edit'\nimport { TaskRowMenu, useTaskDeletion } from './TaskDeletion'\nimport { useFocusReturn, useTaskDue } from './TaskDue'\nimport { useTaskEditDialog } from './TaskEditDialog'\nimport type { TaskRowActions, TaskRowMode } from './TaskRow'\nimport {\n  useAssignInboxTasksMutation,\n  usePendingTaskIds,\n  useSetTaskAssignmentMutation,\n  useSetTaskCompletedMutation,\n  useTaskFavorite\n} from './task-queries'\nimport { reopenBlockedReason } from './task-rules'\n\n// TaskRow の行内操作（Inbox・プロジェクトのカード・Summary Review で共通）。保存の経路は画面によらず同じ。\n// 画面ごとの違い（取得条件・選択集合・セクション・カード構成）は呼び出し側に残し、保存後の後処理だけをコールバックで受ける。\n// - 完了: 既存の完了API（目的の状態）。完了済みプロジェクトのタスクは未完了に戻せない（理由を表示）。未保存の編集があれば先に確認する。\n// - お気に入り: favorite-saver（同じタスクの保存キュー・最後に押した状態を保存・失敗時は保存済みの値へ戻して理由を表示）。\n// - 期限: 既存の期限メニュー・日付指定（TaskDue）。対象はその行の1件。\n// - 紐付け: 既存の紐付けメニュー（プロジェクト → マイルストン。最終選択で1回だけ保存）。対象はその行の1件。\n//   Inbox のタスクは Inbox からの紐付けAPI、プロジェクト所属のタスクは単体の所属変更API（Inbox 専用APIを流用しない）。\n// - 「…」: 削除だけ（確認なし。その行の1件）。一括削除は deleteTasks（Inbox の選択バー・Delete キー）。\n// - タスク名: 編集モーダル（TaskEditor）とインライン編集（useInlineTitleEdit）。\nexport function useTaskRowActions(options: {\n  // 全タスク（一覧の Query）。インライン編集の保存済みの値・対象の存在の判定に使う\n  tasks: readonly TaskDto[]\n  onAnnounce: (message: string) => void\n  // 紐付け・所属変更に成功した後（Inbox: 選択から外す・詳細の選択を解除する など）\n  onAssigned?: (saved: TaskDto) => void\n  // 削除に成功した後（Inbox: 選択から外す など）\n  onDeleted?: (tasks: readonly TaskDto[]) => void\n}) {\n  const { confirmLeave } = useDraftGuard()\n  const { selectedTaskId, selectTask } = useWorkspace()\n  const pendingTaskIds = usePendingTaskIds()\n  const projectsQuery = useQuery(projectListQueryOptions)\n  const milestonesQuery = useQuery(milestoneListQueryOptions)\n  const setCompleted = useSetTaskCompletedMutation()\n  const setAssignment = useSetTaskAssignmentMutation()\n  const assignInbox = useAssignInboxTasksMutation()\n  const favorite = useTaskFavorite()\n  const inlineEdit = useInlineTitleEdit(options.tasks)\n  const editDialog = useTaskEditDialog()\n  const optionsRef = useRef(options)\n  optionsRef.current = options\n  const announce = (message: string) => optionsRef.current.onAnnounce(message)\n\n  const [blockedNotice, setBlockedNotice] = useState<string | null>(null)\n  const [assignError, setAssignError] = useState<string | null>(null)\n  const [assignTarget, setAssignTarget] = useState<{ task: TaskDto; anchor: HTMLElement; returnFocus: () => void } | null>(null)\n  const [rowMenu, setRowMenu] = useState<{ task: TaskDto; anchor: HTMLElement; mode: TaskRowMode; returnFocus: () => void } | null>(null)\n  const assigningRef = useRef(false)\n  const focusReturn = useFocusReturn()\n\n  const due = useTaskDue({\n    onSaved: (saved) => announce(saved.dueto ? `「${saved.title}」の${formatDueLong(saved.dueto)}` : `「${saved.title}」の期限を解除しました`)\n  })\n\n  const deletion = useTaskDeletion({\n    onDeleted: (tasks) => {\n      optionsRef.current.onDeleted?.(tasks)\n      announce(tasks.length === 1 ? `「${tasks[0]!.title}」を削除しました` : `${tasks.length} 件のタスクを削除しました`)\n    }\n  })\n\n  const toggleCompleted = async (task: TaskDto) => {\n    if (pendingTaskIds.has(task.id)) return\n    const blocked = reopenBlockedReason(task, projectsQuery.data)\n    if (blocked) {\n      setBlockedNotice(blocked)\n      announce(blocked)\n      return\n    }\n    setBlockedNotice(null)\n    // 未保存の編集があるタスクは、完了操作の前に確認する（入力を黙って失わない）\n    if (!(await confirmLeave({ target: { kind: 'task', id: task.id } }))) return\n    setCompleted.mutate(\n      { id: task.id, completed: task.doneOn === null },\n      { onSuccess: (saved) => announce(`「${saved.title}」を${saved.doneOn === null ? '未完了に戻しました' : '完了にしました'}`) }\n    )\n  }\n\n  const nameOf = (assignment: Assignment) => {\n    const projectName = projectsQuery.data?.find((item) => item.id === assignment.projectId)?.name ?? ''\n    const milestoneName = milestonesQuery.data?.find((item) => item.id === assignment.milestoneId)?.name ?? ''\n    return `${projectName} › ${milestoneName}`\n  }\n\n  // 1件の紐付け・所属変更（最終的な所属先を選んだ時に1回だけ保存する）\n  const assign = async (task: TaskDto, assignment: Assignment) => {\n    if (assigningRef.current || assignment.projectId === null || assignment.milestoneId === null) return\n    if (task.projectId === assignment.projectId && task.milestoneId === assignment.milestoneId) return\n    assigningRef.current = true\n    setAssignError(null)\n    try {\n      // 未保存のタイトル（詳細パネル・インライン編集）があれば、既存の確認を先に行う（黙って失わない）\n      if (!(await confirmLeave({ target: { kind: 'task', id: task.id } }))) return\n      const saved =\n        task.projectId === null\n          ? (await assignInbox.mutateAsync({ ids: [task.id], projectId: assignment.projectId, milestoneId: assignment.milestoneId }))[0]\n          : await setAssignment.mutateAsync({ id: task.id, projectId: assignment.projectId, milestoneId: assignment.milestoneId })\n      if (!saved) return\n      optionsRef.current.onAssigned?.(saved)\n      announce(`「${saved.title}」を「${nameOf(assignment)}」に${task.projectId === null ? '紐付けました' : '移動しました'}`)\n    } catch (error) {\n      setAssignError(`紐付けできませんでした: ${(error as Error).message}`)\n    } finally {\n      assigningRef.current = false\n    }\n  }\n\n  // 所属の表示（「{プロジェクト名} / {マイルストン名}」）。一覧の Query（全件）から名前を引く（行ごとに IPC を発行しない）。\n  // 所属がない（Inbox）・名前を取得できない時は null（「null / null」や空の「 / 」を出さない）\n  const projectNames = new Map((projectsQuery.data ?? []).map((item) => [item.id, item.name]))\n  const milestoneNames = new Map((milestonesQuery.data ?? []).map((item) => [item.id, item.name]))\n  const assignmentLabel = (task: TaskDto): string | null => {\n    if (task.projectId === null) return null\n    const projectName = projectNames.get(task.projectId)\n    const milestoneName = task.milestoneId === null ? undefined : milestoneNames.get(task.milestoneId)\n    if (projectName === undefined) return null\n    return milestoneName === undefined ? projectName : `${projectName} / ${milestoneName}`\n  }\n\n  // 行へ渡す操作\n  const actions: TaskRowActions = {\n    isFavorite: favorite.isFavorite,\n    toggleCompleted: (task) => void toggleCompleted(task),\n    toggleFavorite: favorite.toggle,\n    openDue: (task, anchor) => due.open(task, anchor),\n    openAssign: (task, anchor) => {\n      setAssignError(null)\n      setAssignTarget({ task, anchor, returnFocus: focusReturn.capture(anchor) })\n    },\n    openMenu: (task, anchor, mode = 'Standard') => setRowMenu({ task, anchor, mode, returnFocus: focusReturn.capture(anchor) }),\n    openEditor: (task, anchor) => editDialog.open(task.id, anchor),\n    assignmentLabel,\n    inlineEdit\n  }\n\n  const alerts = (\n    <>\n      {assignError && (\n        <Alert severity=\"error\" variant=\"outlined\" sx={{ mb: 2 }} onClose={() => setAssignError(null)} data-testid=\"assign-error\">\n          {assignError}\n        </Alert>\n      )}\n      {favorite.error && (\n        <Alert severity=\"error\" variant=\"outlined\" sx={{ mb: 2 }} onClose={favorite.clearError} data-testid=\"task-favorite-error\">\n          {favorite.error}\n        </Alert>\n      )}\n      {due.error && (\n        <Alert severity=\"error\" variant=\"outlined\" sx={{ mb: 2 }} onClose={due.clearError} data-testid=\"task-due-error\">\n          {due.error}\n        </Alert>\n      )}\n      {deletion.error && (\n        <Alert severity=\"error\" variant=\"outlined\" sx={{ mb: 2 }} onClose={deletion.clearError} data-testid=\"task-delete-error\">\n          {deletion.error}\n        </Alert>\n      )}\n      {setCompleted.isError && (\n        <Alert severity=\"error\" variant=\"outlined\" sx={{ mb: 2 }} onClose={() => setCompleted.reset()}>\n          完了状態を更新できませんでした: {setCompleted.error.message}\n        </Alert>\n      )}\n      {blockedNotice && (\n        <Alert severity=\"info\" variant=\"outlined\" sx={{ mb: 2 }} onClose={() => setBlockedNotice(null)} data-testid=\"task-blocked-notice\">\n          {blockedNotice}\n        </Alert>\n      )}\n    </>\n  )\n\n  const elements = (\n    <Box component=\"span\" sx={{ display: 'contents' }}>\n      {rowMenu && (\n        <TaskRowMenu\n          task={rowMenu.task}\n          anchor={rowMenu.anchor}\n          onDue={rowMenu.mode === 'Compact' ? () => {\n            const current = rowMenu\n            setRowMenu(null)\n            due.open(current.task, current.anchor)\n          } : undefined}\n          onAssign={rowMenu.mode === 'Compact' ? () => {\n            const current = rowMenu\n            setRowMenu(null)\n            setAssignError(null)\n            setAssignTarget({ task: current.task, anchor: current.anchor, returnFocus: current.returnFocus })\n          } : undefined}\n          pending={pendingTaskIds.has(rowMenu.task.id)}\n          onDelete={() => deletion.request([rowMenu.task])}\n          onClose={() => {\n            rowMenu.returnFocus()\n            setRowMenu(null)\n          }}\n        />\n      )}\n      {due.element}\n      {assignTarget && (\n        <AssignMenu\n          tasks={[assignTarget.task]}\n          anchor={assignTarget.anchor}\n          onChoose={(assignment) => void assign(assignTarget.task, assignment)}\n          onClose={() => {\n            assignTarget.returnFocus()\n            setAssignTarget(null)\n          }}\n        />\n      )}\n      {editDialog.element}\n    </Box>\n  )\n\n  return {\n    actions,\n    inlineEdit,\n    // 複数タスクの削除（Inbox の選択バー・Delete キー）。1件の削除と同じ処理\n    deleteTasks: deletion.request,\n    alerts,\n    elements,\n    // 選択中のタスクがこの操作で一覧から外れた時に使う\n    clearSelectionIf: (taskId: string) => {\n      if (selectedTaskId === taskId) selectTask(null)\n    }\n  }\n}\n\n"}, "src/renderer/src/features/tasks/TaskDeletion.tsx": {"sha256": "0dfefe83e7bf2df28e43256836d50ab9d651f916084bb482511a73ea822fffc2", "after": "import { useRef, useState } from 'react'\nimport { Divider, Menu, MenuItem } from '@mui/material'\nimport { CalendarPlus, Link2, Trash2 } from 'lucide-react'\nimport type { TaskDto } from '../../../../shared/contracts/tasks'\nimport { useDraftGuard } from '../drafts/DraftGuard'\nimport { useWorkspace } from '../workspace/WorkspaceContext'\nimport { useDeleteTaskMutation, useDeleteTasksMutation } from './task-queries'\n\n// 行の「…」メニュー（TaskRow の3点ボタン・一覧の Shift+F10 / ContextMenu キー）。項目は「削除」だけ\n// （名前の変更・期限・紐付けは TaskRow の各操作で行い、ここには重複して置かない）。\n// 対象は常にその行の1タスク（Inboxの複数選択中でも。選択中のタスクの一括削除は選択バー・Delete キー）。確認ダイアログは出さない。\n// MUI の Menu（↑↓・Enter・Esc。開いた時は項目にフォーカス）。閉じたらフォーカスは元の一覧へ戻す（呼び出し側）。\nexport function TaskRowMenu({\n  task,\n  anchor,\n  onDelete,\n  onDue,\n  onAssign,\n  pending = false,\n  onClose\n}: {\n  task: TaskDto\n  anchor: HTMLElement\n  onDelete: () => void\n  onDue?: () => void\n  onAssign?: () => void\n  pending?: boolean\n  onClose: () => void\n}) {\n  return (\n    <Menu\n      open\n      // 閉じた後のフォーカスは呼び出し側が一覧へ戻す\n      disableRestoreFocus\n      anchorEl={anchor}\n      onClose={onClose}\n      slotProps={{\n        list: { 'aria-label': `「${task.title}」のメニュー`, dense: true },\n        paper: { sx: { minWidth: 160 } }\n      }}\n      data-testid=\"task-row-menu\"\n    >\n      {onDue && <MenuItem autoFocus disabled={pending} onClick={onDue} sx={{ fontSize: 13, gap: 1 }} data-testid=\"task-row-menu-due\">\n        <CalendarPlus size={14} aria-hidden />{task.dueto ? `期限を変更（${task.dueto}）` : '期限を設定'}\n      </MenuItem>}\n      {onAssign && <MenuItem disabled={pending} onClick={onAssign} sx={{ fontSize: 13, gap: 1 }} data-testid=\"task-row-menu-assign\">\n        <Link2 size={14} aria-hidden />紐付け\n      </MenuItem>}\n      {(onDue || onAssign) && <Divider />}\n      <MenuItem\n        autoFocus={!onDue}\n        onClick={() => {\n          onClose()\n          onDelete()\n        }}\n        sx={{ fontSize: 13, gap: 1, color: 'error.light' }}\n        data-testid=\"task-row-menu-delete\"\n      >\n        <Trash2 size={14} aria-hidden />\n        削除\n      </MenuItem>\n    </Menu>\n  )\n}\n\n// タスクの削除（Inbox・プロジェクトのカードで共通）。フェーズ5.9から確認ダイアログを出さない。\n// 1. 進行中の保存（保存キュー・編集欄）を待つ（同じタスクへの保存は、削除より先に終わる。削除の後に対象を作り直さない）。\n// 2. 物理削除する（1件は tasks.delete、2件以上は tasks.deleteMany。どちらも Main のトランザクション）。二重実行しない。\n// 3. 成功したら、対象の未保存の編集（タイトル）だけを確認なしで破棄し、選択中なら選択を解除する（呼び出し側が近くの行へ移す）。\n//    他のタスクの未保存の入力・選択は変えない。\n// 4. 失敗時は行・選択・入力を残し、理由を error に返す（一覧の上に表示する）。\nexport function useTaskDeletion(options: { onDeleted?: (tasks: readonly TaskDto[]) => void } = {}) {\n  const { settle, discard } = useDraftGuard()\n  const { selectedTaskId, selectTask } = useWorkspace()\n  const deleteTask = useDeleteTaskMutation()\n  const deleteTasks = useDeleteTasksMutation()\n  const [error, setError] = useState<string | null>(null)\n  // 削除中は次の要求を受け付けない（再描画を待たずに止める）\n  const busyRef = useRef(false)\n  const selectedRef = useRef(selectedTaskId)\n  selectedRef.current = selectedTaskId\n  const onDeletedRef = useRef(options.onDeleted)\n  onDeletedRef.current = options.onDeleted\n\n  const request = async (tasks: readonly TaskDto[]) => {\n    if (busyRef.current || tasks.length === 0) return\n    busyRef.current = true\n    setError(null)\n    try {\n      await settle()\n      const ids = tasks.map((task) => task.id)\n      if (ids.length === 1) await deleteTask.mutateAsync({ id: ids[0]! })\n      else await deleteTasks.mutateAsync({ ids })\n      const removed = new Set(ids)\n      discard((item) => item.kind === 'task' && removed.has(item.id))\n      if (selectedRef.current !== null && removed.has(selectedRef.current)) selectTask(null)\n      onDeletedRef.current?.(tasks)\n    } catch (cause) {\n      setError(`削除できませんでした: ${(cause as Error).message}`)\n    } finally {\n      busyRef.current = false\n    }\n  }\n\n  return {\n    request: (tasks: readonly TaskDto[]) => void request(tasks),\n    error,\n    clearError: () => setError(null),\n    pending: deleteTask.isPending || deleteTasks.isPending\n  }\n}\n\n"}};
+const edits = {"src/renderer/src/routes/SummaryPage.tsx": [["                    variant=\"section\"", "                    variant=\"section\"\n                    rowMode={compact ? 'Compact' : 'Standard'}"]], "src/renderer/src/routes/CompactScreen.tsx": [["<TaskList variant=\"section\" tasks={tasks}", "<TaskList variant=\"section\" rowMode=\"Compact\" tasks={tasks}"]]};
+const additions = {"src/renderer/src/features/tasks/CompactTaskRow.tsx": "import type { SyntheticEvent } from 'react'\nimport { createPortal } from 'react-dom'\nimport { Box, ButtonBase, Checkbox, Typography } from '@mui/material'\nimport { MoreHorizontal, Star } from 'lucide-react'\nimport { isTaskCompleted } from '../../../../shared/contracts/tasks'\nimport { vscodeColors } from '../../theme'\nimport { InlineTitleInput } from './inline-title-edit'\nimport { dueLabelOf } from './due-format'\nimport type { TaskRowProps } from './TaskRow'\nconst COMPACT_TASK_ROW_HEIGHT = 28\nconst HANDLE_COLUMN_WIDTH = 18\nconst taskOptionId = (id: string) => `task-option-${id}`\n\nconst stop = (event: SyntheticEvent) => event.stopPropagation()\nconst STAR_ON = '#e2c541'\nconst titleStyle = {\n  display: 'inline-block', maxWidth: '100%', minWidth: 0, fontSize: 13,\n  px: 0.5, cursor: 'pointer', overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis'\n} as const\n\nexport function CompactTaskRow({ task, top, listId, controlsLayer, today, actions, selected, active, pending, dimmed, handle,\n  onRowPointerDown, onRowClick, onRowContextMenu, onTitleClick, onTitleDoubleClick, onInlineDone }: TaskRowProps) {\n  const completed = isTaskCompleted(task)\n  const favorite = actions.isFavorite(task)\n  const assignment = actions.assignmentLabel(task)\n  const due = dueLabelOf(task.dueto, today)\n  const withHandle = handle !== undefined\n  const editing = actions.inlineEdit.state?.taskId === task.id\n  const error = editing ? actions.inlineEdit.state?.error : null\n  const opacity = pending || dimmed ? 0.5 : 1\n  // 実表示と操作レイヤーで同じ列を使用し、タスク名の直後に…を配置する。\n  const grid = {\n    display: 'grid', alignItems: 'center', minWidth: 0, width: '100%', height: COMPACT_TASK_ROW_HEIGHT,\n    gridTemplateColumns: `${withHandle ? `${HANDLE_COLUMN_WIDTH}px ` : ''}28px 20px minmax(0, max-content) 20px minmax(0, 1fr)`,\n    boxSizing: 'border-box', pr: 0.5\n  } as const\n  const icon = { width: 20, height: 22, minWidth: 0, color: 'text.secondary', pointerEvents: 'auto', borderRadius: 0.5,\n    '&:hover': { bgcolor: vscodeColors.listHover }, '&.Mui-focusVisible': { outline: `1px solid ${vscodeColors.focusBorder}` } } as const\n  const assignmentStyle = {\n    display: 'none', minWidth: 0, maxWidth: 240, justifySelf: 'end', pl: 2,\n    overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 11, color: 'text.secondary',\n    '@container taskRows (min-width: 420px)': { display: 'block' }\n  } as const\n  const controls = (\n    <Box data-list-id={listId} data-task-row-controls={task.id}\n      onClick={stop} onDoubleClick={stop} onPointerDown={stop} onContextMenu={stop} onFocus={stop} onBlur={stop} onKeyDown={stop}\n      onMouseDown={(event) => {\n        event.stopPropagation()\n        if (!(event.target instanceof HTMLElement && event.target.closest('input, textarea'))) event.preventDefault()\n      }}\n      sx={{ ...grid, position: 'absolute', left: 0, top, pointerEvents: 'none', opacity }}>\n      {withHandle && <Box sx={{ pointerEvents: 'auto', display: 'flex', alignItems: 'center' }}>{handle}</Box>}\n      <span aria-hidden />\n      <ButtonBase tabIndex={-1} aria-label={`「${task.title}」をお気に入り`} aria-pressed={favorite}\n        title={favorite ? 'お気に入りを解除' : 'お気に入りに追加'} data-testid=\"task-favorite\" data-favorite={favorite ? 'true' : 'false'}\n        onClick={() => actions.toggleFavorite(task)} sx={{ ...icon, color: favorite ? STAR_ON : '#9a9a9a' }}>\n        <Star size={14} aria-hidden fill={favorite ? STAR_ON : 'none'} />\n      </ButtonBase>\n      {/* 見えない同一テキストで、行本体と列幅を一致させる。編集欄は同じセルに重ねる。 */}\n      <Box sx={{ minWidth: 0, position: 'relative', display: 'flex', alignItems: 'center' }}>\n        <Typography aria-hidden component=\"span\" noWrap sx={{ ...titleStyle, visibility: 'hidden' }}>{task.title}</Typography>\n        {editing && <Box data-testid=\"inline-title-editor-row\" sx={{ position: 'absolute', inset: 0, minWidth: 0, pointerEvents: 'auto' }}>\n          <InlineTitleInput controller={actions.inlineEdit} taskTitle={task.title} onDone={onInlineDone} />\n        </Box>}\n        {error && <Typography id=\"inline-title-error\" role=\"alert\" data-testid=\"inline-title-error\"\n          sx={{ position: 'absolute', top: 24, left: 0, zIndex: 4, bgcolor: 'background.paper', color: 'error.light', fontSize: 11, px: 1, pointerEvents: 'auto' }}>{error}</Typography>}\n      </Box>\n      <ButtonBase tabIndex={-1} aria-haspopup=\"menu\" aria-label={`「${task.title}」のメニュー`} title=\"メニュー\"\n        data-testid=\"task-row-menu-button\" data-row-menu-task-id={task.id}\n        onClick={(event) => actions.openMenu(task, event.currentTarget, 'Compact')} sx={icon}>\n        <MoreHorizontal size={14} aria-hidden />\n      </ButtonBase>\n      <Box aria-hidden sx={{ ...assignmentStyle, visibility: 'hidden' }}>{assignment}</Box>\n    </Box>\n  )\n  return <>\n    <Box id={taskOptionId(task.id)} role=\"option\" aria-selected={selected} aria-busy={pending || undefined}\n      aria-label={`${task.title}、${completed ? '完了' : '未完了'}${favorite ? '、お気に入り' : ''}${due ? `、${due.description}` : ''}${assignment ? `、${assignment}` : ''}`}\n      data-task-id={task.id} data-task-row=\"\" data-task-row-mode=\"Compact\" data-pending={pending || undefined}\n      onPointerDown={onRowPointerDown} onClick={onRowClick} onContextMenu={onRowContextMenu}\n      sx={{ ...grid, position: 'absolute', left: 0, top: 0, transform: `translateY(${top}px)`, opacity,\n        bgcolor: selected ? vscodeColors.listActiveSelection : 'transparent', borderBottom: `1px solid ${vscodeColors.border}40`,\n        outline: active ? `1px solid ${vscodeColors.focusBorder}` : 'none', outlineOffset: -1,\n        '&:hover': { bgcolor: selected ? vscodeColors.listActiveSelection : vscodeColors.listHover } }}>\n      {withHandle && <span aria-hidden />}\n      <Box aria-hidden onClick={stop} onPointerDown={stop} onDoubleClick={stop} sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>\n        <Checkbox size=\"small\" checked={completed} disabled={pending} onChange={() => actions.toggleCompleted(task)} tabIndex={-1}\n          slotProps={{ input: { 'aria-hidden': true, tabIndex: -1, 'data-testid': 'task-complete-checkbox' } as Record<string, unknown> }} sx={{ p: 0 }} />\n      </Box>\n      <span aria-hidden />\n      <Typography component=\"span\" noWrap data-testid=\"task-title\" title={task.title}\n        onClick={onTitleClick} onDoubleClick={onTitleDoubleClick}\n        sx={{ ...titleStyle, visibility: editing ? 'hidden' : 'visible', textDecoration: completed ? 'line-through' : 'none',\n          color: completed ? 'text.secondary' : 'text.primary', '&:hover': { textDecoration: 'underline' } }}>{task.title}</Typography>\n      <span aria-hidden />\n      <Box component=\"span\" aria-hidden title={assignment ?? undefined} data-testid=\"task-assignment\" sx={assignmentStyle}>{assignment}</Box>\n    </Box>\n    {controlsLayer && createPortal(controls, controlsLayer)}\n  </>\n}\n", "docs/task-row-modes.md": "# TaskRow 表示モード\n\n- Standard: 既定。従来の2行・52px。通常画面は変更しない。\n- Compact: 1行・28px。チェックボックス、星、タスク名、…を左側に配置する。\n- 所属は右寄せ。行の表示領域が420px以上の場合のみ、残り幅で省略表示する。狭い場合は非表示。\n- Compactでは期限と紐付けは…メニューの先頭に配置。期限・紐付け・区切り・削除の順。\n- 期限操作は既存の日付メニュー、紐付けは既存の所属先メニューを開く。\n- TaskListのrowModeにStandard/Compactを指定する。未指定はStandard。\n- TaskRowを直接使用する場合はmodeを指定する。未指定はStandard。\n- 仮想スクロール・固定行数・ドラッグ挿入位置はモード別行高を使用する。\n- コンパクト画面のTHE DAY/INBOX/PROJECTはCompactを使用する。\n\n## 手動確認\n\n1. 通常表示は従来どおり2行、52px。\n2. コンパクトの3タブは1行、28px。240px幅でもチェック・星・名前・…が重ならない。\n3. 広げた場合のみ所属が右側に表示され、狭めると消える。\n4. …の先頭から期限・紐付けを開ける。キャンセル・保存後、一覧へフォーカスが戻る。\n5. キーボードのD/M/F/Space/F2/Shift+F10とマウス操作が動作する。\n6. インライン編集の確定・キャンセル・保存失敗、完了後の行消失が動作する。\n7. 大量タスクで上下端へスクロールして行の重なり・余白・クリック位置ずれがない。\n8. THE DAYの境界リサイズとウィンドウの保存復元が維持される。\n"};
+const output = new Map();
+for (const [path, item] of Object.entries(replacements)) {
+  const original = fs.readFileSync(path, 'utf8').trimEnd();
+  if (crypto.createHash('sha256').update(original).digest('hex') !== item.sha256) throw new Error(`添付コードとの差異があります。上書きせず停止します: ${path}`);
+  output.set(path, item.after);
+}
+for (const [path, items] of Object.entries(edits)) {
+  let source = fs.readFileSync(path, 'utf8');
+  for (const [before, after] of items) {
+    if (source.split(before).length !== 2) throw new Error(`変更箇所が一致しません: ${path}`);
+    source = source.replace(before, after);
+  }
+  output.set(path, source);
+}
+for (const [path, source] of Object.entries(additions)) {
+  if (fs.existsSync(path)) throw new Error(`既存ファイルは上書きしません: ${path}`);
+  output.set(path, source);
+}
+for (const [path, source] of output) {
+  fs.writeFileSync(path, source);
+  console.log(`更新: ${path}`);
+}
+NODE
+npm run typecheck
+npm run build
+git diff --check
+
+git add .
+git commit -m 'タスク行に標準とコンパクトの表示モードを追加'
 
 ````
 
@@ -11966,6 +13071,65 @@ Gitのcommit、push、破壊的な操作は行わないでください。
 
 ````
 
+````docs/compact-project-tree.md
+# コンパクトPROJECTタブの階層表示
+
+- 選択プルダウンを削除し、未完了の全プロジェクトを表示する。
+- プロジェクトはSectionRow level=0、アイコンFolderKanban。
+- マイルストンはSectionRow level=1、アイコンFlag。
+- タスクはCompact TaskRow。parentVisible=falseで行内の所属表示を省略する。
+- TaskRow/TaskListのparentVisibleはbooleanで既定true。StandardとCompact双方に対応する。
+- 非表示対象は行内の所属表示のみ。紐付け機能・読み上げ用の所属情報は維持する。
+- プロジェクトの左マージンは0px、マイルストンは12px。タスクは左端から36px（マイルストンから24px）インデントする。
+- プロジェクトとマイルストンを個別に開閉できる。閉じる際は未保存の編集を確認する。
+- タスクは未完了のみ。0件のマイルストンも表示する。
+- ツリー全体を縦スクロールする。各マイルストンはタスク数に応じた高さ。
+- THE DAY・INBOX・通常モードの表示仕様は変更しない。
+
+## 手動確認
+
+1. プルダウンがなく、未完了プロジェクトが複数同時に表示される。
+2. 見出しのlevel別の余白・文字サイズ・背景色が反映される。
+3. プロジェクト、マイルストンの展開・折りたたみと未保存確認が動作する。
+4. 幅を広げてもPROJECTのタスク行に所属が出ない。他の画面は従来どおり。
+5. 完了、削除、期限変更、紐付けで正しいプロジェクト・マイルストンへ更新される。
+6. 240px幅、タスク0件、プロジェクト0件、取得失敗でも表示が破綻しない。
+
+````
+
+````docs/compact-tabs.md
+# コンパクトモードのタブ
+
+Inbox登録欄はタブ共通で上部に配置する。
+
+- THE DAY: Today/Tomorrow。境界ドラッグの比率はタブ切り替え中も保持する。
+- INBOX: 未所属・未完了（doneOnがnull）のタスクのみ。TaskList経由でTaskRowを使用する。
+- PROJECT: 未完了プロジェクトのみ選択可能。マイルストン配下には未完了タスクのみ表示する。マイルストン自体には完了状態がないため、未完了タスクが0件のマイルストンも残す。
+- PROJECTの各マイルストンは最大6行分の高さとし、それ以上はその一覧内でスクロールする。
+- タブ・プロジェクトの切り替え、マイルストンを閉じる際はDraftGuardで未保存確認する。
+- タブ・プロジェクト選択・開閉状態は再起動後の保存対象には含めない。
+- 表示モード・ウィンドウのサイズ／位置の保存復元は従来どおり。
+
+## 手動確認
+
+1. 240px幅で3タブと登録欄が表示される。
+2. どのタブからもInboxへ登録できる。IME確定Enterで誤登録しない。
+3. THE DAYの高さを調整し、別タブから戻っても比率を維持する。
+4. INBOXで登録・完了・期限・お気に入り・紐付け・削除・編集が反映される。
+5. PROJECTでプロジェクト選択、マイルストン開閉、タスク行の操作ができる。
+6. 未保存編集時のタブ変更・プロジェクト変更・折りたたみで保存／破棄／キャンセルができる。
+7. 空データ・取得失敗・削除されたプロジェクトも画面が停止しない。
+8. 通常モードに変更がなく、コンパクト終了後の実幅・位置・モード復元が維持される。
+
+## 未完了表示の確認
+
+- INBOXで完了したタスクが一覧から消え、通常モードの完了済み表示には残る。
+- PROJECTの選択肢に完了済みプロジェクトがなく、完了したタスクが各マイルストンから消える。
+- 未完了のプロジェクト・タスクが0件でも空状態を表示する。
+- 通常モードとTHE DAYの抽出条件は変更しない。
+
+````
+
 ````docs/database.md
 # データベース
 
@@ -12380,6 +13544,71 @@ macOS標準の sqlite3 は終了後も `gtd.sqlite-wal`（0バイト）と `gtd.
 - パッケージ版では `app.asar.unpacked/node_modules/better-sqlite3/` に展開され、
   `prebuilds/darwin-x64.node` が読み込まれることをプロセスの読み込みファイルで確認した。
 - 配布物にはdarwinのx64・arm64バイナリだけを含め、linux・win32版とソースは除外している。
+
+````
+
+````docs/day-task-drag.md
+# THE DAY: ドラッグ選択と期限移動
+
+## 操作
+
+- 未選択の行を上下にドラッグ: 同じセクション内の連続したタスクを複数選択する。
+- 選択済みの行をドラッグ: 選択したタスクをまとめてToday/Tomorrowへ移動する。
+- 1件だけの移動: 行の操作アイコン以外の領域をクリックして1件選択し、もう一度ドラッグする。
+- Command/Ctrlクリック、Shiftクリック、一覧のCommand/Ctrl+Aでも選択可能。
+- ドラッグ中のEsc、ウィンドウのフォーカス喪失、pointercancelで中止する。
+- Overdueは移動元にできる。移動先はToday/Tomorrowのみ。
+- 移動先はセクション全体（折りたたんだ見出しを含む）。成功時は移動先を展開する。
+- THE DAYのみに適用する。INBOX/PROJECT/通常モードは変更しない。
+
+## データ更新
+
+- tasks.setDayManyの専用IPCを追加する。送信元検証とZodによる入力検証を行う。
+- UUID一覧は1件以上、TASK_BULK_MAX以下、重複なし。移動先はtoday/tomorrowのみ。
+- Mainで操作時点のローカル暦日を1度取得し、全対象に同一の期限を適用する。
+- 単一トランザクションで全件を更新する。削除・非表示・完了したタスクが含まれれば全件を取り消す。
+- タイトル、所属、完了状態、並び順は変更しない。
+- 保存キューrunManyを使用し、同じタスクへの他の更新と順序を調整する。
+- 保存成功後にタスクキャッシュをまとめて更新し、Summaryを再取得する。
+- 未保存ドラフトは更新前に確認する。保存失敗時はエラーを表示し、期限移動を成功扱いしない。
+
+## 手動確認
+
+1. Today内で未選択行を上下ドラッグして範囲を選択できる。
+2. 選択済み行をTomorrowにドロップすると全件の期限が明日になり、Tomorrowへ表示が移る。
+3. 1件・複数件・Overdueからの移動が動作する。
+4. 折りたたんだToday/Tomorrowにドロップし、移動先が展開される。
+5. Esc・フォーカス喪失・対象外へのドロップで期限が変わらない。
+6. 未保存編集時に保存／破棄／キャンセルが機能する。
+7. DB更新失敗や対象削除時に一部だけ更新されない。
+8. 日付変更直後もMainの今日／明日で更新される。
+9. 境界付近でスクロールしながら選択・移動できる。
+10. 他のタブと通常表示の選択・編集・ドラッグの動作が変わらない。
+
+````
+
+````docs/display-modes.md
+# 表示モード
+
+- 起動時は通常。表示モードは今回セッション内のみ保持する。
+- ステータスバー左端の表示モードボタンから通常・コンパクトを選択する。
+- 通常は従来の画面。コンパクトは左右のサイドバーと詳細切り替えボタンを隠す。
+- コンパクトは上からInboxへの登録欄、Actions for Today、Actions for Tomorrow。
+- 期限判定・タスク操作はSummary Reviewの既存実装を再利用する。
+- コンパクトではSummaryのプロジェクト除外フィルターを適用しない。
+- モード変更はDraftGuardで未保存の変更を確認する。キャンセル時は変更しない。
+- 通常のルート・希望ペイン幅・詳細表示設定はモード変更で書き換えない。
+
+## 手動確認
+
+1. 初回起動が通常で、従来の画面と操作を維持している。
+2. 左端の表示モードをマウス・キーボードで変更できる。
+3. コンパクトで左右サイドバーがなく、入力欄・Today・Tomorrowだけが表示される。
+4. 登録したタスクがInboxに入り、日本語IMEの確定Enterでは誤登録されない。
+5. Today/Tomorrowで完了・期限変更・削除・編集ができ、一覧に反映される。
+6. 0件・読み込み失敗・大量件数・日付変更時も表示が適切である。
+7. 通常へ戻すと元の画面・ペイン幅・詳細表示設定に戻り、リサイズも動作する。
+8. 未保存の編集がある場合、モード変更で保存・破棄・キャンセルが機能する。
 
 ````
 
@@ -13376,6 +14605,36 @@ GTD_DEV_USER_DATA_DIR=$DIR npm run dev   # 検証用の一時DB（開発用・�
 
 ````
 
+````docs/project-favorite.md
+# プロジェクトのお気に入り
+
+- projects.favorite: SQLite INTEGER（Drizzle boolean）、NOT NULL、DEFAULT false。
+- 既存データはfalse、新規プロジェクトもfalse。
+- 表示: trueは黄色く塗った星、falseは塗りつぶしなしの星。
+- コンパクトPROJECTのプロジェクト行、通常サイドバー、通常のプロジェクト名見出しに表示する。
+- 星を押すと切り替える。行の選択・開閉・画面遷移とは独立する。
+- 通常サイドバーだけ、お気に入りを上にまとめる。同グループ内は従来の名前順。
+- 共通sortProjectsの順序は変更しないため、コンパクトPROJECT等の順序には影響しない。
+- APIはprojects.setFavorite。入力と送信元を検証する。保存キューは同じプロジェクトの他の更新と共通。
+- 同じ状態ならupdatedAtを変更しない。削除済みならNOT_FOUNDとし、再作成しない。
+
+## 適用
+
+スクリプトはDrizzle Kitで追加マイグレーションとスナップショットを生成する。
+DBへの適用は次回アプリ起動時。起動前にユーザーDBをバックアップすること。
+既存のDBや過去のマイグレーションは削除・初期化しない。
+
+## 手動確認
+
+1. バックアップ後に起動し、既存プロジェクトのfavoriteがfalseである。
+2. 3か所の星でON/OFFが保存され、表示が連動し、再起動後も維持される。
+3. 通常サイドバーでお気に入りが先頭にまとまり、解除すると名前順へ戻る。
+4. コンパクトの星クリックで行が開閉しない。サイドバーの星クリックで画面遷移しない。
+5. マイルストン選択、登録先指定、全展開・折りたたみが維持される。
+6. 保存失敗はエラーを表示し、成功した状態として表示しない。
+
+````
+
 ````docs/requirements.md
 # 要件
 
@@ -13663,6 +14922,32 @@ UIと操作導線の変更で、業務ルール（所属・完了の制約）と
 - 期限と開始日、繰り返しの仕様
 - バックアップの保存先と保持数
 - 配布対象CPU、署名・公証の必要性
+
+````
+
+````docs/task-row-modes.md
+# TaskRow 表示モード
+
+- Standard: 既定。従来の2行・52px。通常画面は変更しない。
+- Compact: 1行・28px。チェックボックス、星、タスク名、…を左側に配置する。
+- 所属は右寄せ。行の表示領域が420px以上の場合のみ、残り幅で省略表示する。狭い場合は非表示。
+- Compactでは期限と紐付けは…メニューの先頭に配置。期限・紐付け・区切り・削除の順。
+- 期限操作は既存の日付メニュー、紐付けは既存の所属先メニューを開く。
+- TaskListのrowModeにStandard/Compactを指定する。未指定はStandard。
+- TaskRowを直接使用する場合はmodeを指定する。未指定はStandard。
+- 仮想スクロール・固定行数・ドラッグ挿入位置はモード別行高を使用する。
+- コンパクト画面のTHE DAY/INBOX/PROJECTはCompactを使用する。
+
+## 手動確認
+
+1. 通常表示は従来どおり2行、52px。
+2. コンパクトの3タブは1行、28px。240px幅でもチェック・星・名前・…が重ならない。
+3. 広げた場合のみ所属が右側に表示され、狭めると消える。
+4. …の先頭から期限・紐付けを開ける。キャンセル・保存後、一覧へフォーカスが戻る。
+5. キーボードのD/M/F/Space/F2/Shift+F10とマウス操作が動作する。
+6. インライン編集の確定・キャンセル・保存失敗、完了後の行消失が動作する。
+7. 大量タスクで上下端へスクロールして行の重なり・余白・クリック位置ずれがない。
+8. THE DAYの境界リサイズとウィンドウの保存復元が維持される。
 
 ````
 
@@ -21171,8 +22456,8 @@ export function TaskAssignmentField({ task, busy }: { task: TaskDto; busy: boole
 
 ````src/renderer/src/features/tasks/TaskDeletion.tsx
 import { useRef, useState } from 'react'
-import { Menu, MenuItem } from '@mui/material'
-import { Trash2 } from 'lucide-react'
+import { Divider, Menu, MenuItem } from '@mui/material'
+import { CalendarPlus, Link2, Trash2 } from 'lucide-react'
 import type { TaskDto } from '../../../../shared/contracts/tasks'
 import { useDraftGuard } from '../drafts/DraftGuard'
 import { useWorkspace } from '../workspace/WorkspaceContext'
@@ -21186,11 +22471,17 @@ export function TaskRowMenu({
   task,
   anchor,
   onDelete,
+  onDue,
+  onAssign,
+  pending = false,
   onClose
 }: {
   task: TaskDto
   anchor: HTMLElement
   onDelete: () => void
+  onDue?: () => void
+  onAssign?: () => void
+  pending?: boolean
   onClose: () => void
 }) {
   return (
@@ -21206,8 +22497,15 @@ export function TaskRowMenu({
       }}
       data-testid="task-row-menu"
     >
+      {onDue && <MenuItem autoFocus disabled={pending} onClick={onDue} sx={{ fontSize: 13, gap: 1 }} data-testid="task-row-menu-due">
+        <CalendarPlus size={14} aria-hidden />{task.dueto ? `期限を変更（${task.dueto}）` : '期限を設定'}
+      </MenuItem>}
+      {onAssign && <MenuItem disabled={pending} onClick={onAssign} sx={{ fontSize: 13, gap: 1 }} data-testid="task-row-menu-assign">
+        <Link2 size={14} aria-hidden />紐付け
+      </MenuItem>}
+      {(onDue || onAssign) && <Divider />}
       <MenuItem
-        autoFocus
+        autoFocus={!onDue}
         onClick={() => {
           onClose()
           onDelete()
@@ -21268,6 +22566,7 @@ export function useTaskDeletion(options: { onDeleted?: (tasks: readonly TaskDto[
     pending: deleteTask.isPending || deleteTasks.isPending
   }
 }
+
 
 ````
 
@@ -22097,7 +23396,7 @@ import { vscodeColors } from '../../theme'
 import { usePendingClick } from './pending-click'
 import { nearestRemaining, selectAll, selectOnly, selectRange, toggleSelection, EMPTY_SELECTION, type TaskSelection } from './selection'
 import type { TaskSortColumn } from './task-table'
-import { TaskRow, TASK_ROW_HEIGHT, taskOptionId, type TaskRowActions } from './TaskRow'
+import { TaskRow, TASK_ROW_HEIGHT, taskRowHeight, taskOptionId, type TaskRowActions, type TaskRowMode } from '../../components/TaskRow'
 
 export { TASK_ROW_HEIGHT, taskOptionId }
 const PAGE_STEP = 10
@@ -22197,6 +23496,8 @@ export function TaskList({
   tasks,
   actions,
   variant = 'table',
+  rowMode = 'Standard',
+  parentVisible = true,
   listLabel,
   cardKey,
   emptyLabel,
@@ -22218,6 +23519,8 @@ export function TaskList({
   tasks: readonly TaskDto[]
   actions: TaskRowActions
   variant?: 'table' | 'card' | 'section'
+  rowMode?: TaskRowMode
+  parentVisible?: boolean
   // 一覧の読み上げ名（省略時は「タスク一覧（N件表示 / 全N件）」）
   listLabel?: string
   // カードの識別（隣のカードへの移動で使う）
@@ -22248,6 +23551,7 @@ export function TaskList({
   const listRef = useRef<HTMLDivElement>(null)
   const [activeTaskId, setActiveTaskId] = useState<string | null>(null)
   const [listFocused, setListFocused] = useState(false)
+  const rowHeight = taskRowHeight(rowMode)
   const card = variant === 'card'
   const withHandle = card && reorder !== undefined
   const inlineEdit = actions.inlineEdit
@@ -22269,7 +23573,7 @@ export function TaskList({
     count: tasks.length,
     // スクロール領域の寸法の変化（区画・カードの大きさの変更）は virtualizer が監視して測り直す
     getScrollElement: () => scrollRef.current,
-    estimateSize: () => TASK_ROW_HEIGHT,
+    estimateSize: () => rowHeight,
     // 安定したキー（タスクID）。1つのタスクは1つのカードにだけ表示されるため、カード間でも衝突しない
     getItemKey: (index) => tasks[index]?.id ?? index,
     overscan: 8,
@@ -22283,6 +23587,8 @@ export function TaskList({
       [editingIndex]
     )
   })
+
+  useLayoutEffect(() => { virtualizer.measure() }, [rowHeight, virtualizer])
 
   // 条件（resetScrollKey）が変わった時だけ先頭へ戻す。virtualizerは毎回同じインスタンス。
   useEffect(() => {
@@ -22514,7 +23820,7 @@ export function TaskList({
         }
         if (activeTask) {
           const anchor = anchorOf(activeTask)
-          if (anchor) actions.openMenu(activeTask, anchor)
+          if (anchor) actions.openMenu(activeTask, anchor, rowMode)
         } else moveTo(current)
         break
       }
@@ -22626,7 +23932,7 @@ export function TaskList({
     if (!scroller) return 0
     const rect = scroller.getBoundingClientRect()
     const y = clientY - rect.top + scroller.scrollTop
-    return Math.max(0, Math.min(tasks.length, Math.round(y / TASK_ROW_HEIGHT)))
+    return Math.max(0, Math.min(tasks.length, Math.round(y / rowHeight)))
   }
 
   const handleReorderPointerDown = (event: ReactPointerEvent<HTMLElement>, task: TaskDto, index: number) => {
@@ -22705,7 +24011,7 @@ export function TaskList({
   const activeId = activeRendered && activeTask ? taskOptionId(activeTask.id) : undefined
 
   const selectedIds = multiSelect?.selection.ids
-  const fixedHeight = maxVisibleRows !== undefined ? Math.max(1, Math.min(maxVisibleRows, tasks.length)) * TASK_ROW_HEIGHT : undefined
+  const fixedHeight = maxVisibleRows !== undefined ? Math.max(1, Math.min(maxVisibleRows, tasks.length)) * rowHeight : undefined
 
   const reorderHandle = (task: TaskDto, index: number) => {
     if (!withHandle || !reorder) return undefined
@@ -22739,7 +24045,7 @@ export function TaskList({
   }
 
   return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', minHeight: 0, flex: fixedHeight === undefined ? 1 : '0 0 auto' }}>
+    <Box sx={{ containerType: 'inline-size', containerName: 'taskRows', display: 'flex', flexDirection: 'column', minHeight: 0, flex: fixedHeight === undefined ? 1 : '0 0 auto' }}>
       {variant === 'table' && sorting && onSort && (
         // 並べ替えの見出し（作成日時は表示しないが、作成日時での並べ替えは残す）
         <Box sx={{ display: 'flex', justifyContent: 'space-between', height: 28, flexShrink: 0, borderBottom: `1px solid ${vscodeColors.border}` }}>
@@ -22793,6 +24099,8 @@ export function TaskList({
                 <TaskRow
                   key={task.id}
                   task={task}
+                  mode={rowMode}
+                  parentVisible={parentVisible}
                   top={item.start}
                   listId={listId}
                   controlsLayer={controlsLayer}
@@ -22810,7 +24118,7 @@ export function TaskList({
                     event.preventDefault()
                     pendingClick.cancel()
                     setActiveTaskId(task.id)
-                    actions.openMenu(task, event.currentTarget)
+                    actions.openMenu(task, event.currentTarget, rowMode)
                   }}
                   onTitleClick={(event) => handleTitleClick(event, task)}
                   onTitleDoubleClick={(event) => {
@@ -22840,7 +24148,7 @@ export function TaskList({
                   left: 0,
                   right: 0,
                   height: 2,
-                  top: reorderDrag.insertIndex * TASK_ROW_HEIGHT - 1,
+                  top: reorderDrag.insertIndex * rowHeight - 1,
                   bgcolor: vscodeColors.focusBorder
                 }}
               />
@@ -22851,6 +24159,7 @@ export function TaskList({
     </Box>
   )
 }
+
 
 ````
 
@@ -22963,406 +24272,6 @@ export function TaskQuickAdd({
         </Alert>
       )}
     </Box>
-  )
-}
-
-````
-
-````src/renderer/src/features/tasks/TaskRow.tsx
-import type { MouseEvent as ReactMouseEvent, PointerEvent as ReactPointerEvent, ReactNode, SyntheticEvent } from 'react'
-import { createPortal } from 'react-dom'
-import { Box, ButtonBase, Checkbox, Typography } from '@mui/material'
-import { AlertTriangle, CalendarPlus, Link2, MoreHorizontal, Star } from 'lucide-react'
-import { isTaskCompleted, type TaskDto } from '../../../../shared/contracts/tasks'
-import { vscodeColors } from '../../theme'
-import { dueLabelOf } from './due-format'
-import { InlineTitleInput, type InlineTitleEditController } from './inline-title-edit'
-
-// タスクの行（Inbox の一覧・プロジェクトのマイルストンカード・Summary Review のセクションで共通）。
-// 2行構成:
-// - 1行目（左寄せ）: 完了チェックボックス・タスク名
-// - 2行目（左寄せ）: お気に入りの星・期限（未設定なら期限設定アイコン）・紐付けアイコン・「…」メニュー・所属（{プロジェクト名} / {マイルストン名}）
-//   星のアイコンの左端は、1行目のタスク名の文字の左端と同じ位置（TEXT_INSET。ハンドルの有無によらず、タスク名の列の左端から同じ距離）。
-//   所属は残りの幅を使い、1行で右端を「…」で省略する（全文はツールチップ）。所属がなければ（Inbox）何も出さない。
-// 作成日時は表示しない（データ・並べ替えの条件は変えない）。
-//
-// アクセシビリティの構造:
-// - 行の本体は一覧（role="listbox"）の option。option の中に操作要素を置かない（チェックボックスはマウス用の見た目で、読み上げ・Tab 移動の対象外。
-//   キーボードは一覧の Space）。
-// - 星・期限・紐付け・「…」・並べ替えのハンドル・インライン編集の入力欄は、同じ部品から一覧の外側の重ね合わせ層（controlsLayer）へ
-//   ポータルで描画する（読み上げでは option と別のボタン。Tab 移動の対象は増やさない。キーボードは一覧のショートカット）。
-// - 重ね合わせ層の操作（クリック・押下・フォーカス）は行の選択・ドラッグ・一覧のフォーカス処理へ伝えない。
-//
-// 画面ごとの違い（取得条件・選択集合・セクション・カード構成）は持たない。操作は TaskRowActions（呼び出し側の共通フック）を呼ぶだけ。
-export const TASK_ROW_HEIGHT = 52
-// 1行目（チェックボックス・タスク名）と2行目（操作）の位置
-const LINE1_HEIGHT = 28
-const LINE2_TOP = 26
-const LINE2_HEIGHT = 24
-// 並べ替えのハンドルの列（プロジェクトのカードだけ）とチェックボックスの列
-export const HANDLE_COLUMN_WIDTH = 18
-const CHECK_COLUMN_WIDTH = 32
-// タスク名の列の左端から、タスク名の文字・2行目の星のアイコンの左端までの距離（1行目と2行目で共通）
-const TEXT_INSET = 4
-// 2行目の操作ボタンの大きさ。最小のカード幅（144px・並べ替えのハンドルあり）でも4つの操作が収まる大きさにする
-const ICON_BUTTON = 20
-const LINE2_RIGHT = 2
-const STAR_ON = '#e2c541'
-// 白抜きの星（未設定）。背景（#1e1e1e・#252526）に対して操作できると分かるコントラスト（3:1以上）を保つ淡い灰色
-const STAR_OFF = '#9a9a9a'
-const OVERDUE = '#f48771'
-
-export const taskOptionId = (taskId: string) => `task-option-${taskId}`
-
-// 行の操作（3画面で共通。useTaskRowActions が作る）
-export type TaskRowActions = {
-  // お気に入りの表示（保存待ち・保存中なら押した後の状態）
-  isFavorite: (task: TaskDto) => boolean
-  toggleCompleted: (task: TaskDto) => void
-  toggleFavorite: (task: TaskDto) => void
-  openDue: (task: TaskDto, anchor: HTMLElement) => void
-  openAssign: (task: TaskDto, anchor: HTMLElement) => void
-  openMenu: (task: TaskDto, anchor: HTMLElement) => void
-  openEditor: (task: TaskDto, anchor: HTMLElement) => void
-  // 現在の所属（「{プロジェクト名} / {マイルストン名}」）。所属がない（Inbox）・名前を取得できない時は null
-  assignmentLabel: (task: TaskDto) => string | null
-  inlineEdit: InlineTitleEditController
-}
-
-// 重ね合わせ層の操作を、行（option）・一覧へ伝えない
-const stop = (event: SyntheticEvent) => event.stopPropagation()
-
-export function TaskRow({
-  task,
-  top,
-  listId,
-  controlsLayer,
-  today,
-  actions,
-  selected,
-  active,
-  pending,
-  dimmed,
-  handle,
-  onRowPointerDown,
-  onRowClick,
-  onRowContextMenu,
-  onTitleClick,
-  onTitleDoubleClick,
-  onInlineDone
-}: {
-  task: TaskDto
-  // 行の上端（仮想リスト内の位置）
-  top: number
-  // 一覧（listbox）の DOM の id（操作の後に一覧へフォーカスを戻すため）
-  listId: string
-  controlsLayer: HTMLElement | null
-  // ローカルの今日（"YYYY-MM-DD"。期限の表示）
-  today: string
-  actions: TaskRowActions
-  selected: boolean
-  // キーボードの現在行（枠線で示す）
-  active: boolean
-  // 保存中（薄く表示する）
-  pending: boolean
-  // 並べ替えのドラッグ中（薄く表示する）
-  dimmed: boolean
-  // 並べ替えのハンドル（プロジェクトのカード。省略時はハンドルの列なし）
-  handle?: ReactNode
-  onRowPointerDown?: (event: ReactPointerEvent<HTMLElement>) => void
-  onRowClick: (event: ReactMouseEvent<HTMLElement>) => void
-  onRowContextMenu?: (event: ReactMouseEvent<HTMLElement>) => void
-  // タスク名のクリック（シングル: 編集モーダル、ダブル: インライン編集。判定は一覧が行う）
-  onTitleClick: (event: ReactMouseEvent<HTMLElement>) => void
-  onTitleDoubleClick: (event: ReactMouseEvent<HTMLElement>) => void
-  // インライン編集を Enter・Esc で閉じた時（一覧へフォーカスを戻す）
-  onInlineDone: () => void
-}) {
-  const completed = isTaskCompleted(task)
-  const favorite = actions.isFavorite(task)
-  const due = dueLabelOf(task.dueto, today)
-  const withHandle = handle !== undefined
-  const leftEdge = (withHandle ? HANDLE_COLUMN_WIDTH : 0) + CHECK_COLUMN_WIDTH
-  const editing = actions.inlineEdit.state?.taskId === task.id
-  const editError = editing ? actions.inlineEdit.state?.error ?? null : null
-  const assignment = actions.assignmentLabel(task)
-  const assignmentText = assignment ?? 'Inbox'
-  const opacity = pending || dimmed ? 0.5 : 1
-  const titleQuoted = `「${task.title}」`
-
-  const iconButton = {
-    width: ICON_BUTTON,
-    height: ICON_BUTTON,
-    flexShrink: 0,
-    borderRadius: 1,
-    color: 'text.secondary',
-    pointerEvents: 'auto',
-    '&:hover': { bgcolor: vscodeColors.listHover, color: 'text.primary' },
-    '&.Mui-disabled': { opacity: 0.4 }
-  } as const
-
-  const controls = (
-    <Box
-      data-list-id={listId}
-      data-task-row-controls={task.id}
-      onClick={stop}
-      onDoubleClick={stop}
-      onPointerDown={stop}
-      onMouseDown={(event) => {
-        event.stopPropagation()
-        // ボタンを押してもフォーカスを一覧から移さない（キーボード操作を続けられる。閉じた後の戻り先も一覧になる）。入力欄は除く
-        if (!(event.target instanceof HTMLElement && event.target.closest('input, textarea'))) event.preventDefault()
-      }}
-      onContextMenu={stop}
-      onFocus={stop}
-      onBlur={stop}
-      onKeyDown={stop}
-      sx={{ position: 'absolute', left: 0, width: '100%', top, height: TASK_ROW_HEIGHT, pointerEvents: 'none', opacity }}
-    >
-      {withHandle && (
-        <Box sx={{ position: 'absolute', left: 0, top: 0, width: HANDLE_COLUMN_WIDTH, height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'auto' }}>
-          {handle}
-        </Box>
-      )}
-      {/* 2行目（左寄せ）: 星・期限・紐付け・…・所属。左端はタスク名の列の左端 */}
-      <Box
-        sx={{
-          position: 'absolute',
-          top: LINE2_TOP,
-          height: LINE2_HEIGHT,
-          left: leftEdge,
-          right: LINE2_RIGHT,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'flex-start',
-          gap: '2px',
-          minWidth: 0
-        }}
-      >
-        <ButtonBase
-          tabIndex={-1}
-          aria-pressed={favorite}
-          aria-label={`${titleQuoted}をお気に入り`}
-          title={favorite ? 'お気に入り（押すと解除）' : 'お気に入りに追加'}
-          data-testid="task-favorite"
-          data-favorite={favorite ? 'true' : 'false'}
-          onClick={() => actions.toggleFavorite(task)}
-          // アイコンの左端をタスク名の文字の左端に揃える（ボタンの左の余白 = TEXT_INSET）
-          sx={{ ...iconButton, justifyContent: 'flex-start', pl: `${TEXT_INSET}px`, color: favorite ? STAR_ON : STAR_OFF, '&:hover': { bgcolor: vscodeColors.listHover, color: favorite ? STAR_ON : 'text.primary' } }}
-        >
-          <Star size={14} aria-hidden fill={favorite ? STAR_ON : 'none'} strokeWidth={favorite ? 1.5 : 1.75} />
-        </ButtonBase>
-        {due ? (
-          <ButtonBase
-            tabIndex={-1}
-            aria-haspopup="menu"
-            aria-label={`${titleQuoted}の${due.description}。期限を変更`}
-            title={`${due.description}（押すと変更）`}
-            data-testid="task-due"
-            data-due={task.dueto ?? undefined}
-            data-due-kind={due.kind}
-            disabled={pending}
-            onClick={(event) => actions.openDue(task, event.currentTarget)}
-            sx={{
-              ...iconButton,
-              width: 'auto',
-              flexShrink: 1,
-              minWidth: 0,
-              height: 20,
-              px: 0.75,
-              gap: 0.5,
-              fontSize: 11,
-              lineHeight: '16px',
-              fontVariantNumeric: 'tabular-nums',
-              border: `1px solid ${due.kind === 'overdue' ? OVERDUE : vscodeColors.border}`,
-              color: due.kind === 'overdue' ? OVERDUE : due.kind === 'today' ? 'text.primary' : 'text.secondary'
-            }}
-          >
-            {due.kind === 'overdue' && <AlertTriangle size={11} aria-hidden style={{ flexShrink: 0 }} />}
-            <Box component="span" sx={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-              {due.text}
-            </Box>
-          </ButtonBase>
-        ) : (
-          <ButtonBase
-            tabIndex={-1}
-            aria-haspopup="menu"
-            aria-label={`${titleQuoted}の期限を設定`}
-            title="期限を設定"
-            data-testid="task-due-set"
-            disabled={pending}
-            onClick={(event) => actions.openDue(task, event.currentTarget)}
-            sx={iconButton}
-          >
-            <CalendarPlus size={14} aria-hidden />
-          </ButtonBase>
-        )}
-        <ButtonBase
-          tabIndex={-1}
-          aria-haspopup="menu"
-          aria-label={`${titleQuoted}の紐付け（現在: ${assignmentText}）`}
-          title={`紐付け（現在: ${assignmentText}）`}
-          data-testid="task-assign"
-          data-assign-task-id={task.id}
-          disabled={pending}
-          onClick={(event) => actions.openAssign(task, event.currentTarget)}
-          sx={iconButton}
-        >
-          <Link2 size={14} aria-hidden />
-        </ButtonBase>
-        <ButtonBase
-          tabIndex={-1}
-          aria-haspopup="menu"
-          aria-label={`${titleQuoted}のメニュー`}
-          title="メニュー"
-          data-testid="task-row-menu-button"
-          data-row-menu-task-id={task.id}
-          onClick={(event) => actions.openMenu(task, event.currentTarget)}
-          sx={iconButton}
-        >
-          <MoreHorizontal size={14} aria-hidden />
-        </ButtonBase>
-        {assignment && (
-          // 所属（読み上げは行の名前に含めるため、ここは読み上げない）。操作の領域を先に確保し、残りの幅で省略表示する
-          <Box
-            component="span"
-            aria-hidden
-            title={assignment}
-            data-testid="task-assignment"
-            sx={{
-              flex: '0 1000 auto',
-              minWidth: 0,
-              ml: 0.5,
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-              whiteSpace: 'nowrap',
-              fontSize: 11,
-              color: 'text.secondary',
-              pointerEvents: 'auto'
-            }}
-          >
-            {assignment}
-          </Box>
-        )}
-      </Box>
-      {/* インライン編集（タスク名の位置に重ねる。状態は画面単位で持ち、一覧は編集中の行を常に描画する） */}
-      {editing && (
-        <Box
-          data-testid="inline-title-editor-row"
-          sx={{ position: 'absolute', top: 1, left: leftEdge, right: 4, height: LINE1_HEIGHT - 2, display: 'flex', alignItems: 'center', pointerEvents: 'auto', zIndex: 1 }}
-        >
-          <InlineTitleInput controller={actions.inlineEdit} taskTitle={task.title} onDone={onInlineDone} />
-        </Box>
-      )}
-      {editError && (
-        <Typography
-          id="inline-title-error"
-          role="alert"
-          data-testid="inline-title-error"
-          sx={{
-            position: 'absolute',
-            top: LINE1_HEIGHT - 2,
-            left: leftEdge + 4,
-            zIndex: 2,
-            px: 1,
-            py: 0.25,
-            fontSize: 11,
-            color: OVERDUE,
-            bgcolor: vscodeColors.sideBarBackground,
-            border: `1px solid ${OVERDUE}`,
-            borderRadius: 0.5,
-            pointerEvents: 'auto'
-          }}
-        >
-          {editError}
-        </Typography>
-      )}
-    </Box>
-  )
-
-  return (
-    <>
-      <Box
-        id={taskOptionId(task.id)}
-        role="option"
-        aria-selected={selected}
-        aria-busy={pending || undefined}
-        // 読み上げ名: タスク名・完了状態・お気に入り・期限（チェックボックス・操作ボタンは option の外）
-        aria-label={`${task.title}、${completed ? '完了' : '未完了'}${favorite ? '、お気に入り' : ''}${due ? `、${due.description}` : ''}${assignment ? `、${assignment}` : ''}${pending ? '、保存中' : ''}`}
-        data-task-id={task.id}
-        data-task-row=""
-        data-pending={pending || undefined}
-        onPointerDown={onRowPointerDown}
-        onClick={onRowClick}
-        onContextMenu={onRowContextMenu}
-        sx={{
-          position: 'absolute',
-          top: 0,
-          left: 0,
-          width: '100%',
-          height: TASK_ROW_HEIGHT,
-          transform: `translateY(${top}px)`,
-          display: 'grid',
-          gridTemplateColumns: `${withHandle ? `${HANDLE_COLUMN_WIDTH}px ` : ''}${CHECK_COLUMN_WIDTH}px minmax(0, 1fr)`,
-          gridTemplateRows: `${LINE1_HEIGHT}px 1fr`,
-          cursor: 'default',
-          // 保存中・ドラッグ中の行は薄く表示する
-          opacity,
-          bgcolor: selected ? vscodeColors.listActiveSelection : 'transparent',
-          borderBottom: `1px solid ${vscodeColors.border}40`,
-          // キーボードの現在行（フォーカス）は枠線、選択は背景色で区別する
-          outline: active ? `1px solid ${vscodeColors.focusBorder}` : 'none',
-          outlineOffset: -1,
-          '&:hover': { bgcolor: selected ? vscodeColors.listActiveSelection : vscodeColors.listHover }
-        }}
-      >
-        {withHandle && <span aria-hidden />}
-        <Box
-          sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center' }}
-          // チェック操作で行の選択・編集モーダル・ドラッグを起こさない
-          onClick={stop}
-          onPointerDown={stop}
-          onDoubleClick={stop}
-          aria-hidden
-        >
-          <Checkbox
-            size="small"
-            checked={completed}
-            disabled={pending}
-            onChange={() => actions.toggleCompleted(task)}
-            tabIndex={-1}
-            slotProps={{ input: { 'aria-hidden': true, tabIndex: -1, 'data-testid': 'task-complete-checkbox' } as Record<string, unknown> }}
-            sx={{ p: 0.5 }}
-          />
-        </Box>
-        <Box sx={{ display: 'flex', alignItems: 'center', minWidth: 0, pr: 1 }}>
-          <Typography
-            component="span"
-            noWrap
-            data-testid="task-title"
-            onClick={onTitleClick}
-            onDoubleClick={onTitleDoubleClick}
-            title={task.title}
-            sx={{
-              display: 'inline-block',
-              maxWidth: '100%',
-              fontSize: 13,
-              pl: `${TEXT_INSET}px`,
-              pr: 0.5,
-              borderRadius: 0.5,
-              cursor: 'pointer',
-              // 完了は色だけでなく取り消し線でも示す
-              textDecoration: completed ? 'line-through' : 'none',
-              color: completed ? 'text.secondary' : 'text.primary',
-              '&:hover': { textDecoration: completed ? 'line-through underline' : 'underline' }
-            }}
-          >
-            {task.title}
-          </Typography>
-        </Box>
-      </Box>
-      {controlsLayer && createPortal(controls, controlsLayer)}
-    </>
   )
 }
 
@@ -24612,6 +25521,7 @@ import type {
   DeleteTasksInput,
   ReorderMilestoneTasksInput,
   SetTaskDueInput,
+  SetTasksDayInput,
   SetTaskAssignmentInput,
   SetTaskCompletedInput,
   TaskDto,
@@ -24638,7 +25548,8 @@ export const taskMutationKeys = {
   deleteMany: [...taskKeys.all, 'delete-many'] as const,
   reorder: [...taskKeys.all, 'reorder'] as const,
   // フェーズ6: 期限
-  setDue: [...taskKeys.all, 'set-due'] as const
+  setDue: [...taskKeys.all, 'set-due'] as const,
+  setDayMany: [...taskKeys.all, 'set-day-many'] as const
 }
 
 // タスク一覧の正本はこのQuery（全件）。Inbox・プロジェクトの一覧、詳細、件数はすべてここから導出する。
@@ -24771,6 +25682,20 @@ export function useReorderMilestoneTasksMutation() {
 // 期限の設定・変更・解除（フェーズ6）。同じタスクの保存キューに並べる（タイトルの保存・所属の変更・削除と順番に実行する。
 // 削除の後に届いても Main が NOT_FOUND にし、対象を作り直さない）。成功した応答だけで一覧の行を置き換える。
 // Summary Review の取得結果は query-client の MutationCache で古いものとして扱う
+export function useSetTasksDayMutation() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationKey: taskMutationKeys.setDayMany,
+    mutationFn: (input: SetTasksDayInput) => taskSaveQueue.runMany(input.ids, () => unwrapIpc(window.gtd.tasks.setDayMany(input))),
+    onSuccess: (saved) => {
+      const byId = new Map(saved.map((task) => [task.id, task]))
+      queryClient.setQueryData<TaskDto[]>(taskKeys.list(), (tasks) => tasks?.map((task) => byId.get(task.id) ?? task))
+      void queryClient.invalidateQueries({ queryKey: ['summary'] })
+      if (queryClient.isFetching({ queryKey: taskKeys.list() }) > 0) void queryClient.invalidateQueries({ queryKey: taskKeys.list() })
+    }
+  })
+}
+
 export function useSetTaskDueMutation() {
   const queryClient = useQueryClient()
   return useMutation({
@@ -24808,7 +25733,8 @@ const TASK_UPDATE_KEYS: readonly unknown[] = [
   taskMutationKeys.assignFromInbox[1],
   taskMutationKeys.deleteMany[1],
   taskMutationKeys.reorder[1],
-  taskMutationKeys.setDue[1]
+  taskMutationKeys.setDue[1],
+  taskMutationKeys.setDayMany[1]
 ]
 
 function isTaskUpdateKey(key: readonly unknown[] | undefined): boolean {
@@ -25141,7 +26067,7 @@ import { useInlineTitleEdit } from './inline-title-edit'
 import { TaskRowMenu, useTaskDeletion } from './TaskDeletion'
 import { useFocusReturn, useTaskDue } from './TaskDue'
 import { useTaskEditDialog } from './TaskEditDialog'
-import type { TaskRowActions } from './TaskRow'
+import type { TaskRowActions, TaskRowMode } from '../../components/TaskRow'
 import {
   useAssignInboxTasksMutation,
   usePendingTaskIds,
@@ -25187,7 +26113,7 @@ export function useTaskRowActions(options: {
   const [blockedNotice, setBlockedNotice] = useState<string | null>(null)
   const [assignError, setAssignError] = useState<string | null>(null)
   const [assignTarget, setAssignTarget] = useState<{ task: TaskDto; anchor: HTMLElement; returnFocus: () => void } | null>(null)
-  const [rowMenu, setRowMenu] = useState<{ task: TaskDto; anchor: HTMLElement; returnFocus: () => void } | null>(null)
+  const [rowMenu, setRowMenu] = useState<{ task: TaskDto; anchor: HTMLElement; mode: TaskRowMode; returnFocus: () => void } | null>(null)
   const assigningRef = useRef(false)
   const focusReturn = useFocusReturn()
 
@@ -25270,7 +26196,7 @@ export function useTaskRowActions(options: {
       setAssignError(null)
       setAssignTarget({ task, anchor, returnFocus: focusReturn.capture(anchor) })
     },
-    openMenu: (task, anchor) => setRowMenu({ task, anchor, returnFocus: focusReturn.capture(anchor) }),
+    openMenu: (task, anchor, mode = 'Standard') => setRowMenu({ task, anchor, mode, returnFocus: focusReturn.capture(anchor) }),
     openEditor: (task, anchor) => editDialog.open(task.id, anchor),
     assignmentLabel,
     inlineEdit
@@ -25317,6 +26243,18 @@ export function useTaskRowActions(options: {
         <TaskRowMenu
           task={rowMenu.task}
           anchor={rowMenu.anchor}
+          onDue={rowMenu.mode === 'Compact' ? () => {
+            const current = rowMenu
+            setRowMenu(null)
+            due.open(current.task, current.anchor)
+          } : undefined}
+          onAssign={rowMenu.mode === 'Compact' ? () => {
+            const current = rowMenu
+            setRowMenu(null)
+            setAssignError(null)
+            setAssignTarget({ task: current.task, anchor: current.anchor, returnFocus: current.returnFocus })
+          } : undefined}
+          pending={pendingTaskIds.has(rowMenu.task.id)}
           onDelete={() => deletion.request([rowMenu.task])}
           onClose={() => {
             rowMenu.returnFocus()
@@ -25353,6 +26291,7 @@ export function useTaskRowActions(options: {
     }
   }
 }
+
 
 ````
 
@@ -25841,6 +26780,49 @@ export function ProjectDeleteControl({ project }: { project: ProjectDto }) {
 
 ````
 
+````src/renderer/src/features/projects/ProjectFavoriteButton.tsx
+import { useRef } from 'react'
+import { Alert, Box, IconButton, Snackbar, Tooltip } from '@mui/material'
+import { Star } from 'lucide-react'
+import type { ProjectDto } from '../../../../shared/contracts/projects'
+import { usePendingProjectIds, useSetProjectFavoriteMutation } from './project-queries'
+
+/** 行の選択・開閉・画面遷移とは独立した、お気に入り切り替え。 */
+export function ProjectFavoriteButton({ project }: { project: ProjectDto }) {
+  const mutation = useSetProjectFavoriteMutation()
+  const pendingIds = usePendingProjectIds()
+  const busy = useRef(false)
+  const label = `「${project.name}」を${project.favorite ? 'お気に入りから解除' : 'お気に入りに追加'}`
+  const toggle = async () => {
+    if (busy.current || pendingIds.has(project.id)) return
+    busy.current = true
+    try {
+      await mutation.mutateAsync({ id: project.id, favorite: !project.favorite })
+    } catch {
+      // エラーはmutation.errorをSnackbarへ表示する。
+    } finally { busy.current = false }
+  }
+  return (
+    <Box component="span" onClick={(event) => event.stopPropagation()} onPointerDown={(event) => event.stopPropagation()}
+      onDoubleClick={(event) => event.stopPropagation()} sx={{ display: 'inline-flex', flexShrink: 0 }}>
+      <Tooltip title={label}>
+        <span style={{ display: 'inline-flex' }}>
+          <IconButton aria-label={label} aria-pressed={project.favorite} disabled={pendingIds.has(project.id)}
+            data-testid="project-favorite" data-project-favorite-id={project.id} data-favorite={project.favorite ? 'true' : 'false'}
+            onClick={() => void toggle()} sx={{ width: 24, height: 24, p: 0, color: project.favorite ? '#e2c541' : '#9a9a9a' }}>
+            <Star size={18} aria-hidden fill={project.favorite ? '#e2c541' : 'none'} strokeWidth={1.75} />
+          </IconButton>
+        </span>
+      </Tooltip>
+      <Snackbar open={mutation.isError} onClose={() => mutation.reset()}>
+        <Alert severity="error" onClose={() => mutation.reset()}>お気に入りを保存できませんでした: {mutation.error?.message}</Alert>
+      </Snackbar>
+    </Box>
+  )
+}
+
+````
+
 ````src/renderer/src/features/projects/ProjectNameEditor.tsx
 import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from 'react'
 import { Alert, Box, Button, IconButton, TextField, Tooltip, Typography } from '@mui/material'
@@ -25850,6 +26832,7 @@ import { PROJECT_NAME_MAX_LENGTH, type ProjectDto } from '../../../../shared/con
 import { projectIdFromRoute } from '../../../../shared/contracts/workspace'
 import { useDraftGuard } from '../drafts/DraftGuard'
 import { newProjectReturnRoute } from './new-project'
+import { ProjectFavoriteButton } from './ProjectFavoriteButton'
 import { useCreateProjectMutation, usePendingProjectIds, useRenameProjectMutation } from './project-queries'
 
 const isImeEnter = (event: KeyboardEvent<HTMLElement>) =>
@@ -26018,6 +27001,7 @@ export function ProjectNameEditor({ project }: { project: ProjectDto | null }) {
   if (!editing && project !== null) {
     return (
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 3 }}>
+        <ProjectFavoriteButton project={project} />
         <Typography component="h1" sx={{ fontSize: 15, fontWeight: 600, m: 0, wordBreak: 'break-all' }} data-testid="project-name">
           {project.name}
         </Typography>
@@ -26112,7 +27096,8 @@ import type { ProjectDto } from '../../../../shared/contracts/projects'
 import { projectIdFromRoute } from '../../../../shared/contracts/workspace'
 import { formatTaskDateTime } from '../tasks/TaskList'
 import { NEW_PROJECT_PATH, rememberNewProjectReturn } from './new-project'
-import { groupProjects } from './project-order'
+import { compareFavoriteProjects, groupProjects } from './project-order'
+import { ProjectFavoriteButton } from './ProjectFavoriteButton'
 import { projectListQueryOptions } from './project-queries'
 
 // Projectの左サイドバー: 未完了のプロジェクト一覧と、最下段の「NEW PROJECT」（フェーズ5.5。区分の廃止はフェーズ5.8）。
@@ -26166,7 +27151,7 @@ export function ProjectsSidebar({ pathname }: { pathname: string }) {
     // 未完了のプロジェクトだけを、Project 配下にそのまま並べる（名前順。同名は作成日時・ID）。
     // フェーズ5.8: 「未完了」の見出しと完了済みの区分は廃止した。完了済みのプロジェクトはサイドバーに表示しない（データは残る）。
     // 完了した直後も開いている画面はそのまま（ルートで決まる）で、完了を取り消すと一覧に戻る。
-    const openProjects = groupProjects(projects.data).open
+    const openProjects = groupProjects(projects.data).open.sort(compareFavoriteProjects)
     // 同名のプロジェクトは、作成日時とIDの先頭を副テキストで示して判別できるようにする（フェーズ5.4。一覧に表示するものの中で判定）
     const nameCounts = new Map<string, number>()
     for (const project of openProjects) nameCounts.set(project.name, (nameCounts.get(project.name) ?? 0) + 1)
@@ -26182,13 +27167,14 @@ export function ProjectsSidebar({ pathname }: { pathname: string }) {
           {openProjects.map((project) => {
             const selected = project.id === selectedId
             return (
+              <Box component="li" key={project.id} sx={{ display: 'flex', alignItems: 'center', px: 4, minWidth: 0 }}>
+                <ProjectFavoriteButton project={project} />
               <ListItemButton
-                key={project.id}
                 selected={selected}
                 aria-current={selected ? 'page' : undefined}
                 data-project-id={project.id}
                 onClick={() => void navigate({ to: '/projects/$projectId', params: { projectId: project.id } })}
-                sx={{ px: 4, minWidth: 0 }}
+                sx={{ px: 0.5, minWidth: 0, flex: 1 }}
               >
                 <ListItemText
                   primary={project.name}
@@ -26201,6 +27187,7 @@ export function ProjectsSidebar({ pathname }: { pathname: string }) {
                   }}
                 />
               </ListItemButton>
+              </Box>
             )
           })}
         </List>
@@ -26263,6 +27250,12 @@ export function compareProjects(a: ProjectDto, b: ProjectDto): number {
   return a.id < b.id ? -1 : a.id > b.id ? 1 : 0
 }
 
+// サイドバー用。共通sortProjectsの順序は変更しない。
+export function compareFavoriteProjects(a: ProjectDto, b: ProjectDto): number {
+  if (a.favorite !== b.favorite) return a.favorite ? -1 : 1
+  return compareProjects(a, b)
+}
+
 export function sortProjects(projects: readonly ProjectDto[]): ProjectDto[] {
   return [...projects].sort(compareProjects)
 }
@@ -26286,7 +27279,8 @@ import type {
   ProjectDeletionSummary,
   ProjectDto,
   RenameProjectInput,
-  SetProjectCompletedInput
+  SetProjectCompletedInput,
+  SetProjectFavoriteInput
 } from '../../../../shared/contracts/projects'
 import { unwrapIpc } from '../../lib/ipc'
 import { milestoneKeys } from '../milestones/milestone-queries'
@@ -26302,6 +27296,7 @@ export const projectMutationKeys = {
   create: [...projectKeys.all, 'create'] as const,
   rename: [...projectKeys.all, 'rename'] as const,
   setCompleted: [...projectKeys.all, 'set-completed'] as const,
+  setFavorite: [...projectKeys.all, 'set-favorite'] as const,
   delete: [...projectKeys.all, 'delete'] as const
 }
 
@@ -26349,6 +27344,16 @@ export function useRenameProjectMutation() {
 }
 
 // 完了・完了の取り消し（フェーズ5.3）。保存に成功した後だけ表示を切り替える（楽観的更新はしない）。
+export function useSetProjectFavoriteMutation() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationKey: projectMutationKeys.setFavorite,
+    mutationFn: (input: SetProjectFavoriteInput) =>
+      taskSaveQueue.run(projectSaveKey(input.id), () => unwrapIpc(window.gtd.projects.setFavorite(input))),
+    onSuccess: (saved: ProjectDto) => replaceProjectInList(queryClient, saved)
+  })
+}
+
 export function useSetProjectCompletedMutation() {
   const queryClient = useQueryClient()
   return useMutation({
@@ -26396,6 +27401,7 @@ export function usePendingProjectIds(): ReadonlySet<string> {
           key[0] === projectKeys.all[0] &&
           (key[1] === projectMutationKeys.rename[1] ||
             key[1] === projectMutationKeys.setCompleted[1] ||
+            key[1] === projectMutationKeys.setFavorite[1] ||
             key[1] === projectMutationKeys.delete[1])
         )
       }
@@ -26462,6 +27468,32 @@ export function getProjectPageState(
   if (query.isPending || !query.data) return { kind: 'loading' }
   const project = query.data.find((item) => item.id === projectId)
   return project ? { kind: 'found', project } : { kind: 'not-found' }
+}
+
+````
+
+````src/renderer/src/features/projects/project-tree-display.ts
+export type ProjectTreeDisplayMode = 'PROJECT' | 'MILESTONE' | 'ALL' | 'CUSTOM'
+
+/** 隠れた子ノードの展開フラグではなく、現在の表示階層を判定する。 */
+export function projectTreeDisplayMode(
+  projectIds: readonly string[],
+  milestones: readonly { id: string; projectId: string | null }[],
+  expandedNodes: ReadonlySet<string>,
+  preferred: ProjectTreeDisplayMode = 'MILESTONE'
+): ProjectTreeDisplayMode {
+  if (projectIds.length === 0) return preferred === 'CUSTOM' ? 'MILESTONE' : preferred
+  const openedProjects = projectIds.filter((id) => expandedNodes.has(`project:${id}`)).length
+  if (openedProjects === 0) return 'PROJECT'
+  if (openedProjects !== projectIds.length) return 'CUSTOM'
+  const ids = new Set(projectIds)
+  const children = milestones.filter((item) => item.projectId !== null && ids.has(item.projectId))
+  // マイルストン0件ではMILESTONEとALLが同じ表示になるため、明示操作を優先する。
+  if (children.length === 0) return preferred === 'ALL' ? 'ALL' : 'MILESTONE'
+  const openedMilestones = children.filter((item) => expandedNodes.has(`milestone:${item.id}`)).length
+  if (openedMilestones === 0) return 'MILESTONE'
+  if (openedMilestones === children.length) return 'ALL'
+  return 'CUSTOM'
 }
 
 ````
@@ -26905,7 +27937,7 @@ const TOLERANCE_PX = 1
 
 type Measured = { sidebar: number; main: number; detail: number | null; available: number }
 
-export function usePaneLayout() {
+export function usePaneLayout(compact = false) {
   const { settings, setSidebarWidth, setDetailWidth } = useWorkspace()
   const groupRef = useGroupRef()
   const groupElementRef = useRef<HTMLDivElement>(null)
@@ -26988,6 +28020,7 @@ export function usePaneLayout() {
 
   // ウィンドウサイズの変更でも再計算する（ライブラリの通知の有無に依存しない）。
   useEffect(() => {
+    if (compact) return
     const element = groupElementRef.current
     if (!element) return
     let frame = 0
@@ -27000,13 +28033,13 @@ export function usePaneLayout() {
       cancelAnimationFrame(frame)
       observer.disconnect()
     }
-  }, [reconcile])
+  }, [reconcile, compact])
 
   // 詳細パネルの開閉後も再計算する（希望幅は変えない）。
   useEffect(() => {
     const frame = requestAnimationFrame(reconcile)
     return () => cancelAnimationFrame(frame)
-  }, [settings.detailVisible, reconcile])
+  }, [settings.detailVisible, reconcile, compact])
 
   // 境界線の操作開始（ポインター・キー）を記録する。
   const markOperated = useCallback((pane: PaneKey) => {
@@ -27041,6 +28074,7 @@ export function usePaneLayout() {
     resetToDefault
   }
 }
+
 
 ````
 
@@ -27144,10 +28178,11 @@ import { useDraftGuard, type DraftTarget } from '../drafts/DraftGuard'
 import type { TaskGroup } from '../tasks/assignment'
 import { taskListQueryOptions, useCreateTaskMutation, useReorderMilestoneTasksMutation } from '../tasks/task-queries'
 import type { TaskSortColumn } from '../tasks/task-table'
-import type { TaskRowActions } from '../tasks/TaskRow'
+import type { TaskRowActions } from '../../components/TaskRow'
 import { TaskList } from '../tasks/TaskList'
 import { useWorkspace } from '../workspace/WorkspaceContext'
 import { MilestoneNameEditor } from './MilestoneForms'
+import { MilestoneFavoriteButton } from './MilestoneFavoriteButton'
 import {
   fetchMilestoneDeletionSummary,
   milestoneListQueryOptions,
@@ -27884,6 +28919,7 @@ export function MilestoneBoard({
                       onKeyMove={(target) => moveCardByKey(group.milestoneId, target)}
                       onDragStart={(event) => startCardDrag(event, group.milestoneId, index)}
                     />
+                    <MilestoneFavoriteButton milestoneId={group.milestoneId} />
                     <Typography
                       component="h2"
                       noWrap
@@ -27981,6 +29017,49 @@ export function MilestoneBoard({
         </Box>
       </Box>
     </>
+  )
+}
+
+````
+
+````src/renderer/src/features/milestones/MilestoneFavoriteButton.tsx
+import { useRef } from 'react'
+import { Alert, Box, IconButton, Snackbar, Tooltip } from '@mui/material'
+import { useQuery } from '@tanstack/react-query'
+import { Star } from 'lucide-react'
+import { milestoneListQueryOptions, usePendingMilestoneIds, useSetMilestoneFavoriteMutation } from './milestone-queries'
+
+export function MilestoneFavoriteButton({ milestoneId }: { milestoneId: string }) {
+  const query = useQuery(milestoneListQueryOptions)
+  const milestone = query.data?.find((item) => item.id === milestoneId)
+  const pendingIds = usePendingMilestoneIds()
+  const mutation = useSetMilestoneFavoriteMutation()
+  const busy = useRef(false)
+  const favorite = milestone?.favorite ?? false
+  const label = `「${milestone?.name ?? 'マイルストン'}」を${favorite ? 'お気に入りから解除' : 'お気に入りに追加'}`
+  const toggle = async () => {
+    if (!milestone || busy.current || pendingIds.has(milestoneId)) return
+    busy.current = true
+    try { await mutation.mutateAsync({ id: milestoneId, favorite: !favorite }) }
+    catch { /* mutation.errorで画面に表示する */ }
+    finally { busy.current = false }
+  }
+  return (
+    <Box component="span" onClick={(event) => event.stopPropagation()} onPointerDown={(event) => event.stopPropagation()}
+      onDoubleClick={(event) => event.stopPropagation()} sx={{ display: 'inline-flex', flexShrink: 0 }}>
+      <Tooltip title={label}>
+        <span style={{ display: 'inline-flex' }}>
+          <IconButton aria-label={label} aria-pressed={favorite} disabled={!milestone || pendingIds.has(milestoneId)}
+            data-testid="milestone-favorite" data-milestone-favorite-id={milestoneId} data-favorite={favorite ? 'true' : 'false'}
+            onClick={() => void toggle()} sx={{ width: 24, height: 24, p: 0, color: favorite ? '#ffa500' : '#9a9a9a' }}>
+            <Star size={18} aria-hidden fill={favorite ? '#ffa500' : 'none'} strokeWidth={1.75} />
+          </IconButton>
+        </span>
+      </Tooltip>
+      <Snackbar open={mutation.isError} onClose={() => mutation.reset()}>
+        <Alert severity="error" onClose={() => mutation.reset()}>お気に入りを保存できませんでした: {mutation.error?.message}</Alert>
+      </Snackbar>
+    </Box>
   )
 }
 
@@ -28124,14 +29203,15 @@ export function MilestoneNameEditor({ milestone, onClose }: { milestone: Milesto
 ````
 
 ````src/renderer/src/features/milestones/milestone-queries.ts
-import { queryOptions, useMutation, useQueryClient } from '@tanstack/react-query'
+import { queryOptions, useMutation, useMutationState, useQueryClient } from '@tanstack/react-query'
 import type {
   CreateMilestoneInput,
   DeleteMilestoneInput,
   MilestoneDeletionSummary,
   MilestoneDto,
   RenameMilestoneInput,
-  ReorderMilestonesInput
+  ReorderMilestonesInput,
+  SetMilestoneFavoriteInput
 } from '../../../../shared/contracts/milestones'
 import { unwrapIpc } from '../../lib/ipc'
 import { taskKeys } from '../tasks/task-queries'
@@ -28145,6 +29225,7 @@ export const milestoneKeys = {
 export const milestoneMutationKeys = {
   create: [...milestoneKeys.all, 'create'] as const,
   rename: [...milestoneKeys.all, 'rename'] as const,
+  setFavorite: [...milestoneKeys.all, 'set-favorite'] as const,
   delete: [...milestoneKeys.all, 'delete'] as const,
   reorder: [...milestoneKeys.all, 'reorder'] as const
 }
@@ -28154,6 +29235,30 @@ export const milestoneListQueryOptions = queryOptions({
   queryKey: milestoneKeys.list(),
   queryFn: () => unwrapIpc(window.gtd.milestones.list())
 })
+
+export function usePendingMilestoneIds(): ReadonlySet<string> {
+  const ids = useMutationState({
+    filters: { status: 'pending', predicate: (mutation) => mutation.options.mutationKey?.[0] === milestoneKeys.all[0] },
+    select: (mutation) => {
+      const value = mutation.state.variables
+      return typeof value === 'object' && value !== null && 'id' in value && typeof value.id === 'string' ? value.id : null
+    }
+  })
+  return new Set(ids.filter((id): id is string => id !== null))
+}
+
+export function useSetMilestoneFavoriteMutation() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationKey: milestoneMutationKeys.setFavorite,
+    mutationFn: (input: SetMilestoneFavoriteInput) =>
+      taskSaveQueue.run(`milestone:${input.id}`, () => unwrapIpc(window.gtd.milestones.setFavorite(input))),
+    onSuccess: (saved: MilestoneDto) => {
+      queryClient.setQueryData<MilestoneDto[]>(milestoneKeys.list(), (items) => items?.map((item) => item.id === saved.id ? saved : item))
+      void queryClient.invalidateQueries({ queryKey: milestoneKeys.list() })
+    }
+  })
+}
 
 export function useCreateMilestoneMutation() {
   const queryClient = useQueryClient()
@@ -28222,6 +29327,103 @@ export function useReorderMilestonesMutation() {
     },
     onError: () => queryClient.invalidateQueries({ queryKey: milestoneKeys.list() })
   })
+}
+
+````
+
+````src/renderer/src/features/summary/CompactSplitHandle.tsx
+import { useEffect, useRef, type KeyboardEvent, type PointerEvent } from 'react'
+import { Box } from '@mui/material'
+import { vscodeColors } from '../../theme'
+
+type Drag = { pointerId: number; initial: number; element: HTMLDivElement }
+
+// Todayの占有率を変更する。寸法は操作ごとに測定し、ウィンドウの高さ変更にも追従する。
+export function CompactSplitHandle({ value, onChange }: { value: number; onChange: (value: number) => void }) {
+  const dragRef = useRef<Drag | null>(null)
+  const changeRef = useRef(onChange)
+  changeRef.current = onChange
+
+  const clamp = (next: number, element: HTMLElement) => {
+    const height = element.parentElement?.getBoundingClientRect().height ?? 0
+    const minimum = height > 0 ? Math.min(45, Math.max(10, 64 / height * 100)) : 10
+    return Math.min(100 - minimum, Math.max(minimum, next))
+  }
+  const finish = (cancel: boolean) => {
+    const drag = dragRef.current
+    if (!drag) return
+    dragRef.current = null
+    if (cancel) changeRef.current(drag.initial)
+    if (drag.element.hasPointerCapture(drag.pointerId)) drag.element.releasePointerCapture(drag.pointerId)
+  }
+  useEffect(() => () => {
+    const drag = dragRef.current
+    dragRef.current = null
+    if (drag?.element.hasPointerCapture(drag.pointerId)) drag.element.releasePointerCapture(drag.pointerId)
+  }, [])
+
+  const move = (event: PointerEvent<HTMLDivElement>) => {
+    const drag = dragRef.current
+    if (!drag || drag.pointerId !== event.pointerId) return
+    const rect = event.currentTarget.parentElement?.getBoundingClientRect()
+    if (!rect || rect.height <= 0) return
+    onChange(clamp((event.clientY - rect.top) / rect.height * 100, event.currentTarget))
+  }
+  const keyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    if (event.key === 'Escape' && dragRef.current) {
+      event.preventDefault()
+      event.stopPropagation()
+      finish(true)
+      return
+    }
+    if (dragRef.current) return
+    const step = event.shiftKey ? 10 : 2
+    const next = event.key === 'ArrowUp' ? value - step : event.key === 'ArrowDown' ? value + step : event.key === 'Home' ? 0 : event.key === 'End' ? 100 : null
+    if (next === null) return
+    event.preventDefault()
+    event.stopPropagation()
+    onChange(clamp(next, event.currentTarget))
+  }
+
+  return (
+    <Box
+      role="separator"
+      aria-label="TodayとTomorrowの高さを変更"
+      aria-orientation="horizontal"
+      aria-valuemin={0}
+      aria-valuemax={100}
+      aria-valuenow={Math.round(value)}
+      aria-valuetext={`Today ${Math.round(value)}%、Tomorrow ${Math.round(100 - value)}%`}
+      tabIndex={0}
+      data-testid="compact-height-resizer"
+      onPointerDown={(event: PointerEvent<HTMLDivElement>) => {
+        if (event.button !== 0 || dragRef.current) return
+        event.preventDefault()
+        event.stopPropagation()
+        const element = event.currentTarget
+        element.focus()
+        element.setPointerCapture(event.pointerId)
+        dragRef.current = { pointerId: event.pointerId, initial: value, element }
+      }}
+      onPointerMove={move}
+      onPointerUp={(event: PointerEvent<HTMLDivElement>) => {
+        if (dragRef.current?.pointerId !== event.pointerId) return
+        move(event)
+        finish(false)
+      }}
+      onPointerCancel={() => finish(true)}
+      onLostPointerCapture={() => finish(true)}
+      onKeyDown={keyDown}
+      onDoubleClick={() => onChange(50)}
+      sx={{
+        position: 'absolute', left: 0, right: 0, top: `calc(${value}% - 4px)`, height: 8,
+        zIndex: 2, cursor: 'row-resize', touchAction: 'none', userSelect: 'none',
+        '&::after': { content: '""', position: 'absolute', left: 0, right: 0, top: 3, height: 2, bgcolor: 'transparent' },
+        '&:hover::after, &:focus-visible::after': { bgcolor: vscodeColors.focusBorder },
+        '&:focus-visible': { outline: `1px solid ${vscodeColors.focusBorder}`, outlineOffset: -1 }
+      }}
+    />
+  )
 }
 
 ````
@@ -28415,6 +29617,331 @@ export const summaryQueryOptions = (day: string) =>
     // 画面へ戻った時は必ず取り直す（他の画面での期限・完了・削除などの変更を反映する）
     refetchOnMount: 'always'
   })
+
+````
+
+````src/renderer/src/features/summary/use-day-task-drag.tsx
+import { useEffect, useRef, useState, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent } from 'react'
+import { createPortal } from 'react-dom'
+import { Box } from '@mui/material'
+import { TASK_BULK_MAX, type TaskDto } from '../../../../shared/contracts/tasks'
+import { useDraftGuard } from '../drafts/DraftGuard'
+import { useSetTasksDayMutation } from '../tasks/task-queries'
+import { EMPTY_SELECTION, pruneSelection, selectOnly, type TaskSelection } from '../tasks/selection'
+
+type Day = 'today' | 'tomorrow'
+export type DayDragRow = { task: TaskDto; section: string }
+
+export function useDayTaskDrag(options: {
+  enabled: boolean
+  rows: readonly DayDragRow[]
+  pendingIds: ReadonlySet<string>
+  onMoved: (day: Day) => void
+  onAnnounce: (message: string) => void
+}) {
+  const containerRef = useRef<HTMLDivElement>(null)
+  const [selection, setSelection] = useState<TaskSelection>(EMPTY_SELECTION)
+  const selectionRef = useRef(selection)
+  const [over, setOver] = useState<Day | null>(null)
+  const [ghost, setGhost] = useState<{ x: number; y: number; count: number; moving: boolean } | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const optionsRef = useRef(options)
+  optionsRef.current = options
+  const cleanupRef = useRef<(() => void) | null>(null)
+  const savingRef = useRef(false)
+  const blankPressCleanupRef = useRef<(() => void) | null>(null)
+  const suppressBlankClickRef = useRef(false)
+  const mutation = useSetTasksDayMutation()
+  const { confirmLeave } = useDraftGuard()
+  const changeSelection = (next: TaskSelection) => {
+    selectionRef.current = next
+    setSelection(next)
+  }
+  useEffect(() => {
+    const visible = new Set(options.rows.map((row) => row.task.id))
+    const next = pruneSelection(selectionRef.current, visible)
+    if (next !== selectionRef.current) changeSelection(next)
+  }, [options.rows])
+  useEffect(() => () => {
+    blankPressCleanupRef.current?.()
+    cleanupRef.current?.()
+  }, [])
+
+  const start = (task: TaskDto, point: { x: number; y: number }) => {
+    const opts = optionsRef.current
+    if (!opts.enabled || savingRef.current || opts.pendingIds.has(task.id) || task.doneOn !== null) return
+    cleanupRef.current?.()
+    const initial = selectionRef.current
+    const moving = initial.ids.has(task.id)
+    const rows = opts.rows
+    const origin = rows.find((row) => row.task.id === task.id)
+    if (!origin) return
+    const order = rows.filter((row) => row.section === origin.section).map((row) => row.task.id)
+    const from = order.indexOf(task.id)
+    const ids = moving ? rows.filter((row) => initial.ids.has(row.task.id)).map((row) => row.task.id) : [task.id]
+    if (ids.length > TASK_BULK_MAX || ids.some((id) => opts.pendingIds.has(id))) {
+      setError(`保存中のタスクが含まれるか、選択件数が上限（${TASK_BULK_MAX}件）を超えています。`)
+      return
+    }
+    if (!moving) changeSelection(selectOnly(task.id))
+    setError(null)
+    let x = point.x
+    let y = point.y
+    let frame = 0
+    let alive = true
+    let target: Day | null = null
+    const previousSelect = document.body.style.userSelect
+    document.body.style.userSelect = 'none'
+    const hit = () => document.elementFromPoint(x, y)
+    const update = () => {
+      const element = hit()
+      if (moving) {
+        const candidate = element?.closest<HTMLElement>('[data-day-drop]')
+        const day = candidate?.dataset.dayDrop
+        target = candidate && containerRef.current?.contains(candidate) && (day === 'today' || day === 'tomorrow') ? day : null
+        setOver(target)
+      } else {
+        const row = element?.closest<HTMLElement>('[data-task-id], [data-task-row-controls]')
+        const id = row?.dataset.taskId ?? row?.dataset.taskRowControls
+        const to = id ? order.indexOf(id) : -1
+        if (to >= 0) {
+          const start = Math.min(from, to)
+          const end = Math.max(from, to)
+          changeSelection({ ids: new Set(order.slice(start, end + 1)), anchorId: task.id })
+        }
+      }
+      setGhost({ x, y, count: moving ? ids.length : selectionRef.current.ids.size, moving })
+    }
+    const tick = () => {
+      if (!alive) return
+      const container = containerRef.current
+      if (container) {
+        const rect = container.getBoundingClientRect()
+        if (x >= rect.left && x <= rect.right && y >= rect.top - 24 && y <= rect.bottom + 24) {
+          const delta = y < rect.top + 28 ? -10 : y > rect.bottom - 28 ? 10 : 0
+          if (delta) { container.scrollTop += delta; update() }
+        }
+      }
+      frame = requestAnimationFrame(tick)
+    }
+    const cleanup = () => {
+      alive = false
+      cancelAnimationFrame(frame)
+      window.removeEventListener('pointermove', onMove)
+      window.removeEventListener('pointerup', onUp)
+      window.removeEventListener('pointercancel', cancel)
+      window.removeEventListener('keydown', onKey, true)
+      window.removeEventListener('blur', cancel)
+      document.body.style.userSelect = previousSelect
+      cleanupRef.current = null
+      setGhost(null)
+      setOver(null)
+    }
+    const cancel = () => {
+      cleanup()
+      if (!moving) changeSelection(initial)
+    }
+    const onMove = (event: PointerEvent) => {
+      x = event.clientX; y = event.clientY
+      event.preventDefault()
+      update()
+    }
+    const commit = async (day: Day) => {
+      savingRef.current = true
+      try {
+        if (!(await confirmLeave())) return
+        await mutation.mutateAsync({ ids, day })
+        changeSelection(EMPTY_SELECTION)
+        optionsRef.current.onMoved(day)
+        optionsRef.current.onAnnounce(`${ids.length}件の期限を${day === 'today' ? '今日' : '明日'}に変更しました`)
+      } catch (cause) {
+        setError(cause instanceof Error ? cause.message : '期限を変更できませんでした')
+      } finally { savingRef.current = false }
+    }
+    const onUp = (event: PointerEvent) => {
+      x = event.clientX; y = event.clientY
+      update()
+      const destination = target
+      cleanup()
+      if (moving && destination) void commit(destination)
+      else if (!moving) optionsRef.current.onAnnounce(`${selectionRef.current.ids.size}件を選択しました`)
+    }
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return
+      event.preventDefault(); event.stopPropagation()
+      cancel()
+    }
+    cleanupRef.current = cleanup
+    window.addEventListener('pointermove', onMove, { passive: false })
+    window.addEventListener('pointerup', onUp)
+    window.addEventListener('pointercancel', cancel)
+    window.addEventListener('keydown', onKey, true)
+    window.addEventListener('blur', cancel)
+    update()
+    frame = requestAnimationFrame(tick)
+  }
+  const onBlankPointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (!optionsRef.current.enabled || savingRef.current || event.button !== 0 || !event.isPrimary ||
+      event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return
+    const element = event.target instanceof Element ? event.target : null
+    if (!element || element.closest('button, input, textarea, select, a, [role="button"], .MuiCheckbox-root, [data-testid="task-title"], [data-testid="inline-title-editor-row"], [data-testid="inline-title-error"]')) return
+    const row = element.closest<HTMLElement>('[data-task-id], [data-task-row-controls]')
+    if (!row || !containerRef.current?.contains(row)) return
+    const id = row.dataset.taskId ?? row.dataset.taskRowControls
+    if (!id || !selectionRef.current.ids.has(id)) return
+    const task = optionsRef.current.rows.find((item) => item.task.id === id)?.task
+    if (!task || optionsRef.current.pendingIds.has(id)) return
+    // 行の空白を覆う要素のstopPropagationより前に、移動開始を受け付ける。
+    event.preventDefault()
+    event.stopPropagation()
+    blankPressCleanupRef.current?.()
+    suppressBlankClickRef.current = false
+    const x = event.clientX
+    const y = event.clientY
+    const pointerId = event.pointerId
+    const cleanup = () => {
+      window.removeEventListener('pointermove', move)
+      window.removeEventListener('pointerup', release)
+      window.removeEventListener('pointercancel', release)
+      window.removeEventListener('keydown', key)
+      window.removeEventListener('blur', cleanup)
+      blankPressCleanupRef.current = null
+    }
+    const move = (native: PointerEvent) => {
+      if (native.pointerId !== pointerId || Math.hypot(native.clientX - x, native.clientY - y) < 5) return
+      cleanup()
+      suppressBlankClickRef.current = true
+      start(task, { x: native.clientX, y: native.clientY })
+    }
+    const release = (native: PointerEvent) => {
+      if (native.pointerId === pointerId) cleanup()
+    }
+    const key = (native: KeyboardEvent) => { if (native.key === 'Escape') cleanup() }
+    blankPressCleanupRef.current = cleanup
+    window.addEventListener('pointermove', move)
+    window.addEventListener('pointerup', release)
+    window.addEventListener('pointercancel', release)
+    window.addEventListener('keydown', key)
+    window.addEventListener('blur', cleanup)
+  }
+  const onBlankClickCapture = (event: ReactMouseEvent<HTMLDivElement>) => {
+    if (!suppressBlankClickRef.current) return
+    suppressBlankClickRef.current = false
+    event.preventDefault()
+    event.stopPropagation()
+  }
+  const elements = ghost ? createPortal(
+    <Box sx={{ position: 'fixed', left: ghost.x + 12, top: ghost.y + 12, zIndex: 2000, pointerEvents: 'none',
+      bgcolor: '#2b2b2b', color: '#eeeeee', px: 2, py: 1, fontSize: 12, borderRadius: 1 }}>
+      {ghost.count}件 {ghost.moving ? '移動' : '選択'}
+    </Box>, document.body
+  ) : null
+  return { containerRef, selection, changeSelection, start, onBlankPointerDown, onBlankClickCapture, over, error, clearError: () => setError(null), elements }
+}
+
+````
+
+````src/renderer/src/components/CompactTaskRow.tsx
+import type { SyntheticEvent } from 'react'
+import { createPortal } from 'react-dom'
+import { Box, ButtonBase, Checkbox, Typography } from '@mui/material'
+import { MoreHorizontal, Star } from 'lucide-react'
+import { isTaskCompleted } from '../../../shared/contracts/tasks'
+import { vscodeColors } from '../theme'
+import { InlineTitleInput } from '../features/tasks/inline-title-edit'
+import { dueLabelOf } from '../features/tasks/due-format'
+import type { TaskRowProps } from './TaskRow'
+const COMPACT_TASK_ROW_HEIGHT = 28
+const HANDLE_COLUMN_WIDTH = 18
+const taskOptionId = (id: string) => `task-option-${id}`
+
+const stop = (event: SyntheticEvent) => event.stopPropagation()
+const STAR_ON = '#e2c541'
+const titleStyle = {
+  display: 'inline-block', maxWidth: '100%', minWidth: 0, fontSize: 13,
+  px: 0.5, cursor: 'pointer', overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis'
+} as const
+
+export function CompactTaskRow({ parentVisible = true, task, top, listId, controlsLayer, today, actions, selected, active, pending, dimmed, handle,
+  onRowPointerDown, onRowClick, onRowContextMenu, onTitleClick, onTitleDoubleClick, onInlineDone }: TaskRowProps) {
+  const completed = isTaskCompleted(task)
+  const favorite = actions.isFavorite(task)
+  const assignment = actions.assignmentLabel(task)
+  const due = dueLabelOf(task.dueto, today)
+  const withHandle = handle !== undefined
+  const editing = actions.inlineEdit.state?.taskId === task.id
+  const error = editing ? actions.inlineEdit.state?.error : null
+  const opacity = pending || dimmed ? 0.5 : 1
+  // 実表示と操作レイヤーで同じ列を使用し、タスク名の直後に…を配置する。
+  const grid = {
+    display: 'grid', alignItems: 'center', minWidth: 0, width: '100%', height: COMPACT_TASK_ROW_HEIGHT,
+    gridTemplateColumns: `${withHandle ? `${HANDLE_COLUMN_WIDTH}px ` : ''}28px 20px minmax(0, max-content) 20px minmax(0, 1fr)`,
+    boxSizing: 'border-box', pr: 0.5
+  } as const
+  const icon = { width: 20, height: 22, minWidth: 0, color: 'text.secondary', pointerEvents: 'auto', borderRadius: 0.5,
+    '&:hover': { bgcolor: vscodeColors.listHover }, '&.Mui-focusVisible': { outline: `1px solid ${vscodeColors.focusBorder}` } } as const
+  const assignmentStyle = {
+    display: 'none', minWidth: 0, maxWidth: 240, justifySelf: 'end', pl: 2,
+    overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 11, color: 'text.secondary',
+    '@container taskRows (min-width: 420px)': { display: 'block' }
+  } as const
+  const controls = (
+    <Box data-list-id={listId} data-task-row-controls={task.id}
+      onClick={stop} onDoubleClick={stop} onPointerDown={stop} onContextMenu={stop} onFocus={stop} onBlur={stop} onKeyDown={stop}
+      onMouseDown={(event) => {
+        event.stopPropagation()
+        if (!(event.target instanceof HTMLElement && event.target.closest('input, textarea'))) event.preventDefault()
+      }}
+      sx={{ ...grid, position: 'absolute', left: 0, top, pointerEvents: 'none', opacity }}>
+      {withHandle && <Box sx={{ pointerEvents: 'auto', display: 'flex', alignItems: 'center' }}>{handle}</Box>}
+      <span aria-hidden />
+      <ButtonBase tabIndex={-1} aria-label={`「${task.title}」をお気に入り`} aria-pressed={favorite}
+        title={favorite ? 'お気に入りを解除' : 'お気に入りに追加'} data-testid="task-favorite" data-favorite={favorite ? 'true' : 'false'}
+        onClick={() => actions.toggleFavorite(task)} sx={{ ...icon, color: favorite ? STAR_ON : '#9a9a9a' }}>
+        <Star size={14} aria-hidden fill={favorite ? STAR_ON : 'none'} />
+      </ButtonBase>
+      {/* 見えない同一テキストで、行本体と列幅を一致させる。編集欄は同じセルに重ねる。 */}
+      <Box sx={{ minWidth: 0, position: 'relative', display: 'flex', alignItems: 'center' }}>
+        <Typography aria-hidden component="span" noWrap sx={{ ...titleStyle, visibility: 'hidden' }}>{task.title}</Typography>
+        {editing && <Box data-testid="inline-title-editor-row" sx={{ position: 'absolute', inset: 0, minWidth: 0, pointerEvents: 'auto' }}>
+          <InlineTitleInput controller={actions.inlineEdit} taskTitle={task.title} onDone={onInlineDone} />
+        </Box>}
+        {error && <Typography id="inline-title-error" role="alert" data-testid="inline-title-error"
+          sx={{ position: 'absolute', top: 24, left: 0, zIndex: 4, bgcolor: 'background.paper', color: 'error.light', fontSize: 11, px: 1, pointerEvents: 'auto' }}>{error}</Typography>}
+      </Box>
+      <ButtonBase tabIndex={-1} aria-haspopup="menu" aria-label={`「${task.title}」のメニュー`} title="メニュー"
+        data-testid="task-row-menu-button" data-row-menu-task-id={task.id}
+        onClick={(event) => actions.openMenu(task, event.currentTarget, 'Compact')} sx={icon}>
+        <MoreHorizontal size={14} aria-hidden />
+      </ButtonBase>
+      <Box aria-hidden sx={{ ...assignmentStyle, visibility: 'hidden' }}>{parentVisible ? assignment : null}</Box>
+    </Box>
+  )
+  return <>
+    <Box id={taskOptionId(task.id)} role="option" aria-selected={selected} aria-busy={pending || undefined}
+      aria-label={`${task.title}、${completed ? '完了' : '未完了'}${favorite ? '、お気に入り' : ''}${due ? `、${due.description}` : ''}${assignment ? `、${assignment}` : ''}`}
+      data-task-id={task.id} data-task-row="" data-task-row-mode="Compact" data-pending={pending || undefined}
+      onPointerDown={onRowPointerDown} onClick={onRowClick} onContextMenu={onRowContextMenu}
+      sx={{ ...grid, position: 'absolute', left: 0, top: 0, transform: `translateY(${top}px)`, opacity,
+        bgcolor: selected ? vscodeColors.listActiveSelection : 'transparent', borderBottom: `1px solid ${vscodeColors.border}40`,
+        outline: active ? `1px solid ${vscodeColors.focusBorder}` : 'none', outlineOffset: -1,
+        '&:hover': { bgcolor: selected ? vscodeColors.listActiveSelection : vscodeColors.listHover } }}>
+      {withHandle && <span aria-hidden />}
+      <Box aria-hidden onClick={stop} onPointerDown={stop} onDoubleClick={stop} sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <Checkbox size="small" checked={completed} disabled={pending} onChange={() => actions.toggleCompleted(task)} tabIndex={-1}
+          slotProps={{ input: { 'aria-hidden': true, tabIndex: -1, 'data-testid': 'task-complete-checkbox' } as Record<string, unknown> }} sx={{ p: 0 }} />
+      </Box>
+      <span aria-hidden />
+      <Typography component="span" noWrap data-testid="task-title" title={task.title}
+        onClick={onTitleClick} onDoubleClick={onTitleDoubleClick}
+        sx={{ ...titleStyle, visibility: editing ? 'hidden' : 'visible', textDecoration: completed ? 'line-through' : 'none',
+          color: completed ? 'text.secondary' : 'text.primary', '&:hover': { textDecoration: 'underline' } }}>{task.title}</Typography>
+      <span aria-hidden />
+      <Box component="span" aria-hidden title={assignment ?? undefined} data-testid="task-assignment" sx={assignmentStyle}>{parentVisible ? assignment : null}</Box>
+    </Box>
+    {controlsLayer && createPortal(controls, controlsLayer)}
+  </>
+}
 
 ````
 
@@ -28743,6 +30270,138 @@ export function Page({
 
 ````
 
+````src/renderer/src/components/SectionRow.tsx
+import type { ReactNode } from 'react'
+import { Box, ButtonBase, Typography } from '@mui/material'
+import type { SxProps, Theme } from '@mui/material/styles'
+import { ChevronDown, ChevronRight, Minus, type LucideIcon } from 'lucide-react'
+
+export type SectionRowProps = {
+  /** 0: section、1: subsection、2: subsubsection。非負整数。 */
+  level?: number
+  title: ReactNode
+  /** 選択状態と選択操作。未指定なら従来の見出し表示。 */
+  selected?: boolean
+  onSelect?: () => void
+  /** 行全体のクリックでも展開状態を切り替える。既定false。 */
+  toggleOnRowClick?: boolean
+  /** タイトル前の個別アイコン。省略時はMinus。 */
+  icon?: LucideIcon
+  /** 個別の操作付きアイコンを指定する場合。iconより優先する。 */
+  iconElement?: ReactNode
+  /** 表示状態は呼び出し側で管理する。省略時は展開状態。 */
+  expanded?: boolean
+  /** 未指定の場合、展開アイコンは表示するが操作不可。 */
+  onExpandedChange?: (expanded: boolean) => void
+  /** 折りたたむ内容のDOM ID。内容自体はSectionRowの外側で描画する。 */
+  controlsId?: string
+  /** タイトルのDOM ID。セクションのaria-labelledbyに使用可能。 */
+  titleId?: string
+  /** titleが文字列以外の場合などの読み上げ用セクション名。 */
+  sectionLabel?: string
+  /** 高さを固定する場合のみ指定する。未指定では内容に合わせる。 */
+  height?: number | string
+  sx?: SxProps<Theme>
+}
+
+/** セクションの見出しのみを描画する。配下の表示・非表示や状態の保存は呼び出し側の責務。 */
+export function SectionRow({
+  level = 0,
+  title,
+  selected = false,
+  onSelect,
+  toggleOnRowClick = false,
+  icon: Icon = Minus,
+  iconElement,
+  expanded = true,
+  onExpandedChange,
+  controlsId,
+  titleId,
+  sectionLabel,
+  height,
+  sx = []
+}: SectionRowProps) {
+  // TypeScriptのnumberには実数も渡せるため、有限の非負整数に正規化する。
+  const normalizedLevel = Number.isFinite(level) ? Math.max(0, Math.floor(level)) : 0
+  const leftMargin = normalizedLevel * 32
+  const fontSize = Math.max(10, 16 - normalizedLevel * 2)
+  const shade = Math.max(0, 43 - normalizedLevel * 4)
+  const backgroundColor = `rgb(${shade}, ${shade}, ${shade})`
+  const headingTag = `h${Math.min(6, 2 + normalizedLevel)}` as 'h2' | 'h3' | 'h4' | 'h5' | 'h6'
+  const Chevron = expanded ? ChevronDown : ChevronRight
+  const label = sectionLabel ?? (typeof title === 'string' ? title : 'セクション')
+
+  return (
+    <Box
+      data-testid="section-row"
+      data-selected={selected ? 'true' : 'false'}
+      onClick={(event) => {
+        const target = event.target instanceof Element ? event.target : null
+        if (!target) return
+        // 開閉ボタンは自身の処理に任せ、バブリングによる二重切り替えを防ぐ。
+        if (target.closest('[data-testid="section-row-toggle"]')) return
+        if (target.closest('input, textarea, select, a')) return
+        const titleButton = target.closest('[data-testid="section-row-select"]')
+        if (target.closest('button') && !titleButton) return
+        // タイトルボタンではonSelectが既に実行される。それ以外の行内クリックではここで選択する。
+        if (!titleButton) onSelect?.()
+        if (toggleOnRowClick) onExpandedChange?.(!expanded)
+      }}
+      data-level={normalizedLevel}
+      data-expanded={expanded ? 'true' : 'false'}
+      sx={[
+        {
+          display: 'flex', alignItems: 'center', minWidth: 0, flexShrink: 0,
+          height, boxSizing: 'border-box', ml: `${leftMargin}px`, px: '12px', gap: '8px',
+          bgcolor: backgroundColor, color: '#eeeeee',
+          boxShadow: selected ? 'inset 0 -1.5px 0 #00ff00' : undefined,
+          fontSize: `${fontSize}px`, fontWeight: 800,
+          cursor: toggleOnRowClick && onExpandedChange ? 'pointer' : undefined
+        },
+        ...(Array.isArray(sx) ? sx : [sx])
+      ]}
+    >
+      <ButtonBase
+        type="button"
+        aria-label={`${label}を${expanded ? '折りたたむ' : '展開する'}`}
+        aria-expanded={expanded}
+        aria-controls={controlsId}
+        disabled={onExpandedChange === undefined}
+        onClick={() => onExpandedChange?.(!expanded)}
+        data-testid="section-row-toggle"
+        sx={{
+          width: 24, height: 24, flexShrink: 0, color: 'inherit',
+          '&:hover': { bgcolor: 'rgba(255,255,255,0.08)' },
+          '&.Mui-focusVisible': { outline: '2px solid currentColor', outlineOffset: -2 }
+        }}
+      >
+        <Chevron size={18} aria-hidden="true" />
+      </ButtonBase>
+      {iconElement ?? <Icon size={18} aria-hidden="true" style={{ flexShrink: 0 }} />}
+      <Typography
+        component={headingTag}
+        id={titleId}
+        noWrap
+        data-testid="section-row-title"
+        title={typeof title === 'string' ? title : undefined}
+        sx={{ m: 0, minWidth: 0, fontSize: 'inherit', fontWeight: 'inherit', lineHeight: 1.5, color: 'inherit' }}
+      >
+        {onSelect ? (
+          <ButtonBase type="button" onClick={onSelect} aria-pressed={selected}
+            aria-label={`${label}を選択`} data-testid="section-row-select"
+            sx={{ display: 'block', maxWidth: '100%', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+              textAlign: 'left', fontSize: 'inherit', fontWeight: 'inherit', lineHeight: 'inherit', color: 'inherit',
+              '&.Mui-focusVisible': { outline: '1px solid currentColor', outlineOffset: -1 } }}>
+            {title}
+          </ButtonBase>
+        ) : title}
+      </Typography>
+    </Box>
+  )
+}
+
+````
+
 ````src/renderer/src/components/ShellSlots.tsx
 import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
@@ -28787,6 +30446,419 @@ export function ShellSlot({ name, children }: { name: ShellSlotName; children: R
 
 ````
 
+````src/renderer/src/components/TaskRow.tsx
+import type { MouseEvent as ReactMouseEvent, PointerEvent as ReactPointerEvent, ReactNode, SyntheticEvent } from 'react'
+import { createPortal } from 'react-dom'
+import { Box, ButtonBase, Checkbox, Typography } from '@mui/material'
+import { AlertTriangle, CalendarPlus, Link2, MoreHorizontal, Star } from 'lucide-react'
+import { isTaskCompleted, type TaskDto } from '../../../shared/contracts/tasks'
+import { vscodeColors } from '../theme'
+import { dueLabelOf } from '../features/tasks/due-format'
+import { InlineTitleInput, type InlineTitleEditController } from '../features/tasks/inline-title-edit'
+import { CompactTaskRow } from './CompactTaskRow'
+
+// タスクの行（Inbox の一覧・プロジェクトのマイルストンカード・Summary Review のセクションで共通）。
+// 2行構成:
+// - 1行目（左寄せ）: 完了チェックボックス・タスク名
+// - 2行目（左寄せ）: お気に入りの星・期限（未設定なら期限設定アイコン）・紐付けアイコン・「…」メニュー・所属（{プロジェクト名} / {マイルストン名}）
+//   星のアイコンの左端は、1行目のタスク名の文字の左端と同じ位置（TEXT_INSET。ハンドルの有無によらず、タスク名の列の左端から同じ距離）。
+//   所属は残りの幅を使い、1行で右端を「…」で省略する（全文はツールチップ）。所属がなければ（Inbox）何も出さない。
+// 作成日時は表示しない（データ・並べ替えの条件は変えない）。
+//
+// アクセシビリティの構造:
+// - 行の本体は一覧（role="listbox"）の option。option の中に操作要素を置かない（チェックボックスはマウス用の見た目で、読み上げ・Tab 移動の対象外。
+//   キーボードは一覧の Space）。
+// - 星・期限・紐付け・「…」・並べ替えのハンドル・インライン編集の入力欄は、同じ部品から一覧の外側の重ね合わせ層（controlsLayer）へ
+//   ポータルで描画する（読み上げでは option と別のボタン。Tab 移動の対象は増やさない。キーボードは一覧のショートカット）。
+// - 重ね合わせ層の操作（クリック・押下・フォーカス）は行の選択・ドラッグ・一覧のフォーカス処理へ伝えない。
+//
+// 画面ごとの違い（取得条件・選択集合・セクション・カード構成）は持たない。操作は TaskRowActions（呼び出し側の共通フック）を呼ぶだけ。
+export const TASK_ROW_HEIGHT = 52
+export const COMPACT_TASK_ROW_HEIGHT = 28
+export const taskRowHeight = (mode: TaskRowMode = 'Standard') => mode === 'Compact' ? COMPACT_TASK_ROW_HEIGHT : TASK_ROW_HEIGHT
+// 1行目（チェックボックス・タスク名）と2行目（操作）の位置
+const LINE1_HEIGHT = 28
+const LINE2_TOP = 26
+const LINE2_HEIGHT = 24
+// 並べ替えのハンドルの列（プロジェクトのカードだけ）とチェックボックスの列
+export const HANDLE_COLUMN_WIDTH = 18
+const CHECK_COLUMN_WIDTH = 32
+// タスク名の列の左端から、タスク名の文字・2行目の星のアイコンの左端までの距離（1行目と2行目で共通）
+const TEXT_INSET = 4
+// 2行目の操作ボタンの大きさ。最小のカード幅（144px・並べ替えのハンドルあり）でも4つの操作が収まる大きさにする
+const ICON_BUTTON = 20
+const LINE2_RIGHT = 2
+const STAR_ON = '#e2c541'
+// 白抜きの星（未設定）。背景（#1e1e1e・#252526）に対して操作できると分かるコントラスト（3:1以上）を保つ淡い灰色
+const STAR_OFF = '#9a9a9a'
+const OVERDUE = '#f48771'
+
+export const taskOptionId = (taskId: string) => `task-option-${taskId}`
+
+// 行の操作（3画面で共通。useTaskRowActions が作る）
+export type TaskRowActions = {
+  // お気に入りの表示（保存待ち・保存中なら押した後の状態）
+  isFavorite: (task: TaskDto) => boolean
+  toggleCompleted: (task: TaskDto) => void
+  toggleFavorite: (task: TaskDto) => void
+  openDue: (task: TaskDto, anchor: HTMLElement) => void
+  openAssign: (task: TaskDto, anchor: HTMLElement) => void
+  openMenu: (task: TaskDto, anchor: HTMLElement, mode?: TaskRowMode) => void
+  openEditor: (task: TaskDto, anchor: HTMLElement) => void
+  // 現在の所属（「{プロジェクト名} / {マイルストン名}」）。所属がない（Inbox）・名前を取得できない時は null
+  assignmentLabel: (task: TaskDto) => string | null
+  inlineEdit: InlineTitleEditController
+}
+
+// 重ね合わせ層の操作を、行（option）・一覧へ伝えない
+const stop = (event: SyntheticEvent) => event.stopPropagation()
+
+export type TaskRowMode = 'Standard' | 'Compact'
+export type TaskRowProps = {
+  mode?: TaskRowMode
+  /** 所属するプロジェクト／マイルストン名の表示。既定はtrue。 */
+  parentVisible?: boolean
+  task: TaskDto
+  // 行の上端（仮想リスト内の位置）
+  top: number
+  // 一覧（listbox）の DOM の id（操作の後に一覧へフォーカスを戻すため）
+  listId: string
+  controlsLayer: HTMLElement | null
+  // ローカルの今日（"YYYY-MM-DD"。期限の表示）
+  today: string
+  actions: TaskRowActions
+  selected: boolean
+  // キーボードの現在行（枠線で示す）
+  active: boolean
+  // 保存中（薄く表示する）
+  pending: boolean
+  // 並べ替えのドラッグ中（薄く表示する）
+  dimmed: boolean
+  // 並べ替えのハンドル（プロジェクトのカード。省略時はハンドルの列なし）
+  handle?: ReactNode
+  onRowPointerDown?: (event: ReactPointerEvent<HTMLElement>) => void
+  onRowClick: (event: ReactMouseEvent<HTMLElement>) => void
+  onRowContextMenu?: (event: ReactMouseEvent<HTMLElement>) => void
+  // タスク名のクリック（シングル: 編集モーダル、ダブル: インライン編集。判定は一覧が行う）
+  onTitleClick: (event: ReactMouseEvent<HTMLElement>) => void
+  onTitleDoubleClick: (event: ReactMouseEvent<HTMLElement>) => void
+  // インライン編集を Enter・Esc で閉じた時（一覧へフォーカスを戻す）
+  onInlineDone: () => void
+}
+
+export function TaskRow(props: TaskRowProps) {
+  const {
+  parentVisible = true,
+  task,
+  top,
+  listId,
+  controlsLayer,
+  today,
+  actions,
+  selected,
+  active,
+  pending,
+  dimmed,
+  handle,
+  onRowPointerDown,
+  onRowClick,
+  onRowContextMenu,
+  onTitleClick,
+  onTitleDoubleClick,
+  onInlineDone
+  } = props
+  if (props.mode === 'Compact') return <CompactTaskRow {...props} />
+  const completed = isTaskCompleted(task)
+  const favorite = actions.isFavorite(task)
+  const due = dueLabelOf(task.dueto, today)
+  const withHandle = handle !== undefined
+  const leftEdge = (withHandle ? HANDLE_COLUMN_WIDTH : 0) + CHECK_COLUMN_WIDTH
+  const editing = actions.inlineEdit.state?.taskId === task.id
+  const editError = editing ? actions.inlineEdit.state?.error ?? null : null
+  const assignment = actions.assignmentLabel(task)
+  const assignmentText = assignment ?? 'Inbox'
+  const opacity = pending || dimmed ? 0.5 : 1
+  const titleQuoted = `「${task.title}」`
+
+  const iconButton = {
+    width: ICON_BUTTON,
+    height: ICON_BUTTON,
+    flexShrink: 0,
+    borderRadius: 1,
+    color: 'text.secondary',
+    pointerEvents: 'auto',
+    '&:hover': { bgcolor: vscodeColors.listHover, color: 'text.primary' },
+    '&.Mui-disabled': { opacity: 0.4 }
+  } as const
+
+  const controls = (
+    <Box
+      data-list-id={listId}
+      data-task-row-controls={task.id}
+      onClick={stop}
+      onDoubleClick={stop}
+      onPointerDown={stop}
+      onMouseDown={(event) => {
+        event.stopPropagation()
+        // ボタンを押してもフォーカスを一覧から移さない（キーボード操作を続けられる。閉じた後の戻り先も一覧になる）。入力欄は除く
+        if (!(event.target instanceof HTMLElement && event.target.closest('input, textarea'))) event.preventDefault()
+      }}
+      onContextMenu={stop}
+      onFocus={stop}
+      onBlur={stop}
+      onKeyDown={stop}
+      sx={{ position: 'absolute', left: 0, width: '100%', top, height: TASK_ROW_HEIGHT, pointerEvents: 'none', opacity }}
+    >
+      {withHandle && (
+        <Box sx={{ position: 'absolute', left: 0, top: 0, width: HANDLE_COLUMN_WIDTH, height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'auto' }}>
+          {handle}
+        </Box>
+      )}
+      {/* 2行目（左寄せ）: 星・期限・紐付け・…・所属。左端はタスク名の列の左端 */}
+      <Box
+        sx={{
+          position: 'absolute',
+          top: LINE2_TOP,
+          height: LINE2_HEIGHT,
+          left: leftEdge,
+          right: LINE2_RIGHT,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'flex-start',
+          gap: '2px',
+          minWidth: 0
+        }}
+      >
+        <ButtonBase
+          tabIndex={-1}
+          aria-pressed={favorite}
+          aria-label={`${titleQuoted}をお気に入り`}
+          title={favorite ? 'お気に入り（押すと解除）' : 'お気に入りに追加'}
+          data-testid="task-favorite"
+          data-favorite={favorite ? 'true' : 'false'}
+          onClick={() => actions.toggleFavorite(task)}
+          // アイコンの左端をタスク名の文字の左端に揃える（ボタンの左の余白 = TEXT_INSET）
+          sx={{ ...iconButton, justifyContent: 'flex-start', pl: `${TEXT_INSET}px`, color: favorite ? STAR_ON : STAR_OFF, '&:hover': { bgcolor: vscodeColors.listHover, color: favorite ? STAR_ON : 'text.primary' } }}
+        >
+          <Star size={14} aria-hidden fill={favorite ? STAR_ON : 'none'} strokeWidth={favorite ? 1.5 : 1.75} />
+        </ButtonBase>
+        {due ? (
+          <ButtonBase
+            tabIndex={-1}
+            aria-haspopup="menu"
+            aria-label={`${titleQuoted}の${due.description}。期限を変更`}
+            title={`${due.description}（押すと変更）`}
+            data-testid="task-due"
+            data-due={task.dueto ?? undefined}
+            data-due-kind={due.kind}
+            disabled={pending}
+            onClick={(event) => actions.openDue(task, event.currentTarget)}
+            sx={{
+              ...iconButton,
+              width: 'auto',
+              flexShrink: 1,
+              minWidth: 0,
+              height: 20,
+              px: 0.75,
+              gap: 0.5,
+              fontSize: 11,
+              lineHeight: '16px',
+              fontVariantNumeric: 'tabular-nums',
+              border: `1px solid ${due.kind === 'overdue' ? OVERDUE : vscodeColors.border}`,
+              color: due.kind === 'overdue' ? OVERDUE : due.kind === 'today' ? 'text.primary' : 'text.secondary'
+            }}
+          >
+            {due.kind === 'overdue' && <AlertTriangle size={11} aria-hidden style={{ flexShrink: 0 }} />}
+            <Box component="span" sx={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {due.text}
+            </Box>
+          </ButtonBase>
+        ) : (
+          <ButtonBase
+            tabIndex={-1}
+            aria-haspopup="menu"
+            aria-label={`${titleQuoted}の期限を設定`}
+            title="期限を設定"
+            data-testid="task-due-set"
+            disabled={pending}
+            onClick={(event) => actions.openDue(task, event.currentTarget)}
+            sx={iconButton}
+          >
+            <CalendarPlus size={14} aria-hidden />
+          </ButtonBase>
+        )}
+        <ButtonBase
+          tabIndex={-1}
+          aria-haspopup="menu"
+          aria-label={`${titleQuoted}の紐付け（現在: ${assignmentText}）`}
+          title={`紐付け（現在: ${assignmentText}）`}
+          data-testid="task-assign"
+          data-assign-task-id={task.id}
+          disabled={pending}
+          onClick={(event) => actions.openAssign(task, event.currentTarget)}
+          sx={iconButton}
+        >
+          <Link2 size={14} aria-hidden />
+        </ButtonBase>
+        <ButtonBase
+          tabIndex={-1}
+          aria-haspopup="menu"
+          aria-label={`${titleQuoted}のメニュー`}
+          title="メニュー"
+          data-testid="task-row-menu-button"
+          data-row-menu-task-id={task.id}
+          onClick={(event) => actions.openMenu(task, event.currentTarget)}
+          sx={iconButton}
+        >
+          <MoreHorizontal size={14} aria-hidden />
+        </ButtonBase>
+        {parentVisible && assignment && (
+          // 所属（読み上げは行の名前に含めるため、ここは読み上げない）。操作の領域を先に確保し、残りの幅で省略表示する
+          <Box
+            component="span"
+            aria-hidden
+            title={assignment}
+            data-testid="task-assignment"
+            sx={{
+              flex: '0 1000 auto',
+              minWidth: 0,
+              ml: 0.5,
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+              fontSize: 11,
+              color: 'text.secondary',
+              pointerEvents: 'auto'
+            }}
+          >
+            {assignment}
+          </Box>
+        )}
+      </Box>
+      {/* インライン編集（タスク名の位置に重ねる。状態は画面単位で持ち、一覧は編集中の行を常に描画する） */}
+      {editing && (
+        <Box
+          data-testid="inline-title-editor-row"
+          sx={{ position: 'absolute', top: 1, left: leftEdge, right: 4, height: LINE1_HEIGHT - 2, display: 'flex', alignItems: 'center', pointerEvents: 'auto', zIndex: 1 }}
+        >
+          <InlineTitleInput controller={actions.inlineEdit} taskTitle={task.title} onDone={onInlineDone} />
+        </Box>
+      )}
+      {editError && (
+        <Typography
+          id="inline-title-error"
+          role="alert"
+          data-testid="inline-title-error"
+          sx={{
+            position: 'absolute',
+            top: LINE1_HEIGHT - 2,
+            left: leftEdge + 4,
+            zIndex: 2,
+            px: 1,
+            py: 0.25,
+            fontSize: 11,
+            color: OVERDUE,
+            bgcolor: vscodeColors.sideBarBackground,
+            border: `1px solid ${OVERDUE}`,
+            borderRadius: 0.5,
+            pointerEvents: 'auto'
+          }}
+        >
+          {editError}
+        </Typography>
+      )}
+    </Box>
+  )
+
+  return (
+    <>
+      <Box
+        id={taskOptionId(task.id)}
+        role="option"
+        aria-selected={selected}
+        aria-busy={pending || undefined}
+        // 読み上げ名: タスク名・完了状態・お気に入り・期限（チェックボックス・操作ボタンは option の外）
+        aria-label={`${task.title}、${completed ? '完了' : '未完了'}${favorite ? '、お気に入り' : ''}${due ? `、${due.description}` : ''}${assignment ? `、${assignment}` : ''}${pending ? '、保存中' : ''}`}
+        data-task-id={task.id}
+        data-task-row=""
+        data-pending={pending || undefined}
+        onPointerDown={onRowPointerDown}
+        onClick={onRowClick}
+        onContextMenu={onRowContextMenu}
+        sx={{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          width: '100%',
+          height: TASK_ROW_HEIGHT,
+          transform: `translateY(${top}px)`,
+          display: 'grid',
+          gridTemplateColumns: `${withHandle ? `${HANDLE_COLUMN_WIDTH}px ` : ''}${CHECK_COLUMN_WIDTH}px minmax(0, 1fr)`,
+          gridTemplateRows: `${LINE1_HEIGHT}px 1fr`,
+          cursor: 'default',
+          // 保存中・ドラッグ中の行は薄く表示する
+          opacity,
+          bgcolor: selected ? vscodeColors.listActiveSelection : 'transparent',
+          borderBottom: `1px solid ${vscodeColors.border}40`,
+          // キーボードの現在行（フォーカス）は枠線、選択は背景色で区別する
+          outline: active ? `1px solid ${vscodeColors.focusBorder}` : 'none',
+          outlineOffset: -1,
+          '&:hover': { bgcolor: selected ? vscodeColors.listActiveSelection : vscodeColors.listHover }
+        }}
+      >
+        {withHandle && <span aria-hidden />}
+        <Box
+          sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center' }}
+          // チェック操作で行の選択・編集モーダル・ドラッグを起こさない
+          onClick={stop}
+          onPointerDown={stop}
+          onDoubleClick={stop}
+          aria-hidden
+        >
+          <Checkbox
+            size="small"
+            checked={completed}
+            disabled={pending}
+            onChange={() => actions.toggleCompleted(task)}
+            tabIndex={-1}
+            slotProps={{ input: { 'aria-hidden': true, tabIndex: -1, 'data-testid': 'task-complete-checkbox' } as Record<string, unknown> }}
+            sx={{ p: 0.5 }}
+          />
+        </Box>
+        <Box sx={{ display: 'flex', alignItems: 'center', minWidth: 0, pr: 1 }}>
+          <Typography
+            component="span"
+            noWrap
+            data-testid="task-title"
+            onClick={onTitleClick}
+            onDoubleClick={onTitleDoubleClick}
+            title={task.title}
+            sx={{
+              display: 'inline-block',
+              maxWidth: '100%',
+              fontSize: 13,
+              pl: `${TEXT_INSET}px`,
+              pr: 0.5,
+              borderRadius: 0.5,
+              cursor: 'pointer',
+              // 完了は色だけでなく取り消し線でも示す
+              textDecoration: completed ? 'line-through' : 'none',
+              color: completed ? 'text.secondary' : 'text.primary',
+              '&:hover': { textDecoration: completed ? 'line-through underline' : 'underline' }
+            }}
+          >
+            {task.title}
+          </Typography>
+        </Box>
+      </Box>
+      {controlsLayer && createPortal(controls, controlsLayer)}
+    </>
+  )
+}
+
+
+````
+
 ````src/renderer/src/layouts/AppFrame.tsx
 import { Box, CircularProgress } from '@mui/material'
 import { useQuery } from '@tanstack/react-query'
@@ -28795,13 +30867,15 @@ import { DraftGuardProvider } from '../features/drafts/DraftGuard'
 import { workspaceSettingsQueryOptions } from '../features/workspace/workspace-queries'
 import { WorkspaceProvider } from '../features/workspace/WorkspaceContext'
 import { AppShell } from './shell/AppShell'
+import { appInfoQueryOptions } from '../features/app-info/app-info-query'
 
 // ルートの画面枠。保存済みのWorkspace設定を読み込んでから描画する
 // （読み込み前に既定値でペインを作ると、復元時に幅が飛んだり既定値を保存したりするため）。
 export function AppFrame() {
   const workspace = useQuery(workspaceSettingsQueryOptions)
+  const appInfo = useQuery(appInfoQueryOptions)
 
-  if (workspace.isPending) {
+  if (workspace.isPending || appInfo.isPending) {
     return (
       <Box sx={{ height: '100%', display: 'grid', placeItems: 'center' }} role="status" aria-label="読み込み中">
         <CircularProgress size={18} aria-hidden />
@@ -28814,7 +30888,7 @@ export function AppFrame() {
   return (
     <WorkspaceProvider initialSettings={loaded ? workspace.data : DEFAULT_WORKSPACE_SETTINGS} persistenceEnabled={loaded}>
       <DraftGuardProvider>
-        <AppShell />
+        <AppShell initialCompact={appInfo.data?.compact ?? false} />
       </DraftGuardProvider>
     </WorkspaceProvider>
   )
@@ -28824,7 +30898,8 @@ export function AppFrame() {
 
 ````src/renderer/src/layouts/shell/AppShell.tsx
 import { useCallback, useRef, useState, type Ref } from 'react'
-import { Box } from '@mui/material'
+import { Alert, Box } from '@mui/material'
+import { unwrapIpc } from '../../lib/ipc'
 import { useRouterState } from '@tanstack/react-router'
 import { Group, Panel, Separator } from 'react-resizable-panels'
 import { WORKSPACE_LIMITS } from '../../../../shared/contracts/workspace'
@@ -28834,6 +30909,7 @@ import { usePaneLayout } from '../../features/workspace/use-pane-layout'
 import { useWorkspace } from '../../features/workspace/WorkspaceContext'
 import { vscodeColors } from '../../theme'
 import { ShellSlotsProvider } from '../../components/ShellSlots'
+import { CompactScreen } from '../../routes/CompactScreen'
 import { TaskDragProvider } from '../../features/tasks/TaskDragContext'
 import { DetailPanel } from './DetailPanel'
 import { MainPanel } from './MainPanel'
@@ -28918,11 +30994,28 @@ function DetailPane({
   )
 }
 
-export function AppShell() {
+export function AppShell({ initialCompact = false }: { initialCompact?: boolean }) {
   const { settings, setDetailVisible } = useWorkspace()
   const { confirmLeave } = useDraftGuard()
   const pathname = useRouterState({ select: (state) => state.location.pathname })
-  const pane = usePaneLayout()
+  const [compact, setCompact] = useState(initialCompact)
+  const [modeError, setModeError] = useState<string | null>(null)
+  const switchingRef = useRef(false)
+  const changeMode = async (next: boolean) => {
+    if (switchingRef.current || next === compact) return
+    switchingRef.current = true
+    try {
+      if (!(await confirmLeave())) return
+      setModeError(null)
+      await unwrapIpc(window.gtd.app.setCompact(next))
+      setCompact(next)
+    } catch (error) {
+      setModeError(error instanceof Error ? error.message : '表示モードを変更できませんでした')
+    } finally {
+      switchingRef.current = false
+    }
+  }
+  const pane = usePaneLayout(compact)
   const [initialSidebarWidth] = useState(settings.sidebarWidth)
 
   const toggleButtonRef = useRef<HTMLButtonElement>(null)
@@ -28957,9 +31050,15 @@ export function AppShell() {
           color: 'text.primary'
         }}
       >
-        <TopBar detailVisible={settings.detailVisible} onToggleDetail={() => void toggleDetail()} toggleButtonRef={toggleButtonRef} />
+        <TopBar compact={compact} detailVisible={settings.detailVisible} onToggleDetail={() => void toggleDetail()} toggleButtonRef={toggleButtonRef} />
 
-        <Box sx={{ gridArea: 'body', display: 'flex', minWidth: 0, minHeight: 0, ...separatorStyles }}>
+        <Box sx={{ gridArea: 'body', display: 'flex', flexDirection: modeError ? 'column' : 'row', minWidth: 0, minHeight: 0, ...separatorStyles }}>
+          {modeError && <Alert severity="error" onClose={() => setModeError(null)}>{modeError}</Alert>}
+          {compact ? (
+            <Box component="main" aria-label="メインパネル" data-testid="compact-screen" sx={{ flex: 1, minWidth: 0, minHeight: 0, overflow: 'hidden' }}>
+              <CompactScreen />
+            </Box>
+          ) : (
           <Group
             id="workspace-panes"
             orientation="horizontal"
@@ -29015,14 +31114,16 @@ export function AppShell() {
               </>
             )}
           </Group>
+          )}
         </Box>
 
-        <StatusBar pathname={pathname} />
+        <StatusBar pathname={pathname} compact={compact} onChangeMode={(next) => void changeMode(next)} />
       </Box>
       </TaskDragProvider>
     </ShellSlotsProvider>
   )
 }
+
 
 ````
 
@@ -29463,7 +31564,8 @@ export function PaneHeader({ id, title, actions }: { id: string; title: string; 
 ````
 
 ````src/renderer/src/layouts/shell/StatusBar.tsx
-import { Box, Typography } from '@mui/material'
+import { useState } from 'react'
+import { Box, ButtonBase, Menu, MenuItem, Typography } from '@mui/material'
 import { useIsMutating, useQuery } from '@tanstack/react-query'
 import { useShellSlotRef } from '../../components/ShellSlots'
 import { appInfoQueryOptions } from '../../features/app-info/app-info-query'
@@ -29476,7 +31578,8 @@ import { SCREENS, screenOf } from './screens'
 // 「すべて保存済み」のような根拠のない表示はしない。長いパスは設定画面に集約する。
 // フェーズ5.8: 中央に現在の画面のタスク件数の差し込み先を置く（件数は一覧の部品が描画する。対象外の画面では空）。
 // 左右を同じ幅の列（minmax(0, 1fr)）にして、左右の文字の長さで中央の位置がずれないようにする。狭い時は左右を省略表示する。
-export function StatusBar({ pathname }: { pathname: string }) {
+export function StatusBar({ pathname, compact, onChangeMode }: { pathname: string; compact: boolean; onChangeMode: (compact: boolean) => void }) {
+  const [anchor, setAnchor] = useState<HTMLElement | null>(null)
   const appInfo = useQuery(appInfoQueryOptions)
   // タスクの登録・更新（mutationKeyが ['tasks', ...] のもの）
   const savingTasks = useIsMutating({ mutationKey: taskKeys.all })
@@ -29484,7 +31587,7 @@ export function StatusBar({ pathname }: { pathname: string }) {
   const countRef = useShellSlotRef('status-count')
 
   const screenId = screenOf(pathname)
-  const screen = screenId ? SCREENS[screenId].label : '—'
+  const screen = compact ? 'コンパクト' : screenId ? SCREENS[screenId].label : '—'
 
   const messages: string[] = []
   if (savingTasks > 0) messages.push('タスクを保存中…')
@@ -29506,18 +31609,38 @@ export function StatusBar({ pathname }: { pathname: string }) {
         bgcolor: hasError ? vscodeColors.statusBarErrorBackground : vscodeColors.statusBarBackground,
         color: vscodeColors.statusBarForeground,
         display: 'grid',
-        gridTemplateColumns: 'minmax(0, 1fr) auto minmax(0, 1fr)',
+        gridTemplateColumns: compact ? 'minmax(0, 1fr)' : 'minmax(0, 1fr) auto minmax(0, 1fr)',
         alignItems: 'center',
         columnGap: 4,
         px: 3,
         minWidth: 0,
         overflow: 'hidden',
         whiteSpace: 'nowrap',
-        '& .MuiTypography-root': { fontSize: 12 }
+        '& .MuiTypography-root': { fontSize: 12 },
+        ...(compact && {
+          px: 1, columnGap: 0,
+          '& [data-testid="status-left"]': { gap: 0 },
+          '& [data-testid="status-screen"], & [data-testid="status-center"], & [data-testid="status-app"]': { display: 'none' }
+        })
       }}
       data-testid="status-bar"
     >
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 4, minWidth: 0, overflow: 'hidden' }} data-testid="status-left">
+        <ButtonBase
+          aria-label={`表示モード: ${compact ? 'コンパクト' : '通常'}`}
+          aria-haspopup="menu"
+          aria-expanded={anchor !== null}
+          aria-controls={anchor ? 'display-mode-menu' : undefined}
+          onClick={(event) => setAnchor(event.currentTarget)}
+          data-testid="display-mode-button"
+          sx={{ fontSize: 12, flexShrink: 0, px: 1, height: 22, '&.Mui-focusVisible': { outline: '1px solid currentColor', outlineOffset: -2 } }}
+        >
+          表示モード: {compact ? 'コンパクト' : '通常'}
+        </ButtonBase>
+        <Menu id="display-mode-menu" anchorEl={anchor} open={anchor !== null} onClose={() => setAnchor(null)}>
+          <MenuItem selected={!compact} onClick={() => { setAnchor(null); onChangeMode(false) }}>通常</MenuItem>
+          <MenuItem selected={compact} onClick={() => { setAnchor(null); onChangeMode(true) }}>コンパクト</MenuItem>
+        </Menu>
         <Typography component="span" data-testid="status-screen" sx={{ flexShrink: 0 }}>
           {screen}
         </Typography>
@@ -29532,6 +31655,7 @@ export function StatusBar({ pathname }: { pathname: string }) {
     </Box>
   )
 }
+
 
 ````
 
@@ -29550,10 +31674,12 @@ export const TOP_BAR_HEIGHT = 40
 // フェーズ5.8: 中央に現在の画面の表示設定（キーワード・状態・並べ替え）の差し込み先を置く。
 // 表示設定を持つ画面（Inbox・プロジェクト）だけが中身を描画する。差し込み先は縮められ、狭い時も右の切り替えボタンへ重ならない。
 export function TopBar({
+  compact = false,
   detailVisible,
   onToggleDetail,
   toggleButtonRef
 }: {
+  compact?: boolean
   detailVisible: boolean
   onToggleDetail: () => void
   toggleButtonRef: Ref<HTMLButtonElement>
@@ -29586,7 +31712,7 @@ export function TopBar({
         data-testid="top-bar-controls"
         sx={{ flex: 1, minWidth: 0, height: '100%', display: 'flex', alignItems: 'center', overflow: 'hidden', px: 0.5 }}
       />
-      <Tooltip title={label}>
+      {!compact && <Tooltip title={label}>
         <IconButton
           ref={toggleButtonRef}
           aria-label={label}
@@ -29597,10 +31723,11 @@ export function TopBar({
         >
           <Icon size={16} strokeWidth={1.75} aria-hidden />
         </IconButton>
-      </Tooltip>
+      </Tooltip>}
     </Box>
   )
 }
+
 
 ````
 
@@ -29763,6 +31890,343 @@ export const queryClient: QueryClient = new QueryClient({
     }
   })
 })
+
+````
+
+````src/renderer/src/routes/CompactScreen.tsx
+import { useLayoutEffect, useRef, useState, type ReactNode } from 'react'
+import { Alert, Box, CircularProgress, Tab, Tabs, ToggleButton, ToggleButtonGroup, Typography } from '@mui/material'
+import { useQuery } from '@tanstack/react-query'
+import { useDraftGuard } from '../features/drafts/DraftGuard'
+import { projectListQueryOptions } from '../features/projects/project-queries'
+import { compareFavoriteProjects, sortProjects } from '../features/projects/project-order'
+import { milestoneListQueryOptions } from '../features/milestones/milestone-queries'
+import { buildTaskGroups, compareManualOrder, disambiguatedNames } from '../features/tasks/assignment'
+import { TaskQuickAdd } from '../features/tasks/TaskQuickAdd'
+import { TaskList } from '../features/tasks/TaskList'
+import { taskListQueryOptions, usePendingTaskIds } from '../features/tasks/task-queries'
+import { useTaskRowActions } from '../features/tasks/use-task-row-actions'
+import type { TaskDto } from '../../../shared/contracts/tasks'
+import { vscodeColors } from '../theme'
+import { SummaryPage } from './SummaryPage'
+import { mergeSummary } from '../features/summary/summary-merge'
+import { summaryQueryOptions } from '../features/summary/summary-queries'
+import { useLocalDay } from '../lib/local-day'
+import { SectionRow } from '../components/SectionRow'
+import { ProjectFavoriteButton } from '../features/projects/ProjectFavoriteButton'
+import { MilestoneFavoriteButton } from '../features/milestones/MilestoneFavoriteButton'
+import { ShellSlot } from '../components/ShellSlots'
+import { projectTreeDisplayMode, type ProjectTreeDisplayMode } from '../features/projects/project-tree-display'
+
+type MilestoneTarget = { projectId: string; milestoneId: string }
+type CompactTab = 'day' | 'inbox' | 'project'
+const EMPTY_TASKS: TaskDto[] = []
+const labels = { day: 'THE DAY', inbox: 'INBOX', project: 'PROJECT' } as const
+
+function TabTaskCountBadge({ count, background, label }: { count: number; background: string; label: string }) {
+  if (count === 0) return null
+  return (
+    <Box component="span" aria-label={`${label}: ${count}件`} title={`${label}: ${count}件`}
+      data-testid="compact-tab-count" data-count-kind={label}
+      sx={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', minWidth: '20px', height: '20px',
+        px: '4px', boxSizing: 'border-box', borderRadius: '10px', bgcolor: background,
+        color: '#ffffff', fontSize: '13px', lineHeight: 1, fontWeight: 800, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>
+      {count}
+    </Box>
+  )
+}
+
+export function CompactScreen() {
+  const [tab, setTab] = useState<CompactTab>('day')
+  const badgeDay = useLocalDay()
+  const badgeSummaryQuery = useQuery(summaryQueryOptions(badgeDay))
+  const badgeTasksQuery = useQuery(taskListQueryOptions)
+  const badgeSummary = badgeSummaryQuery.isSuccess
+    ? mergeSummary(badgeSummaryQuery.data, badgeTasksQuery.data)
+    : undefined
+  const inboxBadgeCount = badgeTasksQuery.isSuccess
+    ? badgeTasksQuery.data.filter((task) => task.projectId === null && task.doneOn === null).length
+    : undefined
+  const [selectedMilestone, setSelectedMilestone] = useState<MilestoneTarget | null>(null)
+  const destinationProjects = useQuery(projectListQueryOptions)
+  const destinationMilestones = useQuery(milestoneListQueryOptions)
+  const destination = selectedMilestone
+    ? destinationMilestones.data?.find((item) => item.id === selectedMilestone.milestoneId && item.projectId === selectedMilestone.projectId)
+    : undefined
+  const destinationProject = destinationProjects.data?.find((item) => item.id === selectedMilestone?.projectId && !item.done)
+  const validDestination = destination !== undefined && destinationProject !== undefined
+  const projectTab = tab === 'project'
+  const destinationMissing = projectTab && !validDestination
+  const [error, setError] = useState<string | null>(null)
+  const switching = useRef(false)
+  const { confirmLeave } = useDraftGuard()
+  const changeTab = async (next: CompactTab) => {
+    if (next === tab || switching.current) return
+    switching.current = true
+    try {
+      if (await confirmLeave()) { setError(null); setTab(next) }
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'タブを切り替えられませんでした')
+    } finally { switching.current = false }
+  }
+  return (
+    <Box sx={{ height: '100%', minWidth: 0, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+      <Box sx={{ px: 2, pt: 3, flexShrink: 0,
+        '& form': { mb: 0 },
+        '& [data-testid="task-add-disabled-reason"]': { display: 'none' }
+      }}>
+        <TaskQuickAdd
+          projectId={projectTab && validDestination ? selectedMilestone!.projectId : null}
+          milestoneId={projectTab && validDestination ? selectedMilestone!.milestoneId : null}
+          disabledReason={destinationMissing ? 'Milestone not selected.' : undefined}
+        />
+        <Typography component="p" aria-live="polite" data-testid="compact-registration-target"
+          sx={{ m: 0, mt: '4px', mb: '8px', fontSize: '8pt', lineHeight: 1.5,
+            color: destinationMissing ? '#ff0000' : 'text.secondary', overflowWrap: 'anywhere' }}>
+          {projectTab ? (destinationMissing ? 'Milestone not selected.' : (destination?.name ?? '')) : 'INBOX'}
+        </Typography>
+      </Box>
+      <Tabs value={tab} onChange={(_event, value: CompactTab) => void changeTab(value)} aria-label="コンパクト表示" variant="scrollable" scrollButtons="auto" allowScrollButtonsMobile
+        sx={{ minHeight: 32, flexShrink: 0, borderBottom: `1px solid ${vscodeColors.border}`, '& .MuiTab-root': { minWidth: 0, minHeight: 32, px: 2, py: 1, fontSize: 16 } }}>
+        {(Object.keys(labels) as CompactTab[]).map((key) => (
+          <Tab key={key} value={key} id={`compact-tab-${key}`} aria-controls={`compact-panel-${key}`}
+            label={
+              <Box component="span" sx={{ display: 'inline-flex', flexDirection: 'row', alignItems: 'center', gap: '6px', whiteSpace: 'nowrap' }}>
+                <Box component="span" sx={{ fontSize: '16px', lineHeight: '20px' }}>{labels[key]}</Box>
+                {key === 'day' && badgeSummary && (badgeSummary.overdueItems.length > 0 || badgeSummary.todayItems.length > 0) && (
+                  <Box component="span" sx={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                    <TabTaskCountBadge count={badgeSummary.overdueItems.length} background="#b91c1c" label="期限超過" />
+                    <TabTaskCountBadge count={badgeSummary.todayItems.length} background="#1e90ff" label="今日" />
+                  </Box>
+                )}
+                {key === 'inbox' && inboxBadgeCount !== undefined && inboxBadgeCount > 0 &&
+                  <TabTaskCountBadge count={inboxBadgeCount} background="#008080" label="Inboxの未完了タスク" />}
+              </Box>
+            }
+          />
+        ))}
+      </Tabs>
+      {error && <Alert severity="error" onClose={() => setError(null)}>{error}</Alert>}
+      <Box role="tabpanel" id={`compact-panel-${tab}`} aria-labelledby={`compact-tab-${tab}`} tabIndex={0}
+        sx={{ flex: 1, minWidth: 0, minHeight: 0, overflow: 'hidden' }}>
+        {tab === 'day' ? <SummaryPage compact showQuickAdd={false} /> : <CompactTaskBrowser key={tab} kind={tab} selectedMilestone={validDestination ? selectedMilestone : null} onSelectMilestone={setSelectedMilestone} />}
+      </Box>
+    </Box>
+  )
+}
+
+
+// マイルストン名と、実際に描画されたチェックアイコンの左端を揃える。
+function MilestoneTaskIndent({ titleId, children }: { titleId: string; children: ReactNode }) {
+  const ref = useRef<HTMLDivElement>(null)
+  const [indent, setIndent] = useState(102)
+  useLayoutEffect(() => {
+    const element = ref.current
+    const title = document.getElementById(titleId)
+    if (!element || !title) return
+    const align = () => {
+      const checkbox = element.querySelector('.MuiCheckbox-root svg')
+      const left = element.getBoundingClientRect().left
+      const padding = Number.parseFloat(getComputedStyle(element).paddingLeft) || 0
+      const iconOffset = checkbox ? checkbox.getBoundingClientRect().left - left - padding : 0
+      const next = Math.max(0, title.getBoundingClientRect().left - left - iconOffset)
+      setIndent((current) => Math.abs(current - next) > 0.5 ? next : current)
+    }
+    align()
+    const observer = new ResizeObserver(align)
+    observer.observe(element)
+    observer.observe(title)
+    return () => observer.disconnect()
+  })
+  return <Box ref={ref} sx={{ pl: `${indent}px`, minWidth: 0, boxSizing: 'border-box' }}>{children}</Box>
+}
+
+function CompactTaskBrowser({ kind, selectedMilestone, onSelectMilestone }: {
+  kind: 'inbox' | 'project'
+  selectedMilestone: MilestoneTarget | null
+  onSelectMilestone: (target: MilestoneTarget) => void
+}) {
+  const tasksQuery = useQuery(taskListQueryOptions)
+  const projectsQuery = useQuery(projectListQueryOptions)
+  const milestonesQuery = useQuery(milestoneListQueryOptions)
+  const [expandedNodes, setExpandedNodes] = useState<ReadonlySet<string>>(new Set())
+  const [preferredDisplay, setPreferredDisplay] = useState<ProjectTreeDisplayMode>('MILESTONE')
+  const defaultExpansionApplied = useRef(false)
+  useLayoutEffect(() => {
+    if (kind !== 'project' || !projectsQuery.isSuccess || defaultExpansionApplied.current) return
+    defaultExpansionApplied.current = true
+    // プロジェクトだけを開き、マイルストン配下のタスクは閉じた状態にする。
+    setExpandedNodes(new Set(projectsQuery.data.filter((project) => !project.done).map((project) => `project:${project.id}`)))
+  }, [kind, projectsQuery.isSuccess, projectsQuery.data])
+  const [selectedId, setSelectedId] = useState<string | null>(null)
+  const [announcement, setAnnouncement] = useState('')
+  const [navigationError, setNavigationError] = useState<string | null>(null)
+  const busy = useRef(false)
+  const { confirmLeave } = useDraftGuard()
+  const pendingTaskIds = usePendingTaskIds()
+  const allTasks = tasksQuery.data ?? EMPTY_TASKS
+  const rowActions = useTaskRowActions({ tasks: allTasks, onAnnounce: setAnnouncement })
+  const projects = sortProjects(projectsQuery.data ?? []).filter((project) => !project.done).sort(compareFavoriteProjects)
+  const projectLabels = disambiguatedNames(projects)
+  const inboxTasks = allTasks.filter((task) => task.projectId === null && task.doneOn === null).sort(compareManualOrder)
+  const tasksByProject = new Map<string, TaskDto[]>()
+  for (const task of allTasks) {
+    if (task.projectId === null || task.doneOn !== null) continue
+    const list = tasksByProject.get(task.projectId)
+    if (list) list.push(task)
+    else tasksByProject.set(task.projectId, [task])
+  }
+  const milestoneRows = milestonesQuery.data ?? []
+  const displayMode = projectTreeDisplayMode(projects.map((project) => project.id), milestoneRows, expandedNodes, preferredDisplay)
+  const milestonesByProject = new Map<string, typeof milestoneRows>()
+  for (const milestone of milestoneRows) {
+    if (milestone.projectId === null) continue
+    const list = milestonesByProject.get(milestone.projectId)
+    if (list) list.push(milestone)
+    else milestonesByProject.set(milestone.projectId, [milestone])
+  }
+
+  const toggle = async (key: string) => {
+    if (busy.current) return
+    busy.current = true
+    try {
+      const closing = expandedNodes.has(key)
+      if (closing && !(await confirmLeave())) return
+      setNavigationError(null)
+      setExpandedNodes((current) => {
+        const next = new Set(current)
+        if (next.has(key)) next.delete(key)
+        else next.add(key)
+        return next
+      })
+    } catch (cause) {
+      setNavigationError(cause instanceof Error ? cause.message : '表示を変更できませんでした')
+    } finally { busy.current = false }
+  }
+  const setAllExpanded = async (mode: 'none' | 'milestones' | 'all') => {
+    if (busy.current) return
+    busy.current = true
+    try {
+      if (mode !== 'all' && !(await confirmLeave())) return
+      setNavigationError(null)
+      const projectIds = new Set(projects.map((project) => project.id))
+      setPreferredDisplay(mode === 'none' ? 'PROJECT' : mode === 'milestones' ? 'MILESTONE' : 'ALL')
+      setExpandedNodes(mode === 'none' ? new Set() : new Set([
+        ...projects.map((project) => `project:${project.id}`),
+        ...(mode === 'all' ? milestoneRows.filter((milestone) => milestone.projectId !== null && projectIds.has(milestone.projectId))
+          .map((milestone) => `milestone:${milestone.id}`) : [])
+      ]))
+    } catch (cause) {
+      setNavigationError(cause instanceof Error ? cause.message : '展開状態を変更できませんでした')
+    } finally { busy.current = false }
+  }
+  const renderList = (tasks: readonly TaskDto[], label: string, projectTree = false) => (
+    <TaskList variant="section" rowMode="Compact" parentVisible={!projectTree}
+      tasks={tasks} actions={rowActions.actions} listLabel={label}
+      totalCount={tasks.length} selectedTaskId={selectedId} pendingTaskIds={pendingTaskIds}
+      resetScrollKey={kind} onSelect={setSelectedId}
+      onRequestDelete={(task) => rowActions.deleteTasks([task])}
+      maxVisibleRows={projectTree ? Math.max(1, tasks.length) : undefined} />
+  )
+  const loading = tasksQuery.isPending || (kind === 'project' && (projectsQuery.isPending || milestonesQuery.isPending))
+  const error = tasksQuery.error ?? (kind === 'project' ? projectsQuery.error ?? milestonesQuery.error : null)
+  let body: ReactNode
+  if (error) body = <Alert severity="error">読み込めませんでした: {error.message}</Alert>
+  else if (loading) body = <Box role="status" sx={{ p: 2 }}><CircularProgress size={16} /> 読み込み中…</Box>
+  else if (kind === 'inbox') body = inboxTasks.length > 0
+    ? renderList(inboxTasks, `Inbox（${inboxTasks.length}件）`)
+    : <Typography sx={{ p: 2, fontSize: 12 }}>Inboxに未完了のタスクはありません</Typography>
+  else body = (
+    <Box component="ul" aria-label="プロジェクト・マイルストン・タスク" data-testid="compact-project-tree"
+      sx={{ m: 0, p: 0, listStyle: 'none', flex: 1, minHeight: 0, minWidth: 0, overflowY: 'auto', overflowX: 'hidden' }}>
+      {projects.length === 0 && <Box component="li" sx={{ p: 2, fontSize: 12 }}>未完了のプロジェクトがありません</Box>}
+      {projects.map((project) => {
+        const projectKey = `project:${project.id}`
+        const projectExpanded = expandedNodes.has(projectKey)
+        const projectLabel = projectLabels.get(project.id) ?? project.name
+        const projectTitleId = `compact-project-title-${project.id}`
+        const projectContentId = `compact-project-content-${project.id}`
+        const groups = buildTaskGroups(
+          [...(tasksByProject.get(project.id) ?? [])].sort(compareManualOrder),
+          milestonesByProject.get(project.id) ?? []
+        )
+        return (
+          <Box component="li" key={project.id} sx={{ minWidth: 0 }}>
+            <SectionRow level={0} toggleOnRowClick title={projectLabel} titleId={projectTitleId} iconElement={<ProjectFavoriteButton project={project} />}
+              height={32} sx={{ mt: '8px' }}
+              expanded={projectExpanded} onExpandedChange={() => void toggle(projectKey)} controlsId={projectContentId} />
+            <Box id={projectContentId} hidden={!projectExpanded}>
+              {projectExpanded && (
+                <Box component="ul" aria-labelledby={projectTitleId} sx={{ listStyle: 'none', m: 0, p: 0 }}>
+                  {groups.length === 0 && <Box component="li" sx={{ pl: '36px', py: 1, fontSize: 12, color: 'text.secondary' }}>マイルストンはありません</Box>}
+                  {groups.map((group) => {
+                    const milestoneKey = `milestone:${group.milestoneId}`
+                    const milestoneExpanded = expandedNodes.has(milestoneKey)
+                    const titleId = `compact-milestone-title-${group.milestoneId}`
+                    const contentId = `compact-milestone-content-${group.milestoneId}`
+                    return (
+                      <Box component="li" key={group.key} sx={{ minWidth: 0 }}>
+                        <SectionRow level={1} toggleOnRowClick title={group.label} titleId={titleId} iconElement={<MilestoneFavoriteButton milestoneId={group.milestoneId} />}
+                          selected={selectedMilestone?.projectId === project.id && selectedMilestone.milestoneId === group.milestoneId}
+                          onSelect={() => onSelectMilestone({ projectId: project.id, milestoneId: group.milestoneId })}
+                          height={28}
+                          expanded={milestoneExpanded} onExpandedChange={() => void toggle(milestoneKey)} controlsId={contentId} />
+                        <Box id={contentId} hidden={!milestoneExpanded}>
+                          <MilestoneTaskIndent titleId={titleId}>
+                          {milestoneExpanded && (group.tasks.length > 0
+                            ? renderList(group.tasks, `${projectLabel} / ${group.label}の未完了タスク`, true)
+                            : <Typography sx={{ py: 1, px: 1, fontSize: 12, color: 'text.secondary' }}>未完了のタスクはありません</Typography>)}
+                          </MilestoneTaskIndent>
+                        </Box>
+                      </Box>
+                    )
+                  })}
+                </Box>
+              )}
+            </Box>
+          </Box>
+        )
+      })}
+    </Box>
+  )
+  return (
+    <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column', minHeight: 0, minWidth: 0 }}>
+      {kind === 'project' && (
+        <ShellSlot name="top-bar-controls">
+          <Box role="group" aria-label="プロジェクト階層の表示"
+            sx={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-start', gap: 1,
+              minWidth: 0, maxWidth: '100%', overflowX: 'auto', overflowY: 'hidden', color: '#ffffff' }}>
+            <Typography component="span" sx={{ fontSize: 12, flexShrink: 0 }}>表示</Typography>
+            <ToggleButtonGroup value={displayMode} exclusive size="small" aria-label="表示するプロジェクト階層"
+              data-testid="compact-project-display" sx={{ flexShrink: 0, height: 28 }}
+              onChange={(_event, value: ProjectTreeDisplayMode | null) => {
+                if (!value || value === 'CUSTOM') return
+                void setAllExpanded(value === 'PROJECT' ? 'none' : value === 'MILESTONE' ? 'milestones' : 'all')
+              }}>
+              {(['PROJECT', 'MILESTONE', 'ALL', 'CUSTOM'] as const).map((mode) => (
+                <ToggleButton key={mode} value={mode}
+                  disabled={mode === 'CUSTOM' || loading || error !== null || projects.length === 0}
+                  title={mode === 'CUSTOM' ? 'ノードを個別に開閉した状態（自動選択）' : undefined}
+                  data-testid={`compact-project-display-${mode.toLowerCase()}`}
+                  sx={{ px: 2.5, py: 0, fontSize: 12, color: '#ffffff', whiteSpace: 'nowrap',
+                    '&.Mui-selected': { color: '#ffffff', bgcolor: 'rgba(255,255,255,0.16)' },
+                    '&.Mui-disabled': { color: 'rgba(255,255,255,0.4)' },
+                    '&.Mui-selected.Mui-disabled': { color: '#ffffff', bgcolor: 'rgba(255,255,255,0.16)' } }}>
+                  {mode}
+                </ToggleButton>
+              ))}
+            </ToggleButtonGroup>
+          </Box>
+        </ShellSlot>
+      )}
+      <Box role="status" aria-live="polite" sx={{ position: 'absolute', width: 1, height: 1, overflow: 'hidden', clip: 'rect(0 0 0 0)' }}>{announcement}</Box>
+      {navigationError && <Alert severity="error" onClose={() => setNavigationError(null)}>{navigationError}</Alert>}
+      <Box sx={{ flexShrink: 0 }}>{rowActions.alerts}</Box>
+      {body}
+      {rowActions.elements}
+    </Box>
+  )
+}
 
 ````
 
@@ -30030,18 +32494,22 @@ export function SettingsPage() {
 ````
 
 ````src/renderer/src/routes/SummaryPage.tsx
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Alert, Box, CircularProgress, Typography } from '@mui/material'
 import { useQuery } from '@tanstack/react-query'
-import { CalendarCheck } from 'lucide-react'
+import { CalendarCheck, CheckCheck, ClockCheck, ClockExclamationPoint } from 'lucide-react'
 import type { SummaryReview } from '../../../shared/contracts/summary'
 import type { TaskDto } from '../../../shared/contracts/tasks'
 import { Page } from '../components/Page'
+import { useDayTaskDrag } from '../features/summary/use-day-task-drag'
+import { SectionRow } from '../components/SectionRow'
+import { useDraftGuard } from '../features/drafts/DraftGuard'
 import { ShellSlot } from '../components/ShellSlots'
 import { projectListQueryOptions } from '../features/projects/project-queries'
 import { filterSummaryByProjects, mergeSummary, summaryTotal } from '../features/summary/summary-merge'
 import { summaryProjectFilter, useSummaryExcludedProjects } from '../features/summary/summary-project-filter'
 import { summaryQueryOptions } from '../features/summary/summary-queries'
+import { TaskQuickAdd } from '../features/tasks/TaskQuickAdd'
 import { TaskList } from '../features/tasks/TaskList'
 import { taskListQueryOptions, usePendingTaskIds } from '../features/tasks/task-queries'
 import { useTaskRowActions } from '../features/tasks/use-task-row-actions'
@@ -30068,7 +32536,26 @@ const EMPTY_TASKS: TaskDto[] = []
 // - 各行は共通の TaskRow。一覧は区画ごとに仮想化し、区画の寸法の変化は virtualizer が測り直す。
 // - 右サイドバーのプロジェクトのフィルター（表示だけ）で OFF のプロジェクトのタスクを全区画から外す。
 // - ステータスバーの中央にフィルター後の4区画の合計件数。トップバーの表示設定は出さない。大きな画面タイトルは出さない。
-export function SummaryPage() {
+export function SummaryPage({ compact = false, showQuickAdd = true }: {
+  compact?: boolean
+  showQuickAdd?: boolean
+}) {
+  const sections = compact ? SECTIONS.filter((section) => section.key === 'todayItems' || section.key === 'tomorrowItems' || section.key === 'overdueItems') : SECTIONS
+  const [sectionExpanded, setSectionExpanded] = useState<Partial<Record<SectionKey, boolean>>>({})
+  const [sectionError, setSectionError] = useState<string | null>(null)
+  const sectionBusy = useRef(false)
+  const { confirmLeave } = useDraftGuard()
+  const changeSectionExpanded = async (key: SectionKey, next: boolean) => {
+    if (sectionBusy.current) return
+    sectionBusy.current = true
+    try {
+      if (!next && !(await confirmLeave())) return
+      setSectionError(null)
+      setSectionExpanded((current) => ({ ...current, [key]: next }))
+    } catch (error) {
+      setSectionError(error instanceof Error ? error.message : 'セクションの表示を変更できませんでした')
+    } finally { sectionBusy.current = false }
+  }
   const day = useLocalDay()
   const query = useQuery(summaryQueryOptions(day))
   const tasksQuery = useQuery(taskListQueryOptions)
@@ -30085,13 +32572,26 @@ export function SummaryPage() {
   }, [projectsQuery.data])
 
   const summary = useMemo(
-    () => (query.data ? filterSummaryByProjects(mergeSummary(query.data, tasksQuery.data), excluded) : undefined),
-    [query.data, tasksQuery.data, excluded]
+    () => {
+      if (!query.data) return undefined
+      const merged = mergeSummary(query.data, tasksQuery.data)
+      return compact ? merged : filterSummaryByProjects(merged, excluded)
+    },
+    [query.data, tasksQuery.data, excluded, compact]
   )
-  const total = summary ? summaryTotal(summary) : 0
+  const dayDrag = useDayTaskDrag({
+    enabled: compact,
+    rows: sections.flatMap((section) => !compact || sectionExpanded[section.key] === false ? [] :
+      (summary?.[section.key] ?? []).map((task) => ({ task, section: section.key }))),
+    pendingIds: pendingTaskIds,
+    onMoved: (day) => setSectionExpanded((current) => ({ ...current, [day === 'today' ? 'todayItems' : 'tomorrowItems']: true })),
+    onAnnounce: setAnnouncement
+  })
+  const total = summary ? compact ? summary.todayItems.length + summary.tomorrowItems.length + summary.overdueItems.length : summaryTotal(summary) : 0
 
   return (
-    <Page title="Summary Review" icon={CalendarCheck} fill titleHidden>
+    <Page title={compact ? 'コンパクト' : 'Summary Review'} icon={CalendarCheck} fill titleHidden>
+      {compact && showQuickAdd && <Box sx={{ flexShrink: 0 }}><TaskQuickAdd projectId={null} /></Box>}
       {query.isSuccess && (
         <ShellSlot name="status-count">
           <Typography component="span" role="status" data-testid="task-count" sx={{ fontVariantNumeric: 'tabular-nums' }}>
@@ -30107,6 +32607,8 @@ export function SummaryPage() {
       >
         {announcement}
       </Box>
+      {sectionError && <Alert severity="error" onClose={() => setSectionError(null)}>{sectionError}</Alert>}
+      {compact && dayDrag.error && <Alert severity="error" onClose={dayDrag.clearError}>{dayDrag.error}</Alert>}
       <Box sx={{ flexShrink: 0 }}>{rowActions.alerts}</Box>
       {query.isPending ? (
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }} role="status">
@@ -30120,40 +32622,64 @@ export function SummaryPage() {
         </Alert>
       ) : (
         <Box
+          ref={dayDrag.containerRef}
+          onPointerDownCapture={compact ? dayDrag.onBlankPointerDown : undefined}
+          onClickCapture={compact ? dayDrag.onBlankClickCapture : undefined}
           data-testid="summary-review"
           data-today={summary?.today}
           sx={{
             flex: 1,
             minHeight: 0,
             minWidth: 0,
-            display: 'grid',
-            gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)',
-            gridTemplateRows: 'minmax(0, 1fr) minmax(0, 1fr)',
-            border: `1px solid ${vscodeColors.gridLine}`
+            display: compact ? 'flex' : 'grid',
+            flexDirection: compact ? 'column' : undefined,
+            overflowY: compact ? 'auto' : undefined,
+            overflowX: compact ? 'hidden' : undefined,
+            gridTemplateColumns: compact ? 'minmax(0, 1fr)' : 'minmax(0, 1fr) minmax(0, 1fr)',
+            gridTemplateRows: compact ? undefined : 'minmax(0, 1fr) minmax(0, 1fr)',
+            position: 'relative',
+            border: compact ? 'none' : `1px solid ${vscodeColors.gridLine}`
           }}
         >
-          {SECTIONS.map((section) => {
+          {sections.map((section) => {
             const items = summary ? summary[section.key] : []
+            if (compact && section.key === 'overdueItems' && items.length === 0) return null
+            const isExpanded = !compact || sectionExpanded[section.key] !== false
             return (
               <Box
                 key={section.key}
                 component="section"
                 aria-labelledby={`summary-heading-${section.key}`}
                 data-section={section.key}
+                data-day-drop={compact && section.key === 'todayItems' ? 'today' : compact && section.key === 'tomorrowItems' ? 'tomorrow' : undefined}
                 data-testid="summary-section"
                 sx={{
                   gridRow: section.row,
-                  gridColumn: section.column,
+                  outline: compact && ((section.key === 'todayItems' && dayDrag.over === 'today') || (section.key === 'tomorrowItems' && dayDrag.over === 'tomorrow')) ? `2px solid ${vscodeColors.focusBorder}` : undefined,
+                  outlineOffset: '-2px',
+                  flexShrink: compact ? 0 : undefined,
+                  gridColumn: compact ? 1 : section.column,
                   display: 'flex',
                   flexDirection: 'column',
                   minWidth: 0,
                   minHeight: 0,
                   overflow: 'hidden',
                   // 中央の罫線は左の列の右と上の行の下だけ（二重線にしない）
-                  borderRight: section.column === 1 ? `1px solid ${vscodeColors.gridLine}` : 'none',
-                  borderBottom: section.row === 1 ? `1px solid ${vscodeColors.gridLine}` : 'none'
+                  borderRight: !compact && section.column === 1 ? `1px solid ${vscodeColors.gridLine}` : 'none',
+                  borderBottom: !compact && section.row === 1 ? `1px solid ${vscodeColors.gridLine}` : 'none'
                 }}
               >
+                {compact ? (
+                  <SectionRow
+                    title={section.label}
+                    titleId={`summary-heading-${section.key}`}
+                    icon={section.key === 'todayItems' ? CheckCheck : section.key === 'tomorrowItems' ? ClockCheck : ClockExclamationPoint}
+                    expanded={isExpanded}
+                    onExpandedChange={(next) => void changeSectionExpanded(section.key, next)}
+                    controlsId={`summary-content-${section.key}`}
+                    height={HEADING_HEIGHT}
+                  />
+                ) : (
                 <Box sx={{ height: HEADING_HEIGHT, flexShrink: 0, display: 'flex', alignItems: 'center', px: 1.5, minWidth: 0 }}>
                   <Typography
                     id={`summary-heading-${section.key}`}
@@ -30169,6 +32695,16 @@ export function SummaryPage() {
                     {items.length} 件
                   </Typography>
                 </Box>
+                )}
+                <Box
+                  id={`summary-content-${section.key}`}
+                  hidden={!isExpanded}
+                  sx={{
+                    display: isExpanded ? 'flex' : 'none', flexDirection: 'column',
+                    flex: compact ? '0 0 auto' : 1, minHeight: 0, minWidth: 0,
+                    pl: compact ? '24px' : 0
+                  }}
+                >
                 {items.length === 0 ? (
                   <Typography sx={{ px: 2, py: 1, fontSize: 12, color: 'text.secondary' }} data-testid="summary-empty">
                     該当なし
@@ -30176,6 +32712,19 @@ export function SummaryPage() {
                 ) : (
                   <TaskList
                     variant="section"
+                    rowMode="Standard"
+                    multiSelect={compact ? {
+                      selection: dayDrag.selection,
+                      onChange: dayDrag.changeSelection,
+                      onShowDetail: (id) => {
+                        setSelectedId(id)
+                        const task = tasksQuery.data?.find((item) => item.id === id)
+                        const anchor = document.getElementById(`task-option-${id}`)
+                        if (task && anchor) rowActions.actions.openEditor(task, anchor)
+                      }
+                    } : undefined}
+                    onRowDragStart={compact ? dayDrag.start : undefined}
+                    maxVisibleRows={compact ? Math.max(1, items.length) : undefined}
                     tasks={items}
                     actions={rowActions.actions}
                     listLabel={`${section.label}（${items.length}件）`}
@@ -30187,15 +32736,18 @@ export function SummaryPage() {
                     onRequestDelete={(task) => rowActions.deleteTasks([task])}
                   />
                 )}
+                </Box>
               </Box>
             )
           })}
         </Box>
       )}
+      {compact && dayDrag.elements}
       {rowActions.elements}
     </Page>
   )
 }
+
 
 ````
 
@@ -30338,7 +32890,8 @@ import type {
   ProjectDeletionSummary,
   ProjectDto,
   RenameProjectInput,
-  SetProjectCompletedInput
+  SetProjectCompletedInput,
+  SetProjectFavoriteInput
 } from './projects'
 import type {
   CreateMilestoneInput,
@@ -30347,7 +32900,8 @@ import type {
   MilestoneDeletionSummary,
   MilestoneDto,
   RenameMilestoneInput,
-  ReorderMilestonesInput
+  ReorderMilestonesInput,
+  SetMilestoneFavoriteInput
 } from './milestones'
 import type {
   AssignInboxTasksInput,
@@ -30358,6 +32912,7 @@ import type {
   DeleteTasksResult,
   ReorderMilestoneTasksInput,
   SetTaskDueInput,
+  SetTasksDayInput,
   SetTaskFavoriteInput,
   SetTaskAssignmentInput,
   SetTaskCompletedInput,
@@ -30369,6 +32924,7 @@ import type { WorkspaceSettings } from './workspace'
 
 export const IPC_CHANNELS = {
   appGetInfo: 'app:get-info',
+  appSetCompact: 'app:set-compact',
   tasksCreate: 'tasks:create',
   tasksList: 'tasks:list',
   tasksUpdateTitle: 'tasks:update-title',
@@ -30379,6 +32935,7 @@ export const IPC_CHANNELS = {
   tasksDeleteMany: 'tasks:delete-many',
   tasksReorderInMilestone: 'tasks:reorder-in-milestone',
   tasksSetDue: 'tasks:set-due',
+  tasksSetDayMany: 'tasks:set-day-many',
   tasksSetFavorite: 'tasks:set-favorite',
   summaryGet: 'summary:get',
   summaryToday: 'summary:today',
@@ -30386,11 +32943,13 @@ export const IPC_CHANNELS = {
   projectsCreate: 'projects:create',
   projectsRename: 'projects:rename',
   projectsSetCompleted: 'projects:set-completed',
+  projectsSetFavorite: 'projects:set-favorite',
   projectsGetDeletionSummary: 'projects:get-deletion-summary',
   projectsDelete: 'projects:delete',
   milestonesList: 'milestones:list',
   milestonesCreate: 'milestones:create',
   milestonesRename: 'milestones:rename',
+  milestonesSetFavorite: 'milestones:set-favorite',
   milestonesGetDeletionSummary: 'milestones:get-deletion-summary',
   milestonesDelete: 'milestones:delete',
   milestonesReorder: 'milestones:reorder',
@@ -30459,6 +33018,7 @@ export type IpcResult<T> = { ok: true; data: T } | { ok: false; error: IpcError 
 export type AppEnvironment = 'development' | 'production'
 
 export type AppInfo = {
+  compact?: boolean
   name: string
   version: string
   environment: AppEnvironment
@@ -30477,6 +33037,7 @@ export type AppInfo = {
 export type GtdApi = {
   app: {
     getInfo: () => Promise<IpcResult<AppInfo>>
+    setCompact: (compact: boolean) => Promise<IpcResult<null>>
   }
   tasks: {
     create: (input: CreateTaskInput) => Promise<IpcResult<TaskDto>>
@@ -30496,6 +33057,7 @@ export type GtdApi = {
     reorderInMilestone: (input: ReorderMilestoneTasksInput) => Promise<IpcResult<TaskDto[]>>
     // 期限の設定・変更・解除（フェーズ6）。期限だけを更新し、保存後のタスクを返す
     setDue: (input: SetTaskDueInput) => Promise<IpcResult<TaskDto>>
+    setDayMany: (input: SetTasksDayInput) => Promise<IpcResult<TaskDto[]>>
     // お気に入りの設定・解除。お気に入りだけを更新し、保存後のタスクを返す
     setFavorite: (input: SetTaskFavoriteInput) => Promise<IpcResult<TaskDto>>
   }
@@ -30512,6 +33074,7 @@ export type GtdApi = {
     rename: (input: RenameProjectInput) => Promise<IpcResult<ProjectDto>>
     // 完了・完了の取り消し（フェーズ5.3）。未完了のタスクがあれば CONFLICT（details: project-has-open-tasks）
     setCompleted: (input: SetProjectCompletedInput) => Promise<IpcResult<ProjectDto>>
+    setFavorite: (input: SetProjectFavoriteInput) => Promise<IpcResult<ProjectDto>>
     // 削除（フェーズ5.6）。確認内容（件数）を取得してから、その件数を添えて削除する。
     // 配下のマイルストン・タスクは削除せず、所属を外して非表示にする（Inboxにも表示しない）
     getDeletionSummary: (input: { id: string }) => Promise<IpcResult<ProjectDeletionSummary>>
@@ -30522,6 +33085,7 @@ export type GtdApi = {
     list: () => Promise<IpcResult<MilestoneDto[]>>
     create: (input: CreateMilestoneInput) => Promise<IpcResult<MilestoneDto>>
     rename: (input: RenameMilestoneInput) => Promise<IpcResult<MilestoneDto>>
+    setFavorite: (input: SetMilestoneFavoriteInput) => Promise<IpcResult<MilestoneDto>>
     // 削除（フェーズ5.6）。所属タスクは削除せず、所属を外して非表示にする
     getDeletionSummary: (input: { id: string }) => Promise<IpcResult<MilestoneDeletionSummary>>
     delete: (input: DeleteMilestoneInput) => Promise<IpcResult<DeleteMilestoneResult>>
@@ -30579,7 +33143,10 @@ export type DeleteMilestoneResult = {
 }
 
 // 日時はUTCのISO 8601文字列。一覧・操作の対象は表示中（プロジェクトに所属する）のマイルストンだけ（フェーズ5.6）
+export type SetMilestoneFavoriteInput = { id: string; favorite: boolean }
+
 export type MilestoneDto = {
+  favorite: boolean
   id: string
   projectId: string
   name: string
@@ -30620,6 +33187,8 @@ export type RenameProjectInput = {
 }
 
 // 完了・完了の取り消し（フェーズ5.3）。目的の状態を指定する（トグルではない）。
+export type SetProjectFavoriteInput = { id: string; favorite: boolean }
+
 export type SetProjectCompletedInput = {
   id: string
   completed: boolean
@@ -30628,6 +33197,7 @@ export type SetProjectCompletedInput = {
 // 日時はUTCのISO 8601文字列。done: 完了状態（0010。永続化した列）。doneOn: 完了日時（未完了なら null）。
 // done = true なら doneOn あり、false なら null（完了・取り消しはフェーズ5.3の projects.setCompleted）
 export type ProjectDto = {
+  favorite: boolean
   id: string
   name: string
   createdAt: string
@@ -30792,6 +33362,8 @@ export type TaskDto = {
 // （画面を開いたまま日付が変わっても、古い日付を保存しない）。date は実在する暦日（Mainで検証）。過去の日付も可
 export type TaskDueChange = { kind: 'today' } | { kind: 'tomorrow' } | { kind: 'date'; date: string } | { kind: 'clear' }
 
+export type SetTasksDayInput = { ids: string[]; day: 'today' | 'tomorrow' }
+
 export type SetTaskDueInput = {
   id: string
   due: TaskDueChange
@@ -30921,6 +33493,7 @@ export const milestonesRenameArgsSchema = z.tuple([
 
 // 削除（フェーズ5.6）。確認した時の件数（0以上の整数）を添える
 const milestoneIdSchema = z.uuid({ error: 'マイルストンIDが正しくありません。' })
+export const milestonesSetFavoriteArgsSchema = z.tuple([z.strictObject({ id: milestoneIdSchema, favorite: z.boolean() })])
 const countSchema = z.number({ error: '件数は数値で指定してください。' }).int().min(0).max(Number.MAX_SAFE_INTEGER)
 export const milestonesGetDeletionSummaryArgsSchema = z.tuple([z.strictObject({ id: milestoneIdSchema })])
 export const milestonesDeleteArgsSchema = z.tuple([z.strictObject({ id: milestoneIdSchema, expectedTaskCount: countSchema })])
@@ -30966,6 +33539,10 @@ export const setProjectCompletedInputSchema = z.strictObject({
   completed: z.boolean({ error: '完了状態は true / false で指定してください。' })
 })
 export const projectsSetCompletedArgsSchema = z.tuple([setProjectCompletedInputSchema])
+export const projectsSetFavoriteArgsSchema = z.tuple([z.strictObject({
+  id: projectIdSchema,
+  favorite: z.boolean({ error: 'お気に入りはtrue/falseで指定してください。' })
+})])
 
 // 削除（フェーズ5.6）。確認した時の件数（0以上の整数）を添える
 const countSchema = z.number({ error: '件数は数値で指定してください。' }).int().min(0).max(Number.MAX_SAFE_INTEGER)
@@ -31069,6 +33646,10 @@ export const setTaskDueInputSchema = z.strictObject({
   ])
 })
 export const tasksSetDueArgsSchema = z.tuple([setTaskDueInputSchema])
+export const tasksSetDayManyArgsSchema = z.tuple([z.strictObject({
+  ids: taskIdListSchema,
+  day: z.enum(['today', 'tomorrow'])
+})])
 
 // お気に入り: 目的の状態（真偽値だけ。0 / 1 や文字列は受け付けない）
 export const setTaskFavoriteInputSchema = z.strictObject({
@@ -31195,6 +33776,7 @@ export function normalizeWorkspaceSettings(raw: string | undefined): NormalizeRe
 ````src/main/index.ts
 import { readFileSync, realpathSync } from 'node:fs'
 import { tmpdir } from 'node:os'
+import { createWindowState } from './lifecycle/window-state'
 import { app, BrowserWindow, dialog, screen, session } from 'electron'
 import { APP_IDENTITY } from '../shared/app-identity'
 import { IPC_CHANNELS, type AppInfo } from '../shared/contracts/ipc'
@@ -31308,6 +33890,7 @@ const migrationsDir = resolveMigrationsDir({
   resourcesPath: process.resourcesPath
 })
 
+let windowState: ReturnType<typeof createWindowState> | null = null
 let mainWindow: BrowserWindow | null = null
 let database: AppDatabase | null = null
 
@@ -31400,7 +33983,12 @@ function startParentWatch(): void {
 function showMainWindow(): void {
   if (!mainWindow || mainWindow.isDestroyed()) {
     exitCoordinator.resetForNewWindow()
-    mainWindow = createMainWindow(windowPresentation)
+    if (!database) throw new Error('DBが初期化されていません')
+    windowState ??= createWindowState(createSettingsRepository(database), MIN_WINDOW_WIDTH)
+    const restoring = windowPresentation.kind === 'normal'
+    mainWindow = createMainWindow(windowPresentation, restoring ? { compact: windowState.compact, bounds: windowState.restoreBounds() } : undefined)
+    // 自動UIテストでは従来の起動サイズと表示方法を維持する。
+    if (restoring) windowState.attach(mainWindow)
     if (testConfig) {
       // 実行スクリプトが「表示されていない」「フォーカスを取っていない」「表示位置」を確認するためのログ
       const win = mainWindow
@@ -31473,6 +34061,7 @@ function initializeDatabase(): AppDatabase {
 
 function getAppInfo(): AppInfo {
   return {
+    compact: windowPresentation.kind === 'normal' ? windowState?.compact ?? false : false,
     name: APP_IDENTITY.displayName,
     version: app.getVersion(),
     environment: app.isPackaged ? 'production' : 'development',
@@ -31543,6 +34132,16 @@ if (!app.requestSingleInstanceLock()) {
     registerIpcHandlers({
       policy: { getWindow: () => mainWindow, isAllowedUrl: isAppUrl },
       getAppInfo,
+    setCompact: (compact) => {
+      if (windowPresentation.kind !== 'normal') {
+        if (!mainWindow || mainWindow.isDestroyed()) throw new Error('ウィンドウがありません')
+        mainWindow.setMinimumSize(compact ? 240 : MIN_WINDOW_WIDTH, MIN_WINDOW_HEIGHT)
+      } else {
+        if (!windowState) throw new Error('ウィンドウ設定が初期化されていません')
+        windowState.setCompact(compact)
+      }
+      return null
+    },
       taskService: createTaskService({
         repository: taskRepository,
         findProject: projectRepository.findById,
@@ -31638,12 +34237,12 @@ export const DEFAULT_WINDOW_SIZE = { width: 1200, height: 760 } as const
 // - inactive: 自動テスト（GTD_TEST_UI=secondary）。指定位置に、フォーカスを奪わずに表示する（showInactive）
 export type WindowPresentation = { kind: 'normal' } | { kind: 'hidden' } | { kind: 'inactive'; bounds: Rectangle }
 
-export function createMainWindow(presentation: WindowPresentation = { kind: 'normal' }): BrowserWindow {
+export function createMainWindow(presentation: WindowPresentation = { kind: 'normal' }, restored?: { compact: boolean; bounds: Rectangle | undefined }): BrowserWindow {
   const testing = presentation.kind !== 'normal'
   const win = new BrowserWindow({
     title: APP_IDENTITY.displayName,
-    ...(presentation.kind === 'inactive' ? presentation.bounds : DEFAULT_WINDOW_SIZE),
-    minWidth: MIN_WINDOW_WIDTH,
+    ...(presentation.kind === 'inactive' ? presentation.bounds : restored?.bounds ?? DEFAULT_WINDOW_SIZE),
+    minWidth: restored?.compact ? 240 : MIN_WINDOW_WIDTH,
     minHeight: MIN_WINDOW_HEIGHT,
     show: false,
     backgroundColor: '#1e1e1e',
@@ -31778,6 +34377,97 @@ export function watchParentProcess(deps: {
     deps.onOrphaned({ initialParentPid, currentParentPid })
   }, deps.intervalMs ?? PARENT_WATCH_INTERVAL_MS)
   return { stop }
+}
+
+````
+
+````src/main/lifecycle/window-state.ts
+import { screen, type BrowserWindow, type Rectangle } from 'electron'
+import { z } from 'zod'
+import type { SettingsRepository } from '../repositories/settings-repository'
+
+const boundsSchema = z.object({
+  x: z.number().int().min(-100000).max(100000),
+  y: z.number().int().min(-100000).max(100000),
+  width: z.number().int().min(240).max(30000),
+  height: z.number().int().min(480).max(30000)
+})
+const stateSchema = z.object({ version: z.literal(1), compact: z.boolean(), bounds: boundsSchema })
+type State = z.infer<typeof stateSchema>
+
+export function createWindowState(repository: SettingsRepository, normalMinimum: number) {
+  let state: State | null = null
+  try {
+    const row = repository.get('windowState')
+    if (row) {
+      const parsed = stateSchema.safeParse(JSON.parse(row.value))
+      if (parsed.success) state = parsed.data
+      else console.warn('[window-state] 保存値が不正なため既定値を使用します')
+    }
+  } catch (error) { console.error('[window-state] 読み込みに失敗しました', error) }
+  let compact = state?.compact ?? false
+  let win: BrowserWindow | null = null
+  let timer: ReturnType<typeof setTimeout> | null = null
+
+  const restoreBounds = (): Rectangle | undefined => {
+    if (!state) return undefined
+    const saved = state.bounds
+    const area = screen.getDisplayMatching(saved).workArea
+    const width = Math.max(compact ? 240 : normalMinimum, Math.min(saved.width, area.width))
+    const height = Math.max(480, Math.min(saved.height, area.height))
+    return {
+      width, height,
+      x: Math.round(Math.max(area.x, Math.min(saved.x, area.x + area.width - width))),
+      y: Math.round(Math.max(area.y, Math.min(saved.y, area.y + area.height - height)))
+    }
+  }
+  const save = () => {
+    if (timer) clearTimeout(timer)
+    timer = null
+    if (!win || win.isDestroyed()) return
+    const bounds = win.isMaximized() || win.isFullScreen() || win.isMinimized() ? win.getNormalBounds() : win.getBounds()
+    const next: State = { version: 1, compact, bounds }
+    repository.upsert({ key: 'windowState', value: JSON.stringify(next), updatedAt: new Date().toISOString() })
+    state = next
+  }
+  const safeSave = () => {
+    try { save() } catch (error) { console.error('[window-state] 保存に失敗しました', error) }
+  }
+  const schedule = () => {
+    if (timer) clearTimeout(timer)
+    timer = setTimeout(safeSave, 150)
+  }
+  return {
+    get compact() { return compact },
+    restoreBounds,
+    attach(window: BrowserWindow) {
+      win = window
+      window.on('move', schedule)
+      window.on('resize', schedule)
+      window.on('close', safeSave)
+      window.once('closed', () => {
+        if (timer) clearTimeout(timer)
+        timer = null
+        win = null
+      })
+    },
+    setCompact(next: boolean) {
+      if (!win || win.isDestroyed()) throw new Error('ウィンドウがありません')
+      const previous = compact
+      const bounds = win.getBounds()
+      try {
+        compact = next
+        win.setMinimumSize(next ? 240 : normalMinimum, 480)
+        if (!next && bounds.width < normalMinimum) win.setSize(normalMinimum, bounds.height)
+        save()
+      } catch (error) {
+        compact = previous
+        win.setMinimumSize(previous ? 240 : normalMinimum, 480)
+        win.setBounds(bounds)
+        throw error
+      }
+    }
+  }
 }
 
 ````
@@ -31999,6 +34689,7 @@ export type MilestoneRepository = {
   // 表示対象（project_id あり）だけ。手動順（フェーズ5.9。NULLは後ろ）→ 作成日時の古い順 → IDの昇順（全プロジェクト分。表示もこの順）
   listAll(): MilestoneRow[]
   updateName(id: string, name: string, updatedAt: string): MilestoneRow | undefined
+  updateFavorite(id: string, favorite: boolean, updatedAt: string): MilestoneRow | undefined
   // プロジェクトに所属するマイルストンの件数
   countByProject(projectId: string): number
   // プロジェクトの削除に伴う所属解除（project_id = NULL）。名前・作成日時は変えない。変更した件数を返す
@@ -32030,6 +34721,9 @@ export function createMilestoneRepository(db: AppDatabase): MilestoneRepository 
         .where(isNotNull(milestones.projectId))
         .orderBy(sql`${milestones.position} IS NULL`, asc(milestones.position), asc(milestones.createdAt), asc(milestones.id))
         .all()
+    },
+    updateFavorite(id, favorite, updatedAt) {
+      return db.update(milestones).set({ favorite, updatedAt }).where(visible(id)).returning().get()
     },
     updateName(id, name, updatedAt) {
       return db.update(milestones).set({ name, updatedAt }).where(visible(id)).returning().get()
@@ -32075,6 +34769,7 @@ export type ProjectRepository = {
   listAll(): ProjectRow[]
   // 更新した行を返す。対象がなければundefined
   updateName(id: string, name: string, updatedAt: string): ProjectRow | undefined
+  updateFavorite(id: string, favorite: boolean, updatedAt: string): ProjectRow | undefined
   // 完了状態の更新（done と done_on を同じ更新で書き換える）。完了は done = true・done_on = 日時、取り消しは false・NULL
   updateDone(id: string, doneOn: string | null, updatedAt: string): ProjectRow | undefined
   // 物理削除（フェーズ5.6）。所属するマイルストン・タスクの所属解除はServiceが先に行う。削除した件数を返す
@@ -32091,6 +34786,9 @@ export function createProjectRepository(db: AppDatabase): ProjectRepository {
     },
     listAll() {
       return db.select().from(projects).orderBy(asc(projects.createdAt), asc(projects.id)).all()
+    },
+    updateFavorite(id, favorite, updatedAt) {
+      return db.update(projects).set({ favorite, updatedAt }).where(eq(projects.id, id)).returning().get()
     },
     updateName(id, name, updatedAt) {
       return db.update(projects).set({ name, updatedAt }).where(eq(projects.id, id)).returning().get()
@@ -32113,7 +34811,8 @@ import { appSettings, type AppSettingRow } from '../db/schema'
 
 // 設定キーは用途ごとに固定する（Rendererから任意のキーは指定させない）。
 export const SETTINGS_KEYS = {
-  workspace: 'workspace'
+  workspace: 'workspace',
+  windowState: 'windowState'
 } as const
 export type SettingsKey = (typeof SETTINGS_KEYS)[keyof typeof SETTINGS_KEYS]
 
@@ -32451,6 +35150,7 @@ export const milestones = sqliteTable(
     createdAt: text('created_at').notNull(),
     updatedAt: text('updated_at').notNull(),
     done: integer('done', { mode: 'boolean' }).notNull().default(false),
+    favorite: integer('favorite', { mode: 'boolean' }).notNull().default(false),
     doneOn: text('done_on'),
     position: integer('position')
   },
@@ -32478,6 +35178,7 @@ export const projects = sqliteTable('projects', {
   createdAt: text('created_at').notNull(),
   updatedAt: text('updated_at').notNull(),
   done: integer('done', { mode: 'boolean' }).notNull().default(false),
+  favorite: integer('favorite', { mode: 'boolean' }).notNull().default(false),
   doneOn: text('done_on')
 })
 
@@ -32625,6 +35326,7 @@ export function createIpcHandler<S extends z.ZodType, T>(options: {
 
 ````src/main/ipc/index.ts
 import { ipcMain } from 'electron'
+import { z } from 'zod'
 import { IPC_CHANNELS, type AppInfo } from '../../shared/contracts/ipc'
 import { appGetInfoArgsSchema } from '../../shared/validation/app'
 import {
@@ -32633,7 +35335,8 @@ import {
   milestonesGetDeletionSummaryArgsSchema,
   milestonesListArgsSchema,
   milestonesRenameArgsSchema,
-  milestonesReorderArgsSchema
+  milestonesReorderArgsSchema,
+  milestonesSetFavoriteArgsSchema
 } from '../../shared/validation/milestones'
 import {
   projectsCreateArgsSchema,
@@ -32641,7 +35344,8 @@ import {
   projectsGetDeletionSummaryArgsSchema,
   projectsListArgsSchema,
   projectsRenameArgsSchema,
-  projectsSetCompletedArgsSchema
+  projectsSetCompletedArgsSchema,
+  projectsSetFavoriteArgsSchema
 } from '../../shared/validation/projects'
 import {
   tasksAssignFromInboxArgsSchema,
@@ -32650,6 +35354,7 @@ import {
   tasksDeleteManyArgsSchema,
   tasksReorderInMilestoneArgsSchema,
   tasksSetDueArgsSchema,
+  tasksSetDayManyArgsSchema,
   summaryGetArgsSchema,
   tasksSetFavoriteArgsSchema,
   tasksListArgsSchema,
@@ -32675,6 +35380,7 @@ import { createIpcHandler, type SenderPolicy } from './handler'
 export function registerIpcHandlers(deps: {
   policy: SenderPolicy
   getAppInfo: () => AppInfo
+  setCompact: (compact: boolean) => null
   taskService: TaskService
   projectService: ProjectService
   milestoneService: MilestoneService
@@ -32683,6 +35389,21 @@ export function registerIpcHandlers(deps: {
   flushRequester: FlushRequester
 }): void {
   const { policy, taskService, projectService, milestoneService, workspaceSettingsService } = deps
+  ipcMain.handle(IPC_CHANNELS.milestonesSetFavorite,
+    createIpcHandler({ channel: IPC_CHANNELS.milestonesSetFavorite, argsSchema: milestonesSetFavoriteArgsSchema, policy,
+      run: ([input]) => milestoneService.setFavorite(input) }))
+  ipcMain.handle(IPC_CHANNELS.projectsSetFavorite,
+    createIpcHandler({ channel: IPC_CHANNELS.projectsSetFavorite, argsSchema: projectsSetFavoriteArgsSchema, policy,
+      run: ([input]) => projectService.setFavorite(input) }))
+  ipcMain.handle(
+    IPC_CHANNELS.appSetCompact,
+    createIpcHandler({
+      channel: IPC_CHANNELS.appSetCompact,
+      argsSchema: z.tuple([z.boolean()]),
+      policy,
+      run: ([compact]) => deps.setCompact(compact)
+    })
+  )
 
   ipcMain.handle(
     IPC_CHANNELS.appGetInfo,
@@ -32783,6 +35504,12 @@ export function registerIpcHandlers(deps: {
       policy,
       run: ([input]) => taskService.reorderInMilestone(input)
     })
+  )
+
+  ipcMain.handle(
+    IPC_CHANNELS.tasksSetDayMany,
+    createIpcHandler({ channel: IPC_CHANNELS.tasksSetDayMany, argsSchema: tasksSetDayManyArgsSchema, policy,
+      run: ([input]) => taskService.setDayMany(input) })
   )
 
   // フェーズ6: 期限の設定・変更・解除と Summary Review
@@ -33311,7 +36038,8 @@ import type {
   MilestoneDeletionSummary,
   MilestoneDto,
   RenameMilestoneInput,
-  ReorderMilestonesInput
+  ReorderMilestonesInput,
+  SetMilestoneFavoriteInput
 } from '../../shared/contracts/milestones'
 import type { MilestoneRow, ProjectRow } from '../db/schema'
 import type { RunInTransaction } from '../db/transaction'
@@ -33332,6 +36060,7 @@ export type MilestoneService = {
   create(input: CreateMilestoneInput): MilestoneDto
   // 同じ名前なら更新しない（updatedAtも変えない）。完了済みプロジェクトのマイルストンでも名前は変更できる。
   rename(input: RenameMilestoneInput): MilestoneDto
+  setFavorite(input: SetMilestoneFavoriteInput): MilestoneDto
   // 削除の確認内容（フェーズ5.6）。件数はDBの所属タスクの総数（完了済み・検索で隠れているものを含む）
   getDeletionSummary(input: { id: string }): MilestoneDeletionSummary
   // 削除（フェーズ5.6）。1つのトランザクションで、所属タスクの milestone_id をNULLにして非表示にし（project_id は残す。
@@ -33356,6 +36085,7 @@ function toDto(row: VisibleMilestoneRow): MilestoneDto {
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
     done: row.done,
+    favorite: row.favorite,
     doneOn: row.doneOn,
     position: row.position
   }
@@ -33397,6 +36127,7 @@ export function createMilestoneService(deps: {
           id: generateId(),
           projectId: input.projectId,
           name: input.name,
+          favorite: false,
           createdAt: timestamp,
           updatedAt: timestamp,
           // 完了の列（0010）。今回は完了の操作がなく、常に未完了で作成する
@@ -33406,6 +36137,15 @@ export function createMilestoneService(deps: {
         }
         repository.insert(row)
         return toDto(row)
+      })
+    },
+    setFavorite(input) {
+      return deps.transaction(() => {
+        const current = findVisible(input.id)
+        if (current.favorite === input.favorite) return toDto(current)
+        const updated = repository.updateFavorite(input.id, input.favorite, now().toISOString())
+        if (!isVisible(updated)) throw milestoneNotFound()
+        return toDto(updated)
       })
     },
     rename(input) {
@@ -33461,7 +36201,8 @@ import type {
   ProjectDeletionSummary,
   ProjectDto,
   RenameProjectInput,
-  SetProjectCompletedInput
+  SetProjectCompletedInput,
+  SetProjectFavoriteInput
 } from '../../shared/contracts/projects'
 import type { MilestoneRow, ProjectRow } from '../db/schema'
 import type { RunInTransaction } from '../db/transaction'
@@ -33480,6 +36221,7 @@ export type ProjectService = {
   // 完了するには、所属する全タスク（画面の絞り込みとは無関係にDBで数える）が完了済みであること。0件なら完了できる。
   // 所属タスクの状態・日時・所属は変えない。タスクが全件完了しても自動では完了しない。
   setCompleted(input: SetProjectCompletedInput): ProjectDto
+  setFavorite(input: SetProjectFavoriteInput): ProjectDto
   // 削除の確認内容（フェーズ5.6）。件数はDBで数える（タスクは既に非表示のものを含む）
   getDeletionSummary(input: { id: string }): ProjectDeletionSummary
   // 削除（フェーズ5.6）。未完了・完了済みのどちらでも削除できる（完了の条件とは無関係）。1つのトランザクションで:
@@ -33496,6 +36238,7 @@ function toDto(row: ProjectRow): ProjectDto {
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
     done: row.done,
+    favorite: row.favorite,
     doneOn: row.doneOn
   }
 }
@@ -33530,6 +36273,7 @@ export function createProjectService(deps: {
         const row: ProjectRow = {
           id: generateId(),
           name: input.name,
+          favorite: false,
           createdAt: timestamp,
           updatedAt: timestamp,
           done: false,
@@ -33540,6 +36284,7 @@ export function createProjectService(deps: {
           id: generateId(),
           projectId: row.id,
           name: INITIAL_MILESTONE_NAME,
+          favorite: false,
           createdAt: timestamp,
           updatedAt: timestamp,
           done: false,
@@ -33557,6 +36302,16 @@ export function createProjectService(deps: {
       const updated = repository.updateName(input.id, input.name, now().toISOString())
       if (!updated) throw projectNotFound()
       return toDto(updated)
+    },
+    setFavorite(input) {
+      return deps.transaction(() => {
+        const current = repository.findById(input.id)
+        if (!current) throw projectNotFound()
+        if (current.favorite === input.favorite) return toDto(current)
+        const updated = repository.updateFavorite(input.id, input.favorite, now().toISOString())
+        if (!updated) throw projectNotFound()
+        return toDto(updated)
+      })
     },
     setCompleted(input) {
       return deps.transaction(() => {
@@ -33666,6 +36421,7 @@ import type {
   DeleteTasksResult,
   ReorderMilestoneTasksInput,
   SetTaskDueInput,
+  SetTasksDayInput,
   SetTaskFavoriteInput,
   SetTaskAssignmentInput,
   SetTaskCompletedInput,
@@ -33676,6 +36432,7 @@ import type { MilestoneRow, ProjectRow, TaskRow } from '../db/schema'
 import type { RunInTransaction } from '../db/transaction'
 import type { TaskRepository } from '../repositories/task-repository'
 import {
+  BusinessError,
   milestoneProjectMismatch,
   milestoneRequired,
   orderChanged,
@@ -33722,6 +36479,7 @@ export type TaskService = {
   // 表示中のタスクだけ（非表示・削除済みは NOT_FOUND。遅れた保存で対象を作り直さない）。期限だけを更新し、
   // タイトル・所属・完了状態・手動順は変えない。同じ期限なら更新しない（updatedAt も変えない）
   setDue(input: SetTaskDueInput): TaskDto
+  setDayMany(input: SetTasksDayInput): TaskDto[]
   // お気に入りの設定・解除。表示中のタスクだけ（非表示・削除済みは NOT_FOUND。遅れた保存で対象を作り直さない）。
   // お気に入りだけを更新し、他の項目は変えない。同じ値なら更新しない（updatedAt も変えない）
   setFavorite(input: SetTaskFavoriteInput): TaskDto
@@ -33911,6 +36669,21 @@ export function createTaskService(deps: {
         return repository.listVisibleByMilestone(input.milestoneId).map(toDto)
       })
     },
+    setDayMany(input) {
+      return transaction(() => {
+        const rows = input.ids.map(findOrThrow)
+        if (rows.some((row) => row.doneOn !== null)) throw new BusinessError('CONFLICT', '完了済みのタスクが含まれています。表示を更新してください。')
+        const at = now()
+        const today = localDateOnly(at)
+        const dueto = input.day === 'today' ? today : addDaysToDateOnly(today, 1)
+        return rows.map((row) => {
+          if (row.dueto === dueto) return toDto(row)
+          const updated = repository.updateDue(row.id, dueto, at.toISOString())
+          if (!updated) throw taskNotFound()
+          return toDto(updated)
+        })
+      })
+    },
     setDue(input) {
       return transaction(() => {
         const current = findOrThrow(input.id)
@@ -34003,7 +36776,8 @@ import { IPC_CHANNELS, type GtdApi } from '../shared/contracts/ipc'
 
 const api: GtdApi = {
   app: {
-    getInfo: () => ipcRenderer.invoke(IPC_CHANNELS.appGetInfo)
+    getInfo: () => ipcRenderer.invoke(IPC_CHANNELS.appGetInfo),
+    setCompact: (compact) => ipcRenderer.invoke(IPC_CHANNELS.appSetCompact, compact)
   },
   tasks: {
     // 入力の検証はMain側で行う。ここでは引数を1つだけ転送する。
@@ -34017,6 +36791,7 @@ const api: GtdApi = {
     deleteMany: (input) => ipcRenderer.invoke(IPC_CHANNELS.tasksDeleteMany, input),
     reorderInMilestone: (input) => ipcRenderer.invoke(IPC_CHANNELS.tasksReorderInMilestone, input),
     setDue: (input) => ipcRenderer.invoke(IPC_CHANNELS.tasksSetDue, input),
+    setDayMany: (input) => ipcRenderer.invoke(IPC_CHANNELS.tasksSetDayMany, input),
     setFavorite: (input) => ipcRenderer.invoke(IPC_CHANNELS.tasksSetFavorite, input)
   },
   summary: {
@@ -34028,6 +36803,7 @@ const api: GtdApi = {
     create: (input) => ipcRenderer.invoke(IPC_CHANNELS.projectsCreate, input),
     rename: (input) => ipcRenderer.invoke(IPC_CHANNELS.projectsRename, input),
     setCompleted: (input) => ipcRenderer.invoke(IPC_CHANNELS.projectsSetCompleted, input),
+    setFavorite: (input) => ipcRenderer.invoke(IPC_CHANNELS.projectsSetFavorite, input),
     getDeletionSummary: (input) => ipcRenderer.invoke(IPC_CHANNELS.projectsGetDeletionSummary, input),
     delete: (input) => ipcRenderer.invoke(IPC_CHANNELS.projectsDelete, input)
   },
@@ -34035,6 +36811,7 @@ const api: GtdApi = {
     list: () => ipcRenderer.invoke(IPC_CHANNELS.milestonesList),
     create: (input) => ipcRenderer.invoke(IPC_CHANNELS.milestonesCreate, input),
     rename: (input) => ipcRenderer.invoke(IPC_CHANNELS.milestonesRename, input),
+    setFavorite: (input) => ipcRenderer.invoke(IPC_CHANNELS.milestonesSetFavorite, input),
     getDeletionSummary: (input) => ipcRenderer.invoke(IPC_CHANNELS.milestonesGetDeletionSummary, input),
     delete: (input) => ipcRenderer.invoke(IPC_CHANNELS.milestonesDelete, input),
     reorder: (input) => ipcRenderer.invoke(IPC_CHANNELS.milestonesReorder, input)

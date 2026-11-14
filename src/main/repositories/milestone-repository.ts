@@ -11,6 +11,7 @@ export type MilestoneRepository = {
   // 表示対象（project_id あり）だけ。手動順（フェーズ5.9。NULLは後ろ）→ 作成日時の古い順 → IDの昇順（全プロジェクト分。表示もこの順）
   listAll(): MilestoneRow[]
   updateName(id: string, name: string, updatedAt: string): MilestoneRow | undefined
+  updateFavorite(id: string, favorite: boolean, updatedAt: string): MilestoneRow | undefined
   // プロジェクトに所属するマイルストンの件数
   countByProject(projectId: string): number
   // プロジェクトの削除に伴う所属解除（project_id = NULL）。名前・作成日時は変えない。変更した件数を返す
@@ -42,6 +43,9 @@ export function createMilestoneRepository(db: AppDatabase): MilestoneRepository 
         .where(isNotNull(milestones.projectId))
         .orderBy(sql`${milestones.position} IS NULL`, asc(milestones.position), asc(milestones.createdAt), asc(milestones.id))
         .all()
+    },
+    updateFavorite(id, favorite, updatedAt) {
+      return db.update(milestones).set({ favorite, updatedAt }).where(visible(id)).returning().get()
     },
     updateName(id, name, updatedAt) {
       return db.update(milestones).set({ name, updatedAt }).where(visible(id)).returning().get()

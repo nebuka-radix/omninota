@@ -15,6 +15,7 @@ import { useUpdateTaskTitleMutation } from './task-queries'
 // - 保存に失敗したら入力を残し、理由を表示する。
 export type InlineEditState = {
   taskId: string
+  scopeId?: string
   draft: string
   error: string | null
   saving: boolean
@@ -23,7 +24,7 @@ export type InlineEditState = {
 export type InlineTitleEditController = {
   state: InlineEditState | null
   // 編集を始める。別の行を編集中なら、先にその行を保存する（失敗したら始めない）
-  start: (task: TaskDto) => Promise<boolean>
+  start: (task: TaskDto, scopeId?: string) => Promise<boolean>
   change: (value: string) => void
   // 保存して閉じる。成功（または変更なし）なら true
   commit: () => Promise<boolean>
@@ -90,13 +91,13 @@ export function useInlineTitleEdit(tasks: readonly TaskDto[]): InlineTitleEditCo
   }, [updateTitle])
 
   const start = useCallback(
-    async (task: TaskDto): Promise<boolean> => {
+    async (task: TaskDto, scopeId?: string): Promise<boolean> => {
       const current = stateRef.current
-      if (current?.taskId === task.id) return true
+      if (current?.taskId === task.id && current.scopeId === scopeId) return true
       if (current && !(await commit())) return false
       // 同じタスクを詳細パネルで編集中（未保存）なら、既存の確認を先に行う（同じタスクの2つの入力を同時に持たない）
       if (!(await confirmLeave({ target: { kind: 'task', id: task.id } }))) return false
-      const next = { taskId: task.id, draft: task.title, error: null, saving: false }
+      const next = { taskId: task.id, draft: task.title, error: null, saving: false, ...(scopeId ? { scopeId } : {}) }
       stateRef.current = next
       setState(next)
       return true

@@ -3,6 +3,7 @@ import { sortProjects } from '../../src/renderer/src/features/projects/project-o
 import type { ProjectDto } from '../../src/shared/contracts/projects'
 
 const p = (id: string, name: string, createdAt: string, doneOn: string | null = null): ProjectDto => ({
+  favorite: false,
   id,
   name,
   createdAt,
