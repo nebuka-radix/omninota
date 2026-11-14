@@ -1,7 +1,7 @@
 import { useLayoutEffect, useRef, useState, type ReactNode } from 'react'
-import { Alert, Box, CircularProgress, Tab, Tabs, Typography } from '@mui/material'
+import { Alert, Box, Button, CircularProgress, Menu, MenuItem, Tab, Tabs, Typography } from '@mui/material'
 import { useQuery } from '@tanstack/react-query'
-import { FolderKanban, Flag } from 'lucide-react'
+import { ArrowDownFromLine, ArrowUpFromLine, FolderKanban, Flag } from 'lucide-react'
 import { useDraftGuard } from '../features/drafts/DraftGuard'
 import { projectListQueryOptions } from '../features/projects/project-queries'
 import { sortProjects } from '../features/projects/project-order'
@@ -15,6 +15,7 @@ import type { TaskDto } from '../../../shared/contracts/tasks'
 import { vscodeColors } from '../theme'
 import { SummaryPage } from './SummaryPage'
 import { SectionRow } from '../components/SectionRow'
+import { ShellSlot } from '../components/ShellSlots'
 
 type CompactTab = 'day' | 'inbox' | 'project'
 const EMPTY_TASKS: TaskDto[] = []
@@ -80,7 +81,8 @@ function CompactTaskBrowser({ kind }: { kind: 'inbox' | 'project' }) {
   const tasksQuery = useQuery(taskListQueryOptions)
   const projectsQuery = useQuery(projectListQueryOptions)
   const milestonesQuery = useQuery(milestoneListQueryOptions)
-  const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(new Set())
+  const [expandedNodes, setExpandedNodes] = useState<ReadonlySet<string>>(new Set())
+  const [menuAnchor, setMenuAnchor] = useState<HTMLElement | null>(null)
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [announcement, setAnnouncement] = useState('')
   const [navigationError, setNavigationError] = useState<string | null>(null)
@@ -112,10 +114,10 @@ function CompactTaskBrowser({ kind }: { kind: 'inbox' | 'project' }) {
     if (busy.current) return
     busy.current = true
     try {
-      const closing = !collapsed.has(key)
+      const closing = expandedNodes.has(key)
       if (closing && !(await confirmLeave())) return
       setNavigationError(null)
-      setCollapsed((current) => {
+      setExpandedNodes((current) => {
         const next = new Set(current)
         if (next.has(key)) next.delete(key)
         else next.add(key)
@@ -123,6 +125,23 @@ function CompactTaskBrowser({ kind }: { kind: 'inbox' | 'project' }) {
       })
     } catch (cause) {
       setNavigationError(cause instanceof Error ? cause.message : '表示を変更できませんでした')
+    } finally { busy.current = false }
+  }
+  const setAllExpanded = async (expand: boolean) => {
+    if (busy.current) return
+    busy.current = true
+    setMenuAnchor(null)
+    try {
+      if (!expand && !(await confirmLeave())) return
+      setNavigationError(null)
+      const projectIds = new Set(projects.map((project) => project.id))
+      setExpandedNodes(expand ? new Set([
+        ...projects.map((project) => `project:${project.id}`),
+        ...milestoneRows.filter((milestone) => milestone.projectId !== null && projectIds.has(milestone.projectId))
+          .map((milestone) => `milestone:${milestone.id}`)
+      ]) : new Set())
+    } catch (cause) {
+      setNavigationError(cause instanceof Error ? cause.message : '展開状態を変更できませんでした')
     } finally { busy.current = false }
   }
   const renderList = (tasks: readonly TaskDto[], label: string, projectTree = false) => (
@@ -147,7 +166,7 @@ function CompactTaskBrowser({ kind }: { kind: 'inbox' | 'project' }) {
       {projects.length === 0 && <Box component="li" sx={{ p: 2, fontSize: 12 }}>未完了のプロジェクトがありません</Box>}
       {projects.map((project) => {
         const projectKey = `project:${project.id}`
-        const projectExpanded = !collapsed.has(projectKey)
+        const projectExpanded = expandedNodes.has(projectKey)
         const projectLabel = projectLabels.get(project.id) ?? project.name
         const projectTitleId = `compact-project-title-${project.id}`
         const projectContentId = `compact-project-content-${project.id}`
@@ -166,7 +185,7 @@ function CompactTaskBrowser({ kind }: { kind: 'inbox' | 'project' }) {
                   {groups.length === 0 && <Box component="li" sx={{ pl: '36px', py: 1, fontSize: 12, color: 'text.secondary' }}>マイルストンはありません</Box>}
                   {groups.map((group) => {
                     const milestoneKey = `milestone:${group.milestoneId}`
-                    const milestoneExpanded = !collapsed.has(milestoneKey)
+                    const milestoneExpanded = expandedNodes.has(milestoneKey)
                     const titleId = `compact-milestone-title-${group.milestoneId}`
                     const contentId = `compact-milestone-content-${group.milestoneId}`
                     return (
@@ -194,6 +213,27 @@ function CompactTaskBrowser({ kind }: { kind: 'inbox' | 'project' }) {
   )
   return (
     <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column', minHeight: 0, minWidth: 0 }}>
+      {kind === 'project' && (
+        <ShellSlot name="top-bar-controls">
+          <Button
+            size="small" aria-haspopup="menu"
+            aria-expanded={menuAnchor !== null}
+            aria-controls={menuAnchor ? 'compact-project-actions-menu' : undefined}
+            disabled={loading || error !== null || projects.length === 0}
+            onClick={(event) => setMenuAnchor(event.currentTarget)}
+            sx={{ minWidth: 0, px: 1, fontSize: 12, whiteSpace: 'nowrap' }}
+            data-testid="compact-project-actions-button"
+          >PROJECT操作</Button>
+          <Menu id="compact-project-actions-menu" anchorEl={menuAnchor} open={menuAnchor !== null} onClose={() => setMenuAnchor(null)}>
+            <MenuItem onClick={() => void setAllExpanded(false)} sx={{ gap: 2, fontSize: 12 }} data-testid="compact-project-collapse-all">
+              <ArrowUpFromLine size={16} aria-hidden />すべて折りたたむ
+            </MenuItem>
+            <MenuItem onClick={() => void setAllExpanded(true)} sx={{ gap: 2, fontSize: 12 }} data-testid="compact-project-expand-all">
+              <ArrowDownFromLine size={16} aria-hidden />すべて展開
+            </MenuItem>
+          </Menu>
+        </ShellSlot>
+      )}
       <Box role="status" aria-live="polite" sx={{ position: 'absolute', width: 1, height: 1, overflow: 'hidden', clip: 'rect(0 0 0 0)' }}>{announcement}</Box>
       {navigationError && <Alert severity="error" onClose={() => setNavigationError(null)}>{navigationError}</Alert>}
       <Box sx={{ flexShrink: 0 }}>{rowActions.alerts}</Box>
