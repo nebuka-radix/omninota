@@ -26,3 +26,12 @@
 .gtd-markdown-page blockquote { border-left:3px solid #a2a9b1; margin:1em 0; padding-left:1em; color:#54595d; }
 .gtd-mermaid-diagram { overflow:auto; }.gtd-mermaid-diagram svg { max-width:100%; height:auto; }
 .gtd-mermaid-error { color:#b32424; white-space:pre-wrap; }.gtd-mermaid-message,.gtd-markdown-image-placeholder { color:#54595d; }
+
+/* 042: Word Wrap toggle and resizable preview. */
+.gtd-monaco-toolbar-right { display:flex; align-items:center; gap:4px; }
+.gtd-monaco-toolbar button.gtd-monaco-wrap[aria-pressed="true"] { background:#00ff00; color:#000000; }
+.gtd-monaco-toolbar button.gtd-monaco-wrap[aria-pressed="false"] { background:#252526; color:#858585; }
+.gtd-monaco-toolbar button.gtd-monaco-wrap:focus-visible { outline:1px solid #3794ff; outline-offset:1px; }
+.gtd-monaco-divider { flex:0 0 6px; width:6px; background:#454545; cursor:col-resize; touch-action:none; user-select:none; }
+.gtd-monaco-divider:hover,.gtd-monaco-divider:focus-visible { background:#007fd4; outline:none; }
+.gtd-monaco-preview { border-left:0; }

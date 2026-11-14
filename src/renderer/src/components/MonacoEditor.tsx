@@ -1,8 +1,9 @@
 import { lazy, Suspense, useEffect, useId, useRef, useState } from 'react'
-import { FileCodeCorner, Save } from 'lucide-react'
+import { FileCodeCorner, Save, TextWrap } from 'lucide-react'
 import type * as Monaco from 'monaco-editor'
 import { markdownTableEdits } from './monaco-editor/markdown-tables'
 import './monaco-editor/monaco-editor.css'
+import { previewFraction, previewLayout } from './monaco-editor/preview-layout'
 
 const Preview = lazy(() => import('./monaco-editor/MarkdownPreview').then((module) => ({ default: module.MarkdownPreview })))
 
@@ -23,8 +24,9 @@ export function MonacoEditor({
 }: MonacoEditorProps) {
   const hostRef = useRef<HTMLDivElement>(null)
   const editorRef = useRef<Monaco.editor.IStandaloneCodeEditor | null>(null)
-  const latest = useRef({ value, onChange, onSave, readOnly, wordWrap, ariaLabel })
-  latest.current = { value, onChange, onSave, readOnly, wordWrap, ariaLabel }
+  const [wrapEnabled, setWrapEnabled] = useState(wordWrap)
+  const latest = useRef({ value, onChange, onSave, readOnly, wordWrap: wrapEnabled, ariaLabel })
+  latest.current = { value, onChange, onSave, readOnly, wordWrap: wrapEnabled, ariaLabel }
   const mounted = useRef(false)
   const busyRef = useRef(false)
   const composing = useRef(false)
@@ -34,6 +36,11 @@ export function MonacoEditor({
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [previewOpen, setPreviewOpen] = useState(false)
+  const bodyRef = useRef<HTMLDivElement>(null)
+  const [bodyWidth, setBodyWidth] = useState(0)
+  const [previewRatio, setPreviewRatio] = useState(0.5)
+  const previewDrag = useRef<{ pointerId: number; x: number; width: number; ratio: number } | null>(null)
+  const preview = previewLayout(bodyWidth, previewRatio)
   const [previewValue, setPreviewValue] = useState(value)
   const [fontSize, setFontSize] = useState(() => Math.min(32, Math.max(10, Math.round(initialFontSize))))
   const previewId = `monaco-preview-${useId().replace(/[^a-zA-Z0-9]/g, '')}`
@@ -132,9 +139,21 @@ export function MonacoEditor({
     } finally { synchronizing.current = false }
   }, [value, ready])
 
+  useEffect(() => { setWrapEnabled(wordWrap) }, [wordWrap])
+
   useEffect(() => {
-    editorRef.current?.updateOptions({ fontSize, readOnly, wordWrap: wordWrap ? 'on' : 'off', ariaLabel })
-  }, [fontSize, readOnly, wordWrap, ariaLabel, ready])
+    editorRef.current?.updateOptions({ fontSize, readOnly, wordWrap: wrapEnabled ? 'on' : 'off', ariaLabel })
+  }, [fontSize, readOnly, wrapEnabled, ariaLabel, ready])
+
+  useEffect(() => {
+    const element = bodyRef.current
+    if (!element) return
+    const measure = () => setBodyWidth(element.clientWidth)
+    measure()
+    const observer = new ResizeObserver(measure)
+    observer.observe(element)
+    return () => observer.disconnect()
+  }, [])
 
   useEffect(() => {
     if (!previewOpen) return
@@ -177,20 +196,67 @@ export function MonacoEditor({
           </button>
           <span className="gtd-monaco-status" role="status">{busy ? '処理中…' : ''}</span>
         </div>
-        <button type="button" aria-label="Markdownプレビュー" title="Markdownプレビュー"
-          aria-pressed={previewOpen} aria-expanded={previewOpen} aria-controls={previewId}
-          onClick={() => { setPreviewValue(editorRef.current?.getValue() ?? latest.current.value); setPreviewOpen((current) => !current) }}>
-          <FileCodeCorner size={16} aria-hidden />
-        </button>
+        <div className="gtd-monaco-toolbar-right">
+          <button type="button" className="gtd-monaco-wrap" aria-label="Word Wrap" aria-pressed={wrapEnabled}
+            title={`Word Wrap: ${wrapEnabled ? 'ON' : 'OFF'}`} onClick={() => setWrapEnabled((current) => !current)}>
+            <TextWrap size={16} aria-hidden />
+          </button>
+          <button type="button" aria-label="Markdownプレビュー" title="Markdownプレビュー"
+            aria-pressed={previewOpen} aria-expanded={previewOpen} aria-controls={previewId}
+            onClick={() => { setPreviewValue(editorRef.current?.getValue() ?? latest.current.value); setPreviewOpen((current) => !current) }}>
+            <FileCodeCorner size={16} aria-hidden />
+          </button>
+        </div>
       </div>
       {error && <div className="gtd-monaco-error" role="alert">{error}</div>}
-      <div className="gtd-monaco-body">
+      <div ref={bodyRef} className="gtd-monaco-body">
         <div ref={hostRef} className="gtd-monaco-input" />
-        {previewOpen && <aside id={previewId} className="gtd-monaco-preview" aria-label="Markdownプレビュー">
+        {previewOpen && <>
+          <div className="gtd-monaco-divider" role="separator" tabIndex={0}
+            aria-label="プレビューペインの幅を調整" aria-orientation="vertical" aria-controls={previewId}
+            aria-valuemin={Math.round(preview.minimum)} aria-valuemax={Math.round(preview.maximum)} aria-valuenow={Math.round(preview.width)}
+            onDoubleClick={() => setPreviewRatio(0.5)}
+            onPointerDown={(event) => {
+              if (event.button !== 0) return
+              event.preventDefault()
+              event.currentTarget.setPointerCapture(event.pointerId)
+              previewDrag.current = { pointerId: event.pointerId, x: event.clientX, width: preview.width, ratio: previewRatio }
+            }}
+            onPointerMove={(event) => {
+              const drag = previewDrag.current
+              if (!drag || drag.pointerId !== event.pointerId) return
+              const total = bodyRef.current?.clientWidth ?? bodyWidth
+              setPreviewRatio(previewFraction(total, drag.width + drag.x - event.clientX))
+            }}
+            onPointerUp={(event) => {
+              if (previewDrag.current?.pointerId !== event.pointerId) return
+              previewDrag.current = null
+              event.currentTarget.releasePointerCapture(event.pointerId)
+            }}
+            onPointerCancel={() => {
+              if (!previewDrag.current) return
+              setPreviewRatio(previewDrag.current.ratio); previewDrag.current = null
+            }}
+            onLostPointerCapture={() => {
+              if (!previewDrag.current) return
+              setPreviewRatio(previewDrag.current.ratio); previewDrag.current = null
+            }}
+            onKeyDown={(event) => {
+              let width = preview.width
+              if (event.key === 'ArrowLeft') width += 10
+              else if (event.key === 'ArrowRight') width -= 10
+              else if (event.key === 'Home') width = preview.minimum
+              else if (event.key === 'End') width = preview.maximum
+              else return
+              event.preventDefault(); event.stopPropagation()
+              setPreviewRatio(previewFraction(bodyWidth, width))
+            }} />
+          <aside id={previewId} className="gtd-monaco-preview" aria-label="Markdownプレビュー" style={{ flex: '0 0 auto', width: preview.width }}>
           <Suspense fallback={<div role="status">プレビューを読み込み中…</div>}>
             <Preview value={previewValue} />
           </Suspense>
-        </aside>}
+          </aside>
+        </>}
       </div>
     </div>
   )

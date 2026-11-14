@@ -1,7 +1,8 @@
 import { readFileSync, realpathSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { createWindowState } from './lifecycle/window-state'
-import { app, BrowserWindow, dialog, screen, session } from 'electron'
+import { app, BrowserWindow, dialog, screen, session, systemPreferences } from 'electron'
+import { enableNativeKeyRepeat } from './infrastructure/key-repeat'
 import { APP_IDENTITY } from '../shared/app-identity'
 import { IPC_CHANNELS, type AppInfo } from '../shared/contracts/ipc'
 import { closeDatabase, openDatabase, type AppDatabase } from './db/client'
@@ -39,6 +40,9 @@ import {
   MIN_WINDOW_WIDTH,
   type WindowPresentation
 } from './window'
+
+// Use native macOS key repeat instead of the press-and-hold accent picker.
+enableNativeKeyRepeat(process.platform, systemPreferences)
 
 // 自動テスト用の起動モード（GTD_TEST_UI=hidden / secondary）。未パッケージ時だけ有効。
 // 詳細は docs/testing.md。通常起動・パッケージ版の動作は変えない。
