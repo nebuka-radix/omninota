@@ -1,7 +1,7 @@
 import { useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import { Alert, Box, Button, CircularProgress, Tab, Tabs, Tooltip, Typography } from '@mui/material'
 import { useQuery } from '@tanstack/react-query'
-import { ArrowDownFromLine, ArrowUpFromLine, FolderKanban, Flag } from 'lucide-react'
+import { ListChevronsDownUp, ListChevronsUpDown, ListTree, FolderKanban, Flag } from 'lucide-react'
 import { useDraftGuard } from '../features/drafts/DraftGuard'
 import { projectListQueryOptions } from '../features/projects/project-queries'
 import { sortProjects } from '../features/projects/project-order'
@@ -126,18 +126,18 @@ function CompactTaskBrowser({ kind }: { kind: 'inbox' | 'project' }) {
       setNavigationError(cause instanceof Error ? cause.message : '表示を変更できませんでした')
     } finally { busy.current = false }
   }
-  const setAllExpanded = async (expand: boolean) => {
+  const setAllExpanded = async (mode: 'none' | 'milestones' | 'all') => {
     if (busy.current) return
     busy.current = true
     try {
-      if (!expand && !(await confirmLeave())) return
+      if (mode !== 'all' && !(await confirmLeave())) return
       setNavigationError(null)
       const projectIds = new Set(projects.map((project) => project.id))
-      setExpandedNodes(expand ? new Set([
+      setExpandedNodes(mode === 'none' ? new Set() : new Set([
         ...projects.map((project) => `project:${project.id}`),
-        ...milestoneRows.filter((milestone) => milestone.projectId !== null && projectIds.has(milestone.projectId))
-          .map((milestone) => `milestone:${milestone.id}`)
-      ]) : new Set())
+        ...(mode === 'all' ? milestoneRows.filter((milestone) => milestone.projectId !== null && projectIds.has(milestone.projectId))
+          .map((milestone) => `milestone:${milestone.id}`) : [])
+      ]))
     } catch (cause) {
       setNavigationError(cause instanceof Error ? cause.message : '展開状態を変更できませんでした')
     } finally { busy.current = false }
@@ -221,11 +221,23 @@ function CompactTaskBrowser({ kind }: { kind: 'inbox' | 'project' }) {
               <span style={{ display: 'flex', flex: '0 0 auto' }}>
                 <Button size="small" aria-label="すべて折りたたむ"
                   disabled={loading || error !== null || projects.length === 0}
-                  onClick={() => void setAllExpanded(false)}
+                  onClick={() => void setAllExpanded('none')}
                   data-testid="compact-project-collapse-all"
                   sx={{ minWidth: 0, px: 0.5, gap: '4px', justifyContent: 'flex-start', fontSize: 11, whiteSpace: 'nowrap', color: '#ffffff', '&.Mui-disabled': { color: '#ffffff', opacity: 0.4 } }}>
-                  <ArrowUpFromLine size={16} aria-hidden style={{ flexShrink: 0 }} />
+                  <ListChevronsDownUp size={16} aria-hidden style={{ flexShrink: 0 }} />
                   <Box component="span" sx={{ whiteSpace: 'nowrap', color: 'inherit' }}>すべて折りたたむ</Box>
+                </Button>
+              </span>
+            </Tooltip>
+            <Tooltip title="マイルストンまで展開">
+              <span style={{ display: 'flex', flex: '0 0 auto' }}>
+                <Button size="small" aria-label="マイルストンまで展開"
+                  disabled={loading || error !== null || projects.length === 0}
+                  onClick={() => void setAllExpanded('milestones')}
+                  data-testid="compact-project-expand-milestones"
+                  sx={{ minWidth: 0, px: 0.5, gap: '4px', justifyContent: 'flex-start', fontSize: 11, whiteSpace: 'nowrap', color: '#ffffff', '&.Mui-disabled': { color: '#ffffff', opacity: 0.4 } }}>
+                  <ListTree size={16} aria-hidden style={{ flexShrink: 0 }} />
+                  <Box component="span" sx={{ whiteSpace: 'nowrap', color: 'inherit' }}>マイルストンまで展開</Box>
                 </Button>
               </span>
             </Tooltip>
@@ -233,10 +245,10 @@ function CompactTaskBrowser({ kind }: { kind: 'inbox' | 'project' }) {
               <span style={{ display: 'flex', flex: '0 0 auto' }}>
                 <Button size="small" aria-label="すべて展開"
                   disabled={loading || error !== null || projects.length === 0}
-                  onClick={() => void setAllExpanded(true)}
+                  onClick={() => void setAllExpanded('all')}
                   data-testid="compact-project-expand-all"
                   sx={{ minWidth: 0, px: 0.5, gap: '4px', justifyContent: 'flex-start', fontSize: 11, whiteSpace: 'nowrap', color: '#ffffff', '&.Mui-disabled': { color: '#ffffff', opacity: 0.4 } }}>
-                  <ArrowDownFromLine size={16} aria-hidden style={{ flexShrink: 0 }} />
+                  <ListChevronsUpDown size={16} aria-hidden style={{ flexShrink: 0 }} />
                   <Box component="span" sx={{ whiteSpace: 'nowrap', color: 'inherit' }}>すべて展開</Box>
                 </Button>
               </span>
