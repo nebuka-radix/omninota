@@ -1,0 +1,31 @@
+# 依存関係
+node_modules/
+
+# ビルド成果物
+out/
+dist/
+release/
+*.tsbuildinfo
+
+# 実DB・バックアップ・ログ
+*.sqlite
+*.sqlite3
+*.db
+*.sqlite-wal
+*.sqlite-shm
+*.db-wal
+*.db-shm
+backups/
+logs/
+*.log
+
+# 環境変数
+.env
+.env.*
+
+# macOS
+.DS_Store
+
+context/
+tests/
+note/
