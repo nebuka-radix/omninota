@@ -28,12 +28,13 @@ const EMPTY_TASKS: TaskDto[] = []
 const labels = { day: 'THE DAY', inbox: 'INBOX', project: 'PROJECT' } as const
 
 function TabTaskCountBadge({ count, background, label }: { count: number; background: string; label: string }) {
+  if (count === 0) return null
   return (
     <Box component="span" aria-label={`${label}: ${count}件`} title={`${label}: ${count}件`}
       data-testid="compact-tab-count" data-count-kind={label}
-      sx={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', minWidth: '18px', height: '18px',
-        px: '4px', boxSizing: 'border-box', borderRadius: '9px', bgcolor: background,
-        color: '#ffffff', fontSize: '11px', lineHeight: 1, fontWeight: 800, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>
+      sx={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', minWidth: '20px', height: '20px',
+        px: '4px', boxSizing: 'border-box', borderRadius: '10px', bgcolor: background,
+        color: '#ffffff', fontSize: '13px', lineHeight: 1, fontWeight: 800, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>
       {count}
     </Box>
   )
@@ -96,13 +97,13 @@ export function CompactScreen() {
             label={
               <Box component="span" sx={{ display: 'inline-flex', flexDirection: 'row', alignItems: 'center', gap: '6px', whiteSpace: 'nowrap' }}>
                 <Box component="span" sx={{ fontSize: '16px', lineHeight: '20px' }}>{labels[key]}</Box>
-                {key === 'day' && badgeSummary && (
+                {key === 'day' && badgeSummary && (badgeSummary.overdueItems.length > 0 || badgeSummary.todayItems.length > 0) && (
                   <Box component="span" sx={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                    <TabTaskCountBadge count={badgeSummary.overdueItems.length} background="#ff0000" label="期限超過" />
+                    <TabTaskCountBadge count={badgeSummary.overdueItems.length} background="#b91c1c" label="期限超過" />
                     <TabTaskCountBadge count={badgeSummary.todayItems.length} background="#1e90ff" label="今日" />
                   </Box>
                 )}
-                {key === 'inbox' && inboxBadgeCount !== undefined &&
+                {key === 'inbox' && inboxBadgeCount !== undefined && inboxBadgeCount > 0 &&
                   <TabTaskCountBadge count={inboxBadgeCount} background="#008080" label="Inboxの未完了タスク" />}
               </Box>
             }
