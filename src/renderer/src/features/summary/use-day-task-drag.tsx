@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent } from 'react'
 import { createPortal } from 'react-dom'
 import { Box } from '@mui/material'
 import { TASK_BULK_MAX, type TaskDto } from '../../../../shared/contracts/tasks'
@@ -26,6 +26,8 @@ export function useDayTaskDrag(options: {
   optionsRef.current = options
   const cleanupRef = useRef<(() => void) | null>(null)
   const savingRef = useRef(false)
+  const blankPressCleanupRef = useRef<(() => void) | null>(null)
+  const suppressBlankClickRef = useRef(false)
   const mutation = useSetTasksDayMutation()
   const { confirmLeave } = useDraftGuard()
   const changeSelection = (next: TaskSelection) => {
@@ -37,7 +39,10 @@ export function useDayTaskDrag(options: {
     const next = pruneSelection(selectionRef.current, visible)
     if (next !== selectionRef.current) changeSelection(next)
   }, [options.rows])
-  useEffect(() => () => cleanupRef.current?.(), [])
+  useEffect(() => () => {
+    blankPressCleanupRef.current?.()
+    cleanupRef.current?.()
+  }, [])
 
   const start = (task: TaskDto, point: { x: number; y: number }) => {
     const opts = optionsRef.current
@@ -152,11 +157,61 @@ export function useDayTaskDrag(options: {
     update()
     frame = requestAnimationFrame(tick)
   }
+  const onBlankPointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (!optionsRef.current.enabled || savingRef.current || event.button !== 0 || !event.isPrimary ||
+      event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return
+    const element = event.target instanceof Element ? event.target : null
+    if (!element || element.closest('button, input, textarea, select, a, [role="button"], .MuiCheckbox-root, [data-testid="task-title"], [data-testid="inline-title-editor-row"], [data-testid="inline-title-error"]')) return
+    const row = element.closest<HTMLElement>('[data-task-id], [data-task-row-controls]')
+    if (!row || !containerRef.current?.contains(row)) return
+    const id = row.dataset.taskId ?? row.dataset.taskRowControls
+    if (!id || !selectionRef.current.ids.has(id)) return
+    const task = optionsRef.current.rows.find((item) => item.task.id === id)?.task
+    if (!task || optionsRef.current.pendingIds.has(id)) return
+    // 行の空白を覆う要素のstopPropagationより前に、移動開始を受け付ける。
+    event.preventDefault()
+    event.stopPropagation()
+    blankPressCleanupRef.current?.()
+    suppressBlankClickRef.current = false
+    const x = event.clientX
+    const y = event.clientY
+    const pointerId = event.pointerId
+    const cleanup = () => {
+      window.removeEventListener('pointermove', move)
+      window.removeEventListener('pointerup', release)
+      window.removeEventListener('pointercancel', release)
+      window.removeEventListener('keydown', key)
+      window.removeEventListener('blur', cleanup)
+      blankPressCleanupRef.current = null
+    }
+    const move = (native: PointerEvent) => {
+      if (native.pointerId !== pointerId || Math.hypot(native.clientX - x, native.clientY - y) < 5) return
+      cleanup()
+      suppressBlankClickRef.current = true
+      start(task, { x: native.clientX, y: native.clientY })
+    }
+    const release = (native: PointerEvent) => {
+      if (native.pointerId === pointerId) cleanup()
+    }
+    const key = (native: KeyboardEvent) => { if (native.key === 'Escape') cleanup() }
+    blankPressCleanupRef.current = cleanup
+    window.addEventListener('pointermove', move)
+    window.addEventListener('pointerup', release)
+    window.addEventListener('pointercancel', release)
+    window.addEventListener('keydown', key)
+    window.addEventListener('blur', cleanup)
+  }
+  const onBlankClickCapture = (event: ReactMouseEvent<HTMLDivElement>) => {
+    if (!suppressBlankClickRef.current) return
+    suppressBlankClickRef.current = false
+    event.preventDefault()
+    event.stopPropagation()
+  }
   const elements = ghost ? createPortal(
     <Box sx={{ position: 'fixed', left: ghost.x + 12, top: ghost.y + 12, zIndex: 2000, pointerEvents: 'none',
       bgcolor: '#2b2b2b', color: '#eeeeee', px: 2, py: 1, fontSize: 12, borderRadius: 1 }}>
       {ghost.count}件 {ghost.moving ? '移動' : '選択'}
     </Box>, document.body
   ) : null
-  return { containerRef, selection, changeSelection, start, over, error, clearError: () => setError(null), elements }
+  return { containerRef, selection, changeSelection, start, onBlankPointerDown, onBlankClickCapture, over, error, clearError: () => setError(null), elements }
 }

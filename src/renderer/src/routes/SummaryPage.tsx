@@ -127,6 +127,8 @@ export function SummaryPage({ compact = false, showQuickAdd = true }: {
       ) : (
         <Box
           ref={dayDrag.containerRef}
+          onPointerDownCapture={compact ? dayDrag.onBlankPointerDown : undefined}
+          onClickCapture={compact ? dayDrag.onBlankClickCapture : undefined}
           data-testid="summary-review"
           data-today={summary?.today}
           sx={{
