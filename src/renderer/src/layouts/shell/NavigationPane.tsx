@@ -11,6 +11,7 @@ import { summaryQueryOptions } from '../../features/summary/summary-queries'
 import { useLocalDay } from '../../lib/local-day'
 import { vscodeColors } from '../../theme'
 import { PaneHeader } from './PaneHeader'
+import { APP_IDENTITY } from '../../../../shared/app-identity'
 import { SCREENS, screenOf, type ScreenId } from './screens'
 
 // 幅広のナビゲーション（フェーズ5.4。旧アクティビティバー＋サイドバーを1つのペインに統合）。
@@ -134,7 +135,7 @@ export function NavigationPane({ pathname }: { pathname: string }) {
   return (
     <Box component="nav" aria-label="ナビゲーション" data-testid="navigation"
       sx={{ height: '100%', minHeight: 0, display: 'flex', flexDirection: 'column', minWidth: 0, overflow: 'hidden' }}>
-      <PaneHeader id="navigation-title" title="GTD" />
+      <PaneHeader id="navigation-title" title={APP_IDENTITY.displayName} />
       <Box sx={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
         <Box sx={{ flexShrink: 0 }}>
           <NavItem screen="summary" active={screen === 'summary'} badges={summaryBadges} onClick={() => void navigate({ to: '/summary' })} />

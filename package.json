@@ -1,9 +1,9 @@
 {
-  "name": "gtd-desktop",
-  "productName": "GTD",
+  "name": "omninota",
+  "productName": "omninota",
   "version": "0.1.0",
   "private": true,
-  "description": "macOS向けVS Code風GTDデスクトップアプリ（開発中・仮名称）",
+  "description": "omninota: タスク・プロジェクト・Markdownノートを管理するmacOSデスクトップアプリ",
   "main": "./out/main/index.js",
   "scripts": {
     "dev": "electron-vite dev",
@@ -20,7 +20,7 @@
   },
   "build": {
     "appId": "com.radix-studio.gtd",
-    "productName": "GTD",
+    "productName": "omninota",
     "directories": {
       "output": "dist"
     },
@@ -45,8 +45,10 @@
     ],
     "npmRebuild": false,
     "mac": {
-      "identity": null
-    }
+      "identity": null,
+      "executableName": "omninota"
+    },
+    "executableName": "omninota"
   },
   "dependencies": {
     "better-sqlite3": "13.0.3",
