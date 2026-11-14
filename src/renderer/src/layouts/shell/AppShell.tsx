@@ -10,7 +10,7 @@ import { usePaneLayout } from '../../features/workspace/use-pane-layout'
 import { useWorkspace } from '../../features/workspace/WorkspaceContext'
 import { vscodeColors } from '../../theme'
 import { ShellSlotsProvider } from '../../components/ShellSlots'
-import { SummaryPage } from '../../routes/SummaryPage'
+import { CompactScreen } from '../../routes/CompactScreen'
 import { TaskDragProvider } from '../../features/tasks/TaskDragContext'
 import { DetailPanel } from './DetailPanel'
 import { MainPanel } from './MainPanel'
@@ -157,7 +157,7 @@ export function AppShell({ initialCompact = false }: { initialCompact?: boolean 
           {modeError && <Alert severity="error" onClose={() => setModeError(null)}>{modeError}</Alert>}
           {compact ? (
             <Box component="main" aria-label="メインパネル" data-testid="compact-screen" sx={{ flex: 1, minWidth: 0, minHeight: 0, overflow: 'hidden' }}>
-              <SummaryPage compact />
+              <CompactScreen />
             </Box>
           ) : (
           <Group

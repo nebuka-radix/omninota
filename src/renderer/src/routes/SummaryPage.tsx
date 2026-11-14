@@ -38,8 +38,14 @@ const EMPTY_TASKS: TaskDto[] = []
 // - 各行は共通の TaskRow。一覧は区画ごとに仮想化し、区画の寸法の変化は virtualizer が測り直す。
 // - 右サイドバーのプロジェクトのフィルター（表示だけ）で OFF のプロジェクトのタスクを全区画から外す。
 // - ステータスバーの中央にフィルター後の4区画の合計件数。トップバーの表示設定は出さない。大きな画面タイトルは出さない。
-export function SummaryPage({ compact = false }: { compact?: boolean }) {
-  const [compactTodayPercent, setCompactTodayPercent] = useState(50)
+export function SummaryPage({ compact = false, showQuickAdd = true, compactSplit }: {
+  compact?: boolean
+  showQuickAdd?: boolean
+  compactSplit?: { value: number; onChange: (value: number) => void }
+}) {
+  const [localTodayPercent, setLocalTodayPercent] = useState(50)
+  const compactTodayPercent = compactSplit?.value ?? localTodayPercent
+  const setCompactTodayPercent = compactSplit?.onChange ?? setLocalTodayPercent
   const sections = compact ? SECTIONS.filter((section) => section.key === 'todayItems' || section.key === 'tomorrowItems') : SECTIONS
   const day = useLocalDay()
   const query = useQuery(summaryQueryOptions(day))
@@ -68,7 +74,7 @@ export function SummaryPage({ compact = false }: { compact?: boolean }) {
 
   return (
     <Page title={compact ? 'コンパクト' : 'Summary Review'} icon={CalendarCheck} fill titleHidden>
-      {compact && <Box sx={{ flexShrink: 0 }}><TaskQuickAdd projectId={null} /></Box>}
+      {compact && showQuickAdd && <Box sx={{ flexShrink: 0 }}><TaskQuickAdd projectId={null} /></Box>}
       {query.isSuccess && (
         <ShellSlot name="status-count">
           <Typography component="span" role="status" data-testid="task-count" sx={{ fontVariantNumeric: 'tabular-nums' }}>
