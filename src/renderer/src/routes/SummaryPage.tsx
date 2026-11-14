@@ -5,6 +5,7 @@ import { CalendarCheck } from 'lucide-react'
 import type { SummaryReview } from '../../../shared/contracts/summary'
 import type { TaskDto } from '../../../shared/contracts/tasks'
 import { Page } from '../components/Page'
+import { CompactSplitHandle } from '../features/summary/CompactSplitHandle'
 import { ShellSlot } from '../components/ShellSlots'
 import { projectListQueryOptions } from '../features/projects/project-queries'
 import { filterSummaryByProjects, mergeSummary, summaryTotal } from '../features/summary/summary-merge'
@@ -38,6 +39,7 @@ const EMPTY_TASKS: TaskDto[] = []
 // - 右サイドバーのプロジェクトのフィルター（表示だけ）で OFF のプロジェクトのタスクを全区画から外す。
 // - ステータスバーの中央にフィルター後の4区画の合計件数。トップバーの表示設定は出さない。大きな画面タイトルは出さない。
 export function SummaryPage({ compact = false }: { compact?: boolean }) {
+  const [compactTodayPercent, setCompactTodayPercent] = useState(50)
   const sections = compact ? SECTIONS.filter((section) => section.key === 'todayItems' || section.key === 'tomorrowItems') : SECTIONS
   const day = useLocalDay()
   const query = useQuery(summaryQueryOptions(day))
@@ -103,10 +105,14 @@ export function SummaryPage({ compact = false }: { compact?: boolean }) {
             minWidth: 0,
             display: 'grid',
             gridTemplateColumns: compact ? 'minmax(0, 1fr)' : 'minmax(0, 1fr) minmax(0, 1fr)',
-            gridTemplateRows: 'minmax(0, 1fr) minmax(0, 1fr)',
+            gridTemplateRows: compact
+              ? `minmax(0, ${compactTodayPercent}fr) minmax(0, ${100 - compactTodayPercent}fr)`
+              : 'minmax(0, 1fr) minmax(0, 1fr)',
+            position: 'relative',
             border: `1px solid ${vscodeColors.gridLine}`
           }}
         >
+          {compact && <CompactSplitHandle value={compactTodayPercent} onChange={setCompactTodayPercent} />}
           {sections.map((section) => {
             const items = summary ? summary[section.key] : []
             return (
