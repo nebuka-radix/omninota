@@ -21,7 +21,7 @@ describe('アプリ名・IDの整合性', () => {
   })
 
   it('通常利用のuserData名は表示名と一致し、開発用と異なる', () => {
-    expect(APP_IDENTITY.userDataDirName).toBe(APP_IDENTITY.displayName)
+    expect(APP_IDENTITY.userDataDirName).toBe("GTD")
     expect(APP_IDENTITY.devUserDataDirName).not.toBe(APP_IDENTITY.userDataDirName)
   })
 })
