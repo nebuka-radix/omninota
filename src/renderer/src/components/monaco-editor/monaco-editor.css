@@ -1,0 +1,58 @@
+.gtd-monaco-root { display:flex; flex-direction:column; min-width:0; min-height:0; border:1px solid #454545; background:#1e1e1e; color:#ccc; box-sizing:border-box; }
+.gtd-monaco-toolbar { display:flex; align-items:center; justify-content:space-between; flex-shrink:0; height:32px; padding:0 4px; border-bottom:1px solid #454545; background:#252526; }
+.gtd-monaco-toolbar button { display:inline-flex; align-items:center; justify-content:center; width:28px; height:28px; border:0; border-radius:2px; color:inherit; background:transparent; cursor:pointer; }
+.gtd-monaco-toolbar button:hover { background:#3c3c3c; }
+.gtd-monaco-toolbar button:disabled { opacity:.4; cursor:default; }
+.gtd-monaco-toolbar button[aria-pressed=true] { color:#3794ff; background:#333; }
+.gtd-monaco-body { display:flex; flex:1; min-height:0; min-width:0; overflow:hidden; }
+.gtd-monaco-input { position:relative; flex:1 1 50%; min-width:0; min-height:0; overflow:hidden; }
+.gtd-monaco-preview { flex:1 1 50%; min-width:0; overflow:auto; border-left:1px solid #72777d; background:#fff; color:#202122; user-select:text; }
+.gtd-monaco-error { padding:4px 8px; font-size:12px; color:#ffb4ab; white-space:pre-wrap; flex-shrink:0; }
+.gtd-monaco-status { font-size:11px; margin-left:6px; }
+.gtd-monaco-toolbar-left { display:flex; align-items:center; min-width:0; }
+.gtd-markdown-page { padding:16px 20px; font:14px/1.65 -apple-system,BlinkMacSystemFont,"Hiragino Sans",sans-serif; overflow-wrap:anywhere; }
+.gtd-markdown-page h1,.gtd-markdown-page h2 { color:#101418; font-family:Georgia,"Times New Roman",serif; font-weight:normal; border-bottom:1px solid #a2a9b1; margin:1em 0 .5em; line-height:1.35; }
+.gtd-markdown-page h1 { font-size:1.9em; }.gtd-markdown-page h2 { font-size:1.5em; }
+.gtd-markdown-page h3 { font-size:1.2em; }.gtd-markdown-page h4 { font-size:1.05em; }
+.gtd-markdown-page a { color:#36c; text-decoration:none; cursor:default; }.gtd-markdown-page a:hover { text-decoration:underline; }
+.gtd-markdown-page p { margin:.5em 0 1em; }
+.gtd-markdown-page ul,.gtd-markdown-page ol { padding-left:1.7em; }
+.gtd-markdown-page table { border-collapse:collapse; margin:1em 0; background:#f8f9fa; color:#202122; font-size:inherit; }
+.gtd-markdown-page th,.gtd-markdown-page td { border:1px solid #a2a9b1; padding:.25em .6em; }
+.gtd-markdown-page th { background:#eaecf0; font-weight:bold; }
+.gtd-markdown-page code { font: .92em/1.5 ui-monospace,SFMono-Regular,Menlo,monospace; background:#f8f9fa; border:1px solid #eaecf0; padding:1px 3px; border-radius:2px; }
+.gtd-markdown-code-container { margin:1em 0; padding:10px; overflow:auto; border:1px solid #a2a9b1; background:#f8f9fa; }
+.gtd-markdown-code-container > code { display:block; white-space:pre; border:0; padding:0; }
+.gtd-markdown-page blockquote { border-left:3px solid #a2a9b1; margin:1em 0; padding-left:1em; color:#54595d; }
+.gtd-mermaid-diagram { overflow:auto; }.gtd-mermaid-diagram svg { max-width:100%; height:auto; }
+.gtd-mermaid-error { color:#b32424; white-space:pre-wrap; }.gtd-mermaid-message,.gtd-markdown-image-placeholder { color:#54595d; }
+
+/* 042: Word Wrap toggle and resizable preview. */
+.gtd-monaco-toolbar-right { display:flex; align-items:center; gap:4px; }
+.gtd-monaco-toolbar button.gtd-monaco-wrap[aria-pressed="true"] { background:#00ff00; color:#000000; }
+.gtd-monaco-toolbar button.gtd-monaco-wrap[aria-pressed="false"] { background:#252526; color:#858585; }
+.gtd-monaco-toolbar button.gtd-monaco-wrap:focus-visible { outline:1px solid #3794ff; outline-offset:1px; }
+.gtd-monaco-divider { flex:0 0 6px; width:6px; background:#454545; cursor:col-resize; touch-action:none; user-select:none; }
+.gtd-monaco-divider:hover,.gtd-monaco-divider:focus-visible { background:#007fd4; outline:none; }
+.gtd-monaco-preview { border-left:0; }
+
+/* 043: Save and TextWrap share the left toolbar group. */
+.gtd-monaco-toolbar-left { gap:4px; }
+
+/* 046: Heading outline pane. The preview width is measured within workspace only. */
+.gtd-monaco-workspace { display:flex; flex:1; min-width:0; min-height:0; overflow:hidden; }
+.gtd-monaco-outline { flex:0 0 28%; max-width:220px; min-width:0; overflow:auto; background:#252526; border-right:1px solid #454545; color:#cccccc; user-select:text; }
+.gtd-monaco-outline-title { position:sticky; top:0; padding:6px; font-size:11px; font-weight:700; background:#252526; }
+.gtd-monaco-outline-empty { padding:6px; font-size:11px; color:#999999; }
+.gtd-monaco-outline nav button { display:block; box-sizing:border-box; width:100%; min-height:26px; padding-top:4px; padding-right:6px; padding-bottom:4px; border:0; background:transparent; color:inherit; font:inherit; font-size:12px; line-height:18px; text-align:left; white-space:nowrap; text-overflow:ellipsis; overflow:hidden; cursor:pointer; }
+.gtd-monaco-outline nav button:hover { background:#2a2d2e; }
+.gtd-monaco-outline nav button:focus-visible { outline:1px solid #007fd4; outline-offset:-1px; }
+.gtd-monaco-toolbar button.gtd-monaco-toc[aria-pressed="true"] { background:#00ff00; color:#000000; }
+.gtd-monaco-toolbar button.gtd-monaco-toc[aria-pressed="false"] { background:#252526; color:#858585; }
+
+/* 055: Strict 128px minimum and a draggable outline separator. */
+.gtd-monaco-body { overflow-x:auto; overflow-y:hidden; }
+.gtd-monaco-outline { flex:0 0 auto; min-width:128px; max-width:none; box-sizing:border-box; border-right:0; }
+.gtd-monaco-body[data-outline-open="true"] > .gtd-monaco-workspace { min-width:80px; }
+.gtd-monaco-outline-divider { flex:0 0 6px; width:6px; background:#454545; cursor:col-resize; touch-action:none; user-select:none; }
+.gtd-monaco-outline-divider:hover,.gtd-monaco-outline-divider:focus-visible { background:#007fd4; outline:none; }

@@ -1,0 +1,92 @@
+{
+  "name": "gtd-desktop",
+  "productName": "GTD",
+  "version": "0.1.0",
+  "private": true,
+  "description": "macOS向けVS Code風GTDデスクトップアプリ（開発中・仮名称）",
+  "main": "./out/main/index.js",
+  "scripts": {
+    "dev": "electron-vite dev",
+    "build": "electron-vite build",
+    "preview": "electron-vite preview",
+    "typecheck": "npm run typecheck:node && npm run typecheck:web",
+    "typecheck:node": "tsc --noEmit -p tsconfig.node.json",
+    "typecheck:web": "tsc --noEmit -p tsconfig.web.json",
+    "test": "vitest run",
+    "test:ui": "electron-vite build && node scripts/ui-test/run.mjs hidden",
+    "test:ui:secondary": "electron-vite build && node scripts/ui-test/run.mjs secondary",
+    "db:generate": "drizzle-kit generate",
+    "package:dir": "electron-vite build && electron-builder --mac dir --x64"
+  },
+  "build": {
+    "appId": "com.radix-studio.gtd",
+    "productName": "GTD",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "out/**/*",
+      "package.json",
+      "!node_modules/better-sqlite3/{deps,src}/**",
+      "!node_modules/better-sqlite3/binding.gyp",
+      "!node_modules/better-sqlite3/prebuilds/{linux,linuxmusl,win32}-*.node"
+    ],
+    "asarUnpack": [
+      "node_modules/better-sqlite3/prebuilds/darwin-*.node"
+    ],
+    "extraResources": [
+      {
+        "from": "migrations",
+        "to": "migrations",
+        "filter": [
+          "**/*"
+        ]
+      }
+    ],
+    "npmRebuild": false,
+    "mac": {
+      "identity": null
+    }
+  },
+  "dependencies": {
+    "better-sqlite3": "13.0.3",
+    "drizzle-orm": "0.45.4",
+    "zod": "4.6.7"
+  },
+  "devDependencies": {
+    "@emotion/react": "11.14.0",
+    "@emotion/styled": "11.14.1",
+    "@mui/material": "9.5.0",
+    "@tanstack/react-query": "5.107.1",
+    "@tanstack/react-router": "1.170.46",
+    "@tanstack/react-table": "9.3.1",
+    "@tanstack/react-virtual": "3.14.26",
+    "@tanstack/table-core": "9.3.1",
+    "@types/better-sqlite3": "9.6.0",
+    "@types/node": "24.19.2",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "@vitejs/plugin-react": "6.3.0",
+    "dompurify": "3.4.18",
+    "drizzle-kit": "0.31.11",
+    "electron": "44.10.2",
+    "electron-builder": "26.18.0",
+    "electron-vite": "6.0.0",
+    "lucide-react": "1.70.0",
+    "mermaid": "11.17.2",
+    "monaco-editor": "0.52.2",
+    "motion": "14.10.1",
+    "prettier": "3.10.1",
+    "react": "19.3.1",
+    "react-dom": "19.3.1",
+    "react-markdown": "10.1.0",
+    "react-resizable-panels": "4.21.0",
+    "remark-gfm": "4.0.1",
+    "remark-parse": "11.0.0",
+    "string-width": "7.2.0",
+    "typescript": "6.0.3",
+    "unified": "11.0.5",
+    "vite": "8.3.6",
+    "vitest": "5.1.0"
+  }
+}

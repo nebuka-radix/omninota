@@ -1,0 +1,111 @@
+{
+  "version": "7",
+  "dialect": "sqlite",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "6",
+      "when": 1794218590916,
+      "tag": "0000_init_tasks",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1794219425489,
+      "tag": "0001_add_app_settings",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1794221695179,
+      "tag": "0002_add_task_completed_at",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1794224516358,
+      "tag": "0003_add_projects",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1794271063391,
+      "tag": "0004_add_task_project_id",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1794276373360,
+      "tag": "0005_add_milestones",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1794296356809,
+      "tag": "0006_task_deletion_and_hidden",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "6",
+      "when": 1794371040496,
+      "tag": "0007_task_and_milestone_order",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "6",
+      "when": 1794379808591,
+      "tag": "0008_task_dueto",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "6",
+      "when": 1794390043263,
+      "tag": "0009_task_favorite",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "6",
+      "when": 1794390044263,
+      "tag": "0010_done_and_done_on",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "6",
+      "when": 1794671949633,
+      "tag": "0011_brief_tag",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "6",
+      "when": 1794673322487,
+      "tag": "0012_panoramic_phil_sheldon",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "6",
+      "when": 1794676459536,
+      "tag": "0013_add_note",
+      "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "6",
+      "when": 1794682516127,
+      "tag": "0014_task_important",
+      "breakpoints": true
+    }
+  ]
+}

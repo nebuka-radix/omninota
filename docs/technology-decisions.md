@@ -15,32 +15,60 @@
 | 仮想スクロール | @tanstack/react-virtual |
 | ルーティング | @tanstack/react-router |
 
-## 2. 会話で構成案に組み込まれた技術
+## 2. フェーズ0で承認された技術
 
-以下は推奨され、その前提で構成を検討したもの。
-TanStack4ライブラリのような個別の明示承認とは区別する。
-実装開始時にまとめて確認する。
+依存は、実際に必要になるフェーズで導入する。
 
-| 分野 | 技術 |
-|---|---|
-| UI基盤 | React |
-| UIコンポーネント | MUI |
-| アイコン | lucide-react |
-| アニメーション | motion / motion/react |
-
-## 3. 推奨候補・未確定
-
-| 分野 | 第一候補 | 補足 |
+| 分野 | 技術 | 導入フェーズ |
 |---|---|---|
-| 開発・ビルド | electron-vite | Electron用のビルド環境 |
-| パッケージ化 | electron-builder | 配布成果物を生成 |
-| ORM | Drizzle ORM | SQLiteの型付きアクセス |
-| DBドライバー | better-sqlite3 | Electron向け再ビルドを確認 |
-| 固定ペイン | react-resizable-panels | 幅調整中心の場合 |
-| ドッキング | Dockview | 自由なタブ分割が必要な場合 |
-| UI状態保存 | app_settingsテーブル | 保存形式は要設計 |
-| Router方式 | ファイルベース | コードベース方式も選択可能 |
-| Router履歴 | ハッシュ方式など | 配布時の読み込み方式に合わせる |
+| UI基盤 | React | 1 |
+| UIコンポーネント | MUI | 1 |
+| アイコン | lucide-react | 1 |
+| アニメーション | motion / motion/react | 1 |
+| IPC入力の実行時検証 | Zod | 1 |
+| 開発・ビルド | electron-vite | 1 |
+| パッケージ化 | electron-builder | 2 |
+| DBドライバー | better-sqlite3 | 2 |
+| ORM・マイグレーション | Drizzle ORM / Drizzle Kit | 2 |
+| 固定ペイン | react-resizable-panels（v4。Group / Panel / Separator） | 3 |
+| テーブル・仮想スクロール | TanStack Table v9（@tanstack/react-table・table-core 9.3.1）/ Virtual 3.14.26 | 4 |
+
+Drizzleは素のSQLとの再比較を行わず採用する。
+better-sqlite3のNode-API対応、同梱バイナリ、Electron向け再ビルドの要否は、
+フェーズ2で採用版の実体と公式情報を確認し、
+開発起動とパッケージ化後の両方で検証してから確定扱いにする。
+
+### Router
+
+- コードベースのルート定義とする（router-pluginと生成ファイルは使わない）。
+- 履歴はハッシュ方式（createHashHistory）とする。
+- 開発時は開発サーバーのURL、ビルド後はローカルのindex.htmlを読み込む。
+
+### 開発用の仮名称
+
+最終的な公開名とは区別する。定義はsrc/shared/app-identity.tsに集約する。
+
+| 項目 | 値 |
+|---|---|
+| 表示名 | GTD |
+| package名 | gtd-desktop |
+| アプリID | com.radix-studio.gtd |
+
+## 3. 未確定・不採用
+
+| 分野 | 状況 | 補足 |
+|---|---|---|
+| ドッキング | Dockviewは初期版で不採用 | 自由なタブ分割が必要になった時に再検討 |
+| UI状態保存 | app_settingsテーブル（フェーズ3で実装） | 分類ごとの行・バージョン付きJSON。詳細は docs/database.md |
+| UI状態管理 | React Context / Reducer | 状態管理ライブラリは導入しない |
+| UIの自動テスト | 新しい依存なし（Node.js標準のfetch / WebSocket + CDP、`scripts/ui-test/`） | E2Eフレームワークは未選定のまま。Electronの非表示ウィンドウ・セカンダリ表示で実行（docs/testing.md） |
+| プロジェクト（フェーズ5） | 新しい依存なし | 既存のDrizzle・Query・Router・MUIで実装。Inboxの暫定定義・完了ルールは docs/requirements.md |
+| Table v9 の選定 | 9.3.1（2026-08に安定版、latest） | パッケージ同梱の版対応ガイドと型定義に合わせて実装。v8（最終2025-04）のサンプルは使わない |
+| @tanstack/table-core | devDependencies に明示（react-tableが固定で依存する同じ版） | Reactを使わないテストで `storeReactivityBindings` を使うため |
+| 一覧の意味付け | listbox / option（1件選択） | 表（grid）とセル単位の操作は、必要になった時に再検討する |
+| テスト | vitest（フェーズ2で導入） | ホストNode.jsで実行。Electron内の動作確認は別に行う。E2Eツールは未選定 |
+| ネイティブ再ビルド | 不採用（@electron/rebuildなし、npmRebuild: false） | better-sqlite3 v13のNode-APIバイナリをElectron 44で読み込めることを確認済み（docs/database.md） |
+| 配布CPU | 当面はIntel Mac（x64）で確認 | arm64・universalは後続で判断 |
 
 ## 4. 選定時の注意
 
@@ -61,3 +89,9 @@ TanStack4ライブラリのような個別の明示承認とは区別する。
 具体的なバージョン番号は、この指示書では固定しない。
 初期化時に公式情報、peerDependencies、Electronの内蔵Node.jsを確認する。
 動作確認した組み合わせをpackage.jsonとロックファイルに記録する。
+
+- 安定版を使う。alpha、beta、rcは無断で採用しない。
+- 最新版であることだけを選定理由にしない。
+- peerDependenciesの一致と、実行時の動作確認を区別する。
+- --forceや--legacy-peer-depsで依存衝突を回避しない。
+- Node.jsは、Electron内蔵Node.jsと同じLTS系列（.nvmrc）を推奨構成とする。

@@ -1,0 +1,58 @@
+{
+  "compilerOptions": {
+    "composite": true,
+    "tsBuildInfoFile": "./node_modules/.cache/tsconfig.node.tsbuildinfo",
+    "target": "ES2023",
+    "lib": [
+      "ES2023"
+    ],
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "types": [
+      "node"
+    ],
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "noImplicitOverride": true,
+    "noFallthroughCasesInSwitch": true,
+    "isolatedModules": true,
+    "verbatimModuleSyntax": true,
+    "forceConsistentCasingInFileNames": true,
+    "skipLibCheck": true
+  },
+  "include": [
+    "electron.vite.config.ts",
+    "drizzle.config.ts",
+    "vitest.config.mts",
+    "src/main/**/*",
+    "src/preload/**/*",
+    "src/shared/**/*",
+    "tests/**/*",
+    "src/renderer/src/features/workspace/latest-wins-saver.ts",
+    "src/renderer/src/features/workspace/pane-layout.ts",
+    "src/renderer/src/features/tasks/task-table.ts",
+    "src/renderer/src/features/workspace/flush-request-handler.ts",
+    "src/renderer/src/features/projects/project-order.ts",
+    "src/renderer/src/features/projects/project-route.ts",
+    "src/renderer/src/features/tasks/task-scope.ts",
+    "src/renderer/src/features/tasks/task-save-queue.ts",
+    "src/renderer/src/features/tasks/assignment.ts",
+    "src/renderer/src/features/tasks/task-rules.ts",
+    "src/renderer/src/features/tasks/selection.ts",
+    "src/renderer/src/features/tasks/favorite-saver.ts",
+    "src/renderer/src/features/tasks/due-format.ts",
+    "src/renderer/src/features/summary/summary-merge.ts",
+    "src/renderer/src/features/projects/project-tree-display.ts",
+    "src/renderer/src/components/monaco-editor/markdown-tables.ts",
+    "src/renderer/src/components/monaco-editor/preview-layout.ts",
+    "src/renderer/src/layouts/shell/screens.ts",
+    "src/renderer/src/features/notes/note-list-scroll.ts",
+    "src/renderer/src/features/notes/compact-note-layout.ts",
+    "src/renderer/src/components/monaco-editor/markdown-headings.ts",
+    "src/renderer/src/components/monaco-editor/table-display-width.ts",
+    "src/renderer/src/features/tasks/important-presentation.ts",
+    "src/renderer/src/features/summary/day-task-order.ts",
+    "src/renderer/src/features/workspace/compact-tab-shortcuts.ts",
+    "src/renderer/src/components/monaco-editor/outline-layout.ts"
+  ]
+}

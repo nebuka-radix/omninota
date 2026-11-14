@@ -51,6 +51,15 @@ TanStackの以下4ライブラリは採用確定。
 - @tanstack/react-virtual
 - @tanstack/react-router
 
+以下も採用済み。依存は実際に必要になるフェーズで導入する。
+
+- React、MUI、lucide-react、Motion for React
+- electron-vite、electron-builder
+- better-sqlite3、Drizzle ORM / Drizzle Kit
+- react-resizable-panels、Zod
+
+Dockviewは初期版では採用しない。
+
 ## 実装上の境界
 
 - RendererからSQLite、Node.jsのファイルAPI、Repositoryを直接使わない。
@@ -62,6 +71,7 @@ TanStackの以下4ライブラリは採用確定。
 - IPCの送信元・ウィンドウを検証する。
 - contextIsolationを有効にし、nodeIntegrationを無効にする。
 - sandboxも原則有効とし、変更が必要な場合は理由を説明する。
+- sandbox付きPreloadはCJSで出力し、`electron`以外をrequireしない前提とする。
 - 外部URL、ナビゲーション、新規ウィンドウの許可範囲を制限する。
 
 ## データと状態
@@ -104,7 +114,8 @@ TanStackの以下4ライブラリは採用確定。
 
 - コマンドはmacOS・zshで実行可能にする。
 - 破壊的な初期化、削除、DBリセットを無断実行しない。
-- エージェントによるコード変更時は，`git add .`と`git commit -m '簡潔な日本語メッセージ'`を自動実行すること。
+- Gitのadd、commitは、ユーザーから明示的な依頼がある場合だけ実行する。
+  依頼時のコミットメッセージは簡潔な日本語とする。
 - Gitのpush、履歴改変は明示的な依頼がある場合だけ行う。
 - 未保存・未コミットの変更を勝手に破棄しない。
 - 依存導入には、既存のパッケージマネージャーを使用する。
