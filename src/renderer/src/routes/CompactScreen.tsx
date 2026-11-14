@@ -64,13 +64,13 @@ function CompactTaskBrowser({ kind }: { kind: 'inbox' | 'project' }) {
   const pendingTaskIds = usePendingTaskIds()
   const allTasks = tasksQuery.data ?? EMPTY_TASKS
   const rowActions = useTaskRowActions({ tasks: allTasks, onAnnounce: setAnnouncement })
-  const projects = sortProjects(projectsQuery.data ?? [])
+  const projects = sortProjects(projectsQuery.data ?? []).filter((project) => !project.done)
   const projectLabels = disambiguatedNames(projects)
   // 保存対象ではないため、未選択・削除された場合は先頭のプロジェクトを選ぶ。
   const selectedProject = projects.find((item) => item.id === projectId) ?? projects[0]
   const selectedProjectId = selectedProject?.id ?? ''
-  const inboxTasks = allTasks.filter((task) => task.projectId === null).sort(compareManualOrder)
-  const ownTasks = allTasks.filter((task) => task.projectId === selectedProjectId).sort(compareManualOrder)
+  const inboxTasks = allTasks.filter((task) => task.projectId === null && task.doneOn === null).sort(compareManualOrder)
+  const ownTasks = allTasks.filter((task) => task.projectId === selectedProjectId && task.doneOn === null).sort(compareManualOrder)
   const groups = buildTaskGroups(ownTasks, (milestonesQuery.data ?? []).filter((item) => item.projectId === selectedProjectId))
 
   const guarded = async (action: () => void) => {
@@ -104,7 +104,7 @@ function CompactTaskBrowser({ kind }: { kind: 'inbox' | 'project' }) {
   let body: ReactNode
   if (error) body = <Alert severity="error">読み込めませんでした: {error.message}</Alert>
   else if (loading) body = <Box role="status" sx={{ p: 2 }}><CircularProgress size={16} /> 読み込み中…</Box>
-  else if (kind === 'inbox') body = inboxTasks.length > 0 ? renderList(inboxTasks, `Inbox（${inboxTasks.length}件）`) : <Typography sx={{ p: 2, fontSize: 12 }}>Inboxにタスクはありません</Typography>
+  else if (kind === 'inbox') body = inboxTasks.length > 0 ? renderList(inboxTasks, `Inbox（${inboxTasks.length}件）`) : <Typography sx={{ p: 2, fontSize: 12 }}>Inboxに未完了のタスクはありません</Typography>
   else body = (
     <>
       <Box sx={{ p: 2, flexShrink: 0 }}>
@@ -114,8 +114,8 @@ function CompactTaskBrowser({ kind }: { kind: 'inbox' | 'project' }) {
             const next = event.target.value
             void guarded(() => { setProjectId(next); setSelectedId(null); setCollapsed(new Set()) })
           }}>
-          {projects.length === 0 ? <option value="">プロジェクトがありません</option> : projects.map((project) => (
-            <option key={project.id} value={project.id}>{projectLabels.get(project.id) ?? project.name}{project.done ? '（完了済み）' : ''}</option>
+          {projects.length === 0 ? <option value="">未完了のプロジェクトがありません</option> : projects.map((project) => (
+            <option key={project.id} value={project.id}>{projectLabels.get(project.id) ?? project.name}</option>
           ))}
         </TextField>
       </Box>
@@ -134,7 +134,7 @@ function CompactTaskBrowser({ kind }: { kind: 'inbox' | 'project' }) {
                 <Typography component="span" sx={{ ml: 'auto', flexShrink: 0, fontSize: 11 }}>{group.tasks.length} 件</Typography>
               </ButtonBase>
               <Box id={`compact-milestone-${group.milestoneId}`} hidden={!expanded} sx={{ pl: 2, minWidth: 0 }}>
-                {expanded && (group.tasks.length > 0 ? renderList(group.tasks, `${group.label}のタスク`, true) : <Typography sx={{ p: 2, fontSize: 12, color: 'text.secondary' }}>タスクはありません</Typography>)}
+                {expanded && (group.tasks.length > 0 ? renderList(group.tasks, `${group.label}のタスク`, true) : <Typography sx={{ p: 2, fontSize: 12, color: 'text.secondary' }}>未完了のタスクはありません</Typography>)}
               </Box>
             </Box>
           )
