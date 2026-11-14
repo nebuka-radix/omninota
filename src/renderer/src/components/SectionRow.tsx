@@ -4,6 +4,8 @@ import type { SxProps, Theme } from '@mui/material/styles'
 import { ChevronDown, ChevronRight, Minus, type LucideIcon } from 'lucide-react'
 
 export type SectionRowProps = {
+  /** 0: section、1: subsection、2: subsubsection。非負整数。 */
+  level?: number
   title: ReactNode
   /** タイトル前の個別アイコン。省略時はMinus。 */
   icon?: LucideIcon
@@ -24,6 +26,7 @@ export type SectionRowProps = {
 
 /** セクションの見出しのみを描画する。配下の表示・非表示や状態の保存は呼び出し側の責務。 */
 export function SectionRow({
+  level = 0,
   title,
   icon: Icon = Minus,
   expanded = true,
@@ -34,19 +37,27 @@ export function SectionRow({
   height,
   sx = []
 }: SectionRowProps) {
+  // TypeScriptのnumberには実数も渡せるため、有限の非負整数に正規化する。
+  const normalizedLevel = Number.isFinite(level) ? Math.max(0, Math.floor(level)) : 0
+  const leftMargin = normalizedLevel * 12
+  const fontSize = Math.max(10, 16 - normalizedLevel * 2)
+  const shade = Math.max(0, 43 - normalizedLevel * 4)
+  const backgroundColor = `rgb(${shade}, ${shade}, ${shade})`
+  const headingTag = `h${Math.min(6, 2 + normalizedLevel)}` as 'h2' | 'h3' | 'h4' | 'h5' | 'h6'
   const Chevron = expanded ? ChevronDown : ChevronRight
   const label = sectionLabel ?? (typeof title === 'string' ? title : 'セクション')
 
   return (
     <Box
       data-testid="section-row"
+      data-level={normalizedLevel}
       data-expanded={expanded ? 'true' : 'false'}
       sx={[
         {
           display: 'flex', alignItems: 'center', minWidth: 0, flexShrink: 0,
-          height, boxSizing: 'border-box', px: '12px', gap: '8px',
-          bgcolor: '#2b2b2b', color: '#eeeeee',
-          fontSize: '16px', fontWeight: 800
+          height, boxSizing: 'border-box', ml: `${leftMargin}px`, px: '12px', gap: '8px',
+          bgcolor: backgroundColor, color: '#eeeeee',
+          fontSize: `${fontSize}px`, fontWeight: 800
         },
         ...(Array.isArray(sx) ? sx : [sx])
       ]}
@@ -69,12 +80,12 @@ export function SectionRow({
       </ButtonBase>
       <Icon size={18} aria-hidden="true" style={{ flexShrink: 0 }} />
       <Typography
-        component="h2"
+        component={headingTag}
         id={titleId}
         noWrap
         data-testid="section-row-title"
         title={typeof title === 'string' ? title : undefined}
-        sx={{ m: 0, minWidth: 0, fontSize: '16px', fontWeight: 800, lineHeight: 1.5, color: 'inherit' }}
+        sx={{ m: 0, minWidth: 0, fontSize: 'inherit', fontWeight: 'inherit', lineHeight: 1.5, color: 'inherit' }}
       >
         {title}
       </Typography>
