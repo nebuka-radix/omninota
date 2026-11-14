@@ -90,6 +90,7 @@ export function createProjectService(deps: {
           id: generateId(),
           projectId: row.id,
           name: INITIAL_MILESTONE_NAME,
+          favorite: false,
           createdAt: timestamp,
           updatedAt: timestamp,
           done: false,

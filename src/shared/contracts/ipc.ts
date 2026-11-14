@@ -17,7 +17,8 @@ import type {
   MilestoneDeletionSummary,
   MilestoneDto,
   RenameMilestoneInput,
-  ReorderMilestonesInput
+  ReorderMilestonesInput,
+  SetMilestoneFavoriteInput
 } from './milestones'
 import type {
   AssignInboxTasksInput,
@@ -65,6 +66,7 @@ export const IPC_CHANNELS = {
   milestonesList: 'milestones:list',
   milestonesCreate: 'milestones:create',
   milestonesRename: 'milestones:rename',
+  milestonesSetFavorite: 'milestones:set-favorite',
   milestonesGetDeletionSummary: 'milestones:get-deletion-summary',
   milestonesDelete: 'milestones:delete',
   milestonesReorder: 'milestones:reorder',
@@ -200,6 +202,7 @@ export type GtdApi = {
     list: () => Promise<IpcResult<MilestoneDto[]>>
     create: (input: CreateMilestoneInput) => Promise<IpcResult<MilestoneDto>>
     rename: (input: RenameMilestoneInput) => Promise<IpcResult<MilestoneDto>>
+    setFavorite: (input: SetMilestoneFavoriteInput) => Promise<IpcResult<MilestoneDto>>
     // 削除（フェーズ5.6）。所属タスクは削除せず、所属を外して非表示にする
     getDeletionSummary: (input: { id: string }) => Promise<IpcResult<MilestoneDeletionSummary>>
     delete: (input: DeleteMilestoneInput) => Promise<IpcResult<DeleteMilestoneResult>>

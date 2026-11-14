@@ -8,7 +8,8 @@ import {
   milestonesGetDeletionSummaryArgsSchema,
   milestonesListArgsSchema,
   milestonesRenameArgsSchema,
-  milestonesReorderArgsSchema
+  milestonesReorderArgsSchema,
+  milestonesSetFavoriteArgsSchema
 } from '../../shared/validation/milestones'
 import {
   projectsCreateArgsSchema,
@@ -61,6 +62,9 @@ export function registerIpcHandlers(deps: {
   flushRequester: FlushRequester
 }): void {
   const { policy, taskService, projectService, milestoneService, workspaceSettingsService } = deps
+  ipcMain.handle(IPC_CHANNELS.milestonesSetFavorite,
+    createIpcHandler({ channel: IPC_CHANNELS.milestonesSetFavorite, argsSchema: milestonesSetFavoriteArgsSchema, policy,
+      run: ([input]) => milestoneService.setFavorite(input) }))
   ipcMain.handle(IPC_CHANNELS.projectsSetFavorite,
     createIpcHandler({ channel: IPC_CHANNELS.projectsSetFavorite, argsSchema: projectsSetFavoriteArgsSchema, policy,
       run: ([input]) => projectService.setFavorite(input) }))

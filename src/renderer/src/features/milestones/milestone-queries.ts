@@ -1,11 +1,12 @@
-import { queryOptions, useMutation, useQueryClient } from '@tanstack/react-query'
+import { queryOptions, useMutation, useMutationState, useQueryClient } from '@tanstack/react-query'
 import type {
   CreateMilestoneInput,
   DeleteMilestoneInput,
   MilestoneDeletionSummary,
   MilestoneDto,
   RenameMilestoneInput,
-  ReorderMilestonesInput
+  ReorderMilestonesInput,
+  SetMilestoneFavoriteInput
 } from '../../../../shared/contracts/milestones'
 import { unwrapIpc } from '../../lib/ipc'
 import { taskKeys } from '../tasks/task-queries'
@@ -19,6 +20,7 @@ export const milestoneKeys = {
 export const milestoneMutationKeys = {
   create: [...milestoneKeys.all, 'create'] as const,
   rename: [...milestoneKeys.all, 'rename'] as const,
+  setFavorite: [...milestoneKeys.all, 'set-favorite'] as const,
   delete: [...milestoneKeys.all, 'delete'] as const,
   reorder: [...milestoneKeys.all, 'reorder'] as const
 }
@@ -28,6 +30,30 @@ export const milestoneListQueryOptions = queryOptions({
   queryKey: milestoneKeys.list(),
   queryFn: () => unwrapIpc(window.gtd.milestones.list())
 })
+
+export function usePendingMilestoneIds(): ReadonlySet<string> {
+  const ids = useMutationState({
+    filters: { status: 'pending', predicate: (mutation) => mutation.options.mutationKey?.[0] === milestoneKeys.all[0] },
+    select: (mutation) => {
+      const value = mutation.state.variables
+      return typeof value === 'object' && value !== null && 'id' in value && typeof value.id === 'string' ? value.id : null
+    }
+  })
+  return new Set(ids.filter((id): id is string => id !== null))
+}
+
+export function useSetMilestoneFavoriteMutation() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationKey: milestoneMutationKeys.setFavorite,
+    mutationFn: (input: SetMilestoneFavoriteInput) =>
+      taskSaveQueue.run(`milestone:${input.id}`, () => unwrapIpc(window.gtd.milestones.setFavorite(input))),
+    onSuccess: (saved: MilestoneDto) => {
+      queryClient.setQueryData<MilestoneDto[]>(milestoneKeys.list(), (items) => items?.map((item) => item.id === saved.id ? saved : item))
+      void queryClient.invalidateQueries({ queryKey: milestoneKeys.list() })
+    }
+  })
+}
 
 export function useCreateMilestoneMutation() {
   const queryClient = useQueryClient()

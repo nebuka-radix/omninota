@@ -21,6 +21,7 @@ const project = (id: string, name: string, doneOn: string | null = null): Projec
   doneOn
 })
 const milestone = (id: string, projectId: string, name: string, createdAt: string): MilestoneDto => ({
+  favorite: false,
   id,
   projectId,
   name,

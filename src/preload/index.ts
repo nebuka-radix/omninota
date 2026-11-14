@@ -40,6 +40,7 @@ const api: GtdApi = {
     list: () => ipcRenderer.invoke(IPC_CHANNELS.milestonesList),
     create: (input) => ipcRenderer.invoke(IPC_CHANNELS.milestonesCreate, input),
     rename: (input) => ipcRenderer.invoke(IPC_CHANNELS.milestonesRename, input),
+    setFavorite: (input) => ipcRenderer.invoke(IPC_CHANNELS.milestonesSetFavorite, input),
     getDeletionSummary: (input) => ipcRenderer.invoke(IPC_CHANNELS.milestonesGetDeletionSummary, input),
     delete: (input) => ipcRenderer.invoke(IPC_CHANNELS.milestonesDelete, input),
     reorder: (input) => ipcRenderer.invoke(IPC_CHANNELS.milestonesReorder, input)

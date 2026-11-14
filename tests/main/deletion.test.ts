@@ -534,7 +534,7 @@ describe('移行（0005 → 0006）: プロジェクトだけに所属するタ�
     )
     // 0007（フェーズ5.9）で手動順の列が加わる（既存の行はNULL）。それ以外の列は変えない
     expect(upgraded.$client.prepare('SELECT * FROM milestones').all()).toEqual(
-      (beforeMilestones as Record<string, unknown>[]).map((m) => ({ ...m, position: null, done: 0, done_on: null }))
+      ((beforeMilestones as Record<string, unknown>[]).map((m) => ({ ...m, position: null, done: 0, done_on: null }))).map((row) => ({ ...row, favorite: 0 }))
     )
     expect(upgraded.$client.prepare('SELECT * FROM projects').all()).toEqual(
       ((beforeProjects as Record<string, unknown>[]).map((p) => ({ ...renamed(p), done: p['completed_at'] === null ? 0 : 1 }))).map((row) => ({ ...row, favorite: 0 }))

@@ -36,7 +36,10 @@ export type DeleteMilestoneResult = {
 }
 
 // 日時はUTCのISO 8601文字列。一覧・操作の対象は表示中（プロジェクトに所属する）のマイルストンだけ（フェーズ5.6）
+export type SetMilestoneFavoriteInput = { id: string; favorite: boolean }
+
 export type MilestoneDto = {
+  favorite: boolean
   id: string
   projectId: string
   name: string

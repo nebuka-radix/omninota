@@ -19,6 +19,7 @@ import type { TaskRowActions } from '../../components/TaskRow'
 import { TaskList } from '../tasks/TaskList'
 import { useWorkspace } from '../workspace/WorkspaceContext'
 import { MilestoneNameEditor } from './MilestoneForms'
+import { MilestoneFavoriteButton } from './MilestoneFavoriteButton'
 import {
   fetchMilestoneDeletionSummary,
   milestoneListQueryOptions,
@@ -755,6 +756,7 @@ export function MilestoneBoard({
                       onKeyMove={(target) => moveCardByKey(group.milestoneId, target)}
                       onDragStart={(event) => startCardDrag(event, group.milestoneId, index)}
                     />
+                    <MilestoneFavoriteButton milestoneId={group.milestoneId} />
                     <Typography
                       component="h2"
                       noWrap

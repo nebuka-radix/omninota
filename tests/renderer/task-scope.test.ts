@@ -110,6 +110,7 @@ describe('詳細パネルの所属の選択肢（5.4でプロジェクト・マ�
   const none = { projectId: null, milestoneId: null }
 
   const milestoneOf = (projectId: string, id: string) => ({
+    favorite: false,
     id,
     projectId,
     name: 'M',

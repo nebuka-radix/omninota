@@ -6,7 +6,8 @@ import type {
   MilestoneDeletionSummary,
   MilestoneDto,
   RenameMilestoneInput,
-  ReorderMilestonesInput
+  ReorderMilestonesInput,
+  SetMilestoneFavoriteInput
 } from '../../shared/contracts/milestones'
 import type { MilestoneRow, ProjectRow } from '../db/schema'
 import type { RunInTransaction } from '../db/transaction'
@@ -27,6 +28,7 @@ export type MilestoneService = {
   create(input: CreateMilestoneInput): MilestoneDto
   // 同じ名前なら更新しない（updatedAtも変えない）。完了済みプロジェクトのマイルストンでも名前は変更できる。
   rename(input: RenameMilestoneInput): MilestoneDto
+  setFavorite(input: SetMilestoneFavoriteInput): MilestoneDto
   // 削除の確認内容（フェーズ5.6）。件数はDBの所属タスクの総数（完了済み・検索で隠れているものを含む）
   getDeletionSummary(input: { id: string }): MilestoneDeletionSummary
   // 削除（フェーズ5.6）。1つのトランザクションで、所属タスクの milestone_id をNULLにして非表示にし（project_id は残す。
@@ -51,6 +53,7 @@ function toDto(row: VisibleMilestoneRow): MilestoneDto {
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
     done: row.done,
+    favorite: row.favorite,
     doneOn: row.doneOn,
     position: row.position
   }
@@ -92,6 +95,7 @@ export function createMilestoneService(deps: {
           id: generateId(),
           projectId: input.projectId,
           name: input.name,
+          favorite: false,
           createdAt: timestamp,
           updatedAt: timestamp,
           // 完了の列（0010）。今回は完了の操作がなく、常に未完了で作成する
@@ -101,6 +105,15 @@ export function createMilestoneService(deps: {
         }
         repository.insert(row)
         return toDto(row)
+      })
+    },
+    setFavorite(input) {
+      return deps.transaction(() => {
+        const current = findVisible(input.id)
+        if (current.favorite === input.favorite) return toDto(current)
+        const updated = repository.updateFavorite(input.id, input.favorite, now().toISOString())
+        if (!isVisible(updated)) throw milestoneNotFound()
+        return toDto(updated)
       })
     },
     rename(input) {

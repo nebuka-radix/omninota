@@ -1,7 +1,6 @@
 import { useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import { Alert, Box, CircularProgress, Tab, Tabs, ToggleButton, ToggleButtonGroup, Typography } from '@mui/material'
 import { useQuery } from '@tanstack/react-query'
-import { Flag } from 'lucide-react'
 import { useDraftGuard } from '../features/drafts/DraftGuard'
 import { projectListQueryOptions } from '../features/projects/project-queries'
 import { compareFavoriteProjects, sortProjects } from '../features/projects/project-order'
@@ -16,6 +15,7 @@ import { vscodeColors } from '../theme'
 import { SummaryPage } from './SummaryPage'
 import { SectionRow } from '../components/SectionRow'
 import { ProjectFavoriteButton } from '../features/projects/ProjectFavoriteButton'
+import { MilestoneFavoriteButton } from '../features/milestones/MilestoneFavoriteButton'
 import { ShellSlot } from '../components/ShellSlots'
 import { projectTreeDisplayMode, type ProjectTreeDisplayMode } from '../features/projects/project-tree-display'
 
@@ -229,7 +229,7 @@ function CompactTaskBrowser({ kind, selectedMilestone, onSelectMilestone }: {
                     const contentId = `compact-milestone-content-${group.milestoneId}`
                     return (
                       <Box component="li" key={group.key} sx={{ minWidth: 0 }}>
-                        <SectionRow level={1} toggleOnRowClick title={group.label} titleId={titleId} icon={Flag}
+                        <SectionRow level={1} toggleOnRowClick title={group.label} titleId={titleId} iconElement={<MilestoneFavoriteButton milestoneId={group.milestoneId} />}
                           selected={selectedMilestone?.projectId === project.id && selectedMilestone.milestoneId === group.milestoneId}
                           onSelect={() => onSelectMilestone({ projectId: project.id, milestoneId: group.milestoneId })}
                           height={28}
