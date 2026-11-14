@@ -200,7 +200,7 @@ export function SummaryPage({ compact = false, showQuickAdd = true }: {
                 ) : (
                   <TaskList
                     variant="section"
-                    rowMode={compact ? 'Compact' : 'Standard'}
+                    rowMode="Standard"
                     maxVisibleRows={compact ? Math.max(1, items.length) : undefined}
                     tasks={items}
                     actions={rowActions.actions}
